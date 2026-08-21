@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="PolarisSentinel.Core/PolarisSentinel.Core.csproj" />
+  <Project Path="PolarisSentinel.Data/PolarisSentinel.Data.csproj" />
+  <Project Path="PolarisSentinel.FirewallEnforement/PolarisSentinel.Firewall.csproj" />
+  <Project Path="PolarisSentinel.Inference/PolarisSentinel.Inference.csproj" />
+  <Project Path="PolarisSentinel.PolicyDecision/PolarisSentinel.PolicyDecision.csproj" />
+  <Project Path="PolarisSentinel.TrafficCapture/PolarisSentinel.TrafficCapture.csproj" />
+  <Project Path="PolarisSentinel/PolarisSentinel.Web.csproj" />
+</Solution>
