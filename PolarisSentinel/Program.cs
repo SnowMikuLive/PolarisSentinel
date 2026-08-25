@@ -1,3 +1,5 @@
+using PolarisSentinel.TrafficCapture;
+
 namespace PolarisSentinel
 {
     public class Program
@@ -9,6 +11,7 @@ namespace PolarisSentinel
             // Add services to the container.
             builder.Services.AddControllersWithViews();
             builder.Host.UseWindowsService();
+            builder.Services.AddSingleton<TrafficCaptureService, TrafficCaptureService>();
             var app = builder.Build();
             //
             // Configure the HTTP request pipeline.

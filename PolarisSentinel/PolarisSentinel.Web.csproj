@@ -10,4 +10,14 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.11" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.Data.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.FirewallEnforement\PolarisSentinel.Firewall.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Inference\PolarisSentinel.Inference.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.PolicyDecision\PolarisSentinel.PolicyDecision.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.TrafficCapture\PolarisSentinel.TrafficCapture.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Utility\PolarisSentinel.Utility.csproj" />
+  </ItemGroup>
+
 </Project>
