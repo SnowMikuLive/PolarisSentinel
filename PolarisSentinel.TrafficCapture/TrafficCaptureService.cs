@@ -1,6 +1,6 @@
 ﻿namespace PolarisSentinel.TrafficCapture
 {
-    public class TrafficCapture
+    public class TrafficCaptureService
     {
 
     }
