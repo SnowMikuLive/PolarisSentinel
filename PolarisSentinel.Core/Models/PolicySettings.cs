@@ -9,7 +9,7 @@ public class PolicySettings
     //Isolation Forest anomaly score below which a flow is treated as anomalous.
     public double IfAnomalyThreshold { get; set; } = -0.1;
 
-    public int FlowIdleTimeoutSeconds { get; set; } = 60;
+    public int FlowIdleTimeoutSeconds { get; set; } = 120;
 
     public int PreFilterMinPackets { get; set; } = 3;
 
