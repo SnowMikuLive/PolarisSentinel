@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
-N_FEATURES = 25
+N_FEATURES = 20
 N_CLASSES = 4  # Benign, DoS, PortScan, BruteForce
 SEED = 42
 
