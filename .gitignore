@@ -361,3 +361,14 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# ===== Polaris Sentinel ML (Python) =====
+# Raw CIC-IDS2017 dataset (~885 MB, never commit)
+CIC-IDS2017/
+# Python virtual environment and caches
+ml/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Intermediate prepared datasets (regenerable via scripts)
+ml/data/
