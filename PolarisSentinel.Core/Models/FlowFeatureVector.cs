@@ -13,4 +13,7 @@ public class FlowFeatureVector
 
     public required DateTime FlowStartTime { get; init; }
     public required DateTime FlowEndTime { get; init; }
+
+    public long TotalPackets { get; init; }
+    public long TotalBytes { get; init; }
 }

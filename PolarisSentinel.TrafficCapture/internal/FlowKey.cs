@@ -1,4 +1,4 @@
-namespace PolarisSentinel.Capture.Internal;
+namespace PolarisSentinel.TrafficCapture.Internal;
 
 
 internal sealed class FlowKey : IEquatable<FlowKey>

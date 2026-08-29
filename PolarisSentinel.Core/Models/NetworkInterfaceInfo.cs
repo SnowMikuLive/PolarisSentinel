@@ -6,8 +6,8 @@ namespace PolarisSentinel.Core.Models
 {
     public class NetworkInterfaceInfo
     {
-        public string DeviceName { get; set; }
-        public string DisplayName { get; set; }
-        public int IPAddress { get; set; }
+        public required string DeviceName { get; set; }
+        public required string DisplayName { get; set; }
+        public string? IpAddress { get; set; }
     }
 }

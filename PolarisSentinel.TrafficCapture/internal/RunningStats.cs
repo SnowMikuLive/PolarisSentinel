@@ -1,13 +1,16 @@
-namespace PolarisSentinel.Capture.Internal;
+namespace PolarisSentinel.TrafficCapture.Internal;
 
 internal sealed class RunningStats
 {
     private int _count;
     private double _mean;
     private double _m2;
+    private double _min = double.MaxValue;   
+    private double _max = double.MinValue;  
 
-    public double Min { get; private set; } = double.MaxValue;
-    public double Max { get; private set; } = double.MinValue;
+
+    public double Min => _count > 0 ? _min : 0;
+    public double Max => _count > 0 ? _max : 0;
 
     public void Add(double value)
     {
@@ -16,8 +19,8 @@ internal sealed class RunningStats
         _mean += delta / _count;
         _m2 += delta * (value - _mean);
 
-        if (value < Min) Min = value;
-        if (value > Max) Max = value;
+        if (value < _min) _min = value;
+        if (value > _max) _max = value;
     }
 
     public int Count => _count;
