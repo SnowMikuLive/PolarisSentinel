@@ -4,16 +4,39 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - PolarisSentinel</title>
+
     <script type="importmap"></script>
+
+    @* Bootstrap CSS *@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    
+    @*Custom CSS*@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/PolarisSentinel.styles.css" asp-append-version="true" />
+
+    @* Local Material Symbols font *@
+    <link rel="stylesheet" href="~/lib/fontsource/material-symbols-outlined/400.css"/>
+
+    @* Local Inter font *@
+    <link rel="stylesheet" href="~/lib/fontsource/inter/400.css" />
+    <link rel="stylesheet" href="~/lib/fontsource/inter/700.css" />
+
+    @* Toastr CSS *@
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/css/toastr.min.css"/>
 </head>
 <body>
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">PolarisSentinel</a>
+
+                @* add icon and system name to the left of the navbar *@
+                <a class="navbar-brand d-flex align-items-center" asp-area="" asp-controller="Home" asp-action="Index">
+
+                    @* it will changed into the PS logo later, and the font and color could also be changed *@
+                    <span class="material-symbols-outlined">bolt</span>
+                    <span class="ms-2">PolarisSentinel</span>
+                    
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -23,10 +46,13 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
-                        <li class="nav-item">
+                        @* Polaris Sentinel does not require a public privacy policy page *@
+                        @*<li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li>
+                        </li>*@
                     </ul>
+                    @* add login partial to the right of the navbar *@
+                    <partial name="_LoginPartial" />
                 </div>
             </div>
         </nav>
@@ -39,12 +65,35 @@
 
     <footer class="border-top footer text-muted">
         <div class="container">
-            &copy; 2026 - PolarisSentinel - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+            &copy; 2026 - PolarisSentinel - @*<a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>*@
         </div>
     </footer>
+
+    @* jQuery *@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    @* Bootstrap JS *@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @* Toastr JS *@
+    <script src="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/js/toastr.min.js"></script>
+
+    @* Success notification *@
+    @if (TempData["success"] != null)
+    {
+        <script type="text/javascript">
+                toastr.success('@TempData["success"]');
+        </script>
+    }
+    @* Error notification *@
+    @if (TempData["error"] != null)
+    {
+        <script type="text/javascript">
+                toastr.error('@TempData["error"]');
+        </script>
+    }
+
+    @* Render script portions defined by the subview (if any) for page-specific scripts *@
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
