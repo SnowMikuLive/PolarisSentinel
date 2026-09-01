@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Update="DemoData\demo_flows.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
     <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.Data.csproj" />
     <ProjectReference Include="..\PolarisSentinel.FirewallEnforement\PolarisSentinel.Firewall.csproj" />

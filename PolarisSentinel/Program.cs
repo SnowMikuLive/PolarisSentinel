@@ -1,5 +1,7 @@
-using PolarisSentinel.TrafficCapture;
-using Microsoft.Extensions.Configuration;
+using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Hubs;
+using PolarisSentinel.Inference;
+using PolarisSentinel.Services;
 
 namespace PolarisSentinel
 {
@@ -9,23 +11,24 @@ namespace PolarisSentinel
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
             builder.Services.AddControllersWithViews();
             builder.Host.UseWindowsService();
-            // Program.cs
-            
+            builder.Services.AddSignalR();
 
-            builder.Services.AddSingleton<TrafficCaptureService>(sp =>
+            string modelPath = Path.GetFullPath(Path.Combine(
+                builder.Environment.ContentRootPath,
+                builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
+            builder.Services.AddSingleton(_ => new OnnxInferenceEngine(modelPath));
+            builder.Services.AddSingleton<IInferenceEngine>(
+                sp => sp.GetRequiredService<OnnxInferenceEngine>());
+
+            if (builder.Configuration.GetValue("Demo:Enabled", false))
             {
-                var config = sp.GetRequiredService<IConfiguration>();
-                var section = config.GetSection("PolicySettings");
-                int flowIdleTimeoutSeconds = section.GetValue<int>("FlowIdleTimeoutSeconds");
-                int preFilterMinPackets = section.GetValue<int>("PreFilterMinPackets");
-                int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
-                return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
-            });
+                builder.Services.AddHostedService<DemoReplayService>();
+            }
+
             var app = builder.Build();
-            //
+
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
             {
@@ -44,6 +47,15 @@ namespace PolarisSentinel
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
+            app.MapHub<DetectionHub>("/hubs/detections");
+
+            app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
+            {
+                classes = engine.ClassNames,
+                featureCount = engine.FeatureNames.Count,
+                rfThreshold = engine.RfConfidenceThreshold,
+                blockThreshold = engine.AutoBlockConfidenceThreshold,
+            }));
 
             app.Run();
         }
