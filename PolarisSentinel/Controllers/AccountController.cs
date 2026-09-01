@@ -55,7 +55,8 @@ namespace PolarisSentinel.Web.Controllers
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
                     else
-                        return RedirectToAction("Index","Dashboard");
+                        //There is no Dashboard controller yet; Home/Index is the live dashboard.
+                        return RedirectToAction("Index", "Home");
                 }
                 else
                 {

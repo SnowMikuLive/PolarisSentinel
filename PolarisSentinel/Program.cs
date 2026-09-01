@@ -13,7 +13,7 @@ namespace PolarisSentinel
 {
     public class Program
     {
-        public static async Task Main(string[] args)//use await which can wait for database completing. To run the application asynchronously
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -52,7 +52,6 @@ namespace PolarisSentinel
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/Home/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 
@@ -78,32 +77,42 @@ namespace PolarisSentinel
                 blockThreshold = engine.AutoBlockConfidenceThreshold,
             }));
 
-            //Default Admin User Create
+            //Apply pending migrations, then create the default admin user.
             using (var scope = app.Services.CreateScope())
             {
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-                var admin = await userManager.FindByNameAsync("admin");
-
-                //Start to create the default admin user if it does not exist. 
-                //The default admin would not created again when admin not null.
-                if (admin == null)
+                try
                 {
-                    admin = new IdentityUser
-                    {
-                        UserName = "admin",
-                        Email = "admin@polaris.local",
-                        EmailConfirmed = true
-                    };
+                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    await db.Database.MigrateAsync();
 
-                    // Create the admin user with a default password
-                    var result = await userManager.CreateAsync(admin, "Polaris@2026");
-                    if (!result.Succeeded)
+                    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+                    var admin = await userManager.FindByNameAsync("admin");
+
+                    //The default admin would not created again when admin not null.
+                    if (admin == null)
                     {
-                        foreach (var error in result.Errors)
+                        admin = new IdentityUser
                         {
-                            Console.WriteLine($"Failed to create admin user: {error.Description}");
+                            UserName = "admin",
+                            Email = "admin@polaris.local",
+                            EmailConfirmed = true
+                        };
+
+                        // Create the admin user with a default password
+                        var result = await userManager.CreateAsync(admin, "Polaris@2026");
+                        if (!result.Succeeded)
+                        {
+                            foreach (var error in result.Errors)
+                            {
+                                app.Logger.LogError("Failed to create admin user: {Error}", error.Description);
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    app.Logger.LogError(ex,
+                        "Identity database initialisation failed; login is unavailable until the database is reachable.");
                 }
             }
             app.Run();
