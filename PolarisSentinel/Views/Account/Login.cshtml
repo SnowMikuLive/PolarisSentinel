@@ -1,0 +1,77 @@
+﻿@model PolarisSentinel.Web.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Login";
+    //Use stand alone layout no navigation
+    Layout = "_LoginLayout";
+}
+
+@*Login card container*@
+<div class="card shadow rounded-4 p-5" style="width:420px;">
+    <div class="text-center mb-4">
+        @* it will changed into the PS logo later
+        <span class="material-symbols-outlined" style="font-size: 36px;">bolt</span> *@
+        @* Polaris Stential Logo *@
+        <img src="~/images/logofinal.svg" alt="Polaris Stinel Logo" style="height:36px; width:auto;"/>
+        @*Project Name*@
+        <h1 class="h4 fw-bold mt-2" style="color:#1E2B3C;">Polaris Sentinel</h1>
+        @*Project tagline*@
+        <p class="text-muted small">AI-Driven Network Security</p>
+    </div>
+
+    @*Login form fields would go here*@
+    <form asp-action="Login" asp-controller="Account" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div class="mb-3">
+            <label asp-for="Username" class="form-label fw-semibold small text-secondary">Username</label>
+            <input asp-for="Username" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="admin"/>
+            <span asp-validation-for="Username" class="text-danger"></span>
+        </div>
+        @*Password field*@
+        <div class="mb-3">
+            <label asp-for="Password" class="form-label fw-semibold small text-secondary">Password</label>
+            <input asp-for="Password" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="••••••••"/>
+            <span asp-validation-for="Password" class="text-danger"></span>
+        </div>
+        @*Sign in button*@
+        <button class="btn btn-dark w-100 fw-bold" type="submit" style="height:40px;background-color: #1E2B3C;border:none">Sign In</button>
+        @*Forgot password link*@
+        <div class="text-center mt-3">
+            <a href="#" class="small text-decoration-none text-secondary" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal">Forgot password?</a>
+        </div>
+        @*Default password reminder*@
+        <p class="text-center text-muted" style="font-size:11px; color:#BCC6D4 !important;">Default: Polaris@2026</p>
+    </form>
+</div>
+
+
+@*Forgot password pop-up window modal*@
+<div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+        <div class="modal-content" style="border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.12);">
+            <div class="modal-header border-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold" style="color:#1E2B3C;">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            @*line*@
+            <div class="px-4">
+                <hr class="my-0" style="border-color:#E6EAF0;"/>
+            </div>
+            <div class="modal-body px-4 pb-4">
+                <p class="text-muted small">Enter your registered email address or phone number to receive a reset link.</p>
+                <form>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-secondary">Email or Phone Number</label>
+                        <input type="text" class="form-control" style="height:36px;border-color:#E6EAF0;" placeholder="Enter your email or phone number">
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100 fw-bold" style="height:36px; background-color:#1E2B3C; border:none;">Send Reset Link</button>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="#" class="small text-decoration-none text-secondary d-inline-flex align-items-center gap-1" data-bs-dismiss="modal">
+                        <span class="material-symbols-outlined" style="font-size:16px;">arrow_back</span>
+                        Back to Sign In
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
