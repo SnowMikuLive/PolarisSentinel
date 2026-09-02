@@ -1,0 +1,31 @@
+cd "c:\Users\chaiz\OneDrive\桌面\PolarisSentinel"
+
+python -m venv ml\.venv
+ml\.venv\Scripts\Activate.ps1
+pip install -r ml\requirements.txt
+
+python ml\scripts\smoke_test_toolchain.py
+
+# 确认 8 个 CSV 都在、标签能对上
+python ml\scripts\check_dataset.py
+
+# 可选：看数据质量（NaN、重复行等）
+python ml\scripts\eda.py
+
+# 切分 train/val/test，写出 ml\data\prepared.npz  ← 这一步最耗内存
+python ml\scripts\prepare_dataset.py
+
+# 只在训练集上拟合基线随机森林，在验证集上打分
+python ml\scripts\train_rf.py
+
+# 可选：对比几种超参（大约要训 4 次，最慢）
+python ml\scripts\tune_rf.py
+
+# 用 train+val 重训，导出你现在打开的那个 ONNX
+python ml\scripts\export_onnx.py
+
+# 可选：看 PreFilter 会拦掉多少攻击流
+python ml\scripts\analyze_prefilter_impact.py
+
+#可选：跑测试
+pytest ml\tests -q

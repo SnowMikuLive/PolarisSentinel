@@ -23,7 +23,7 @@
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
         <div class="mb-3">
             <label asp-for="Username" class="form-label fw-semibold small text-secondary">Username</label>
-            <input asp-for="Username" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="admin"/>
+            <input asp-for="Username" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="Username"/>
             <span asp-validation-for="Username" class="text-danger"></span>
         </div>
         @*Password field*@
@@ -38,8 +38,6 @@
         <div class="text-center mt-3">
             <a href="#" class="small text-decoration-none text-secondary" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal">Forgot password?</a>
         </div>
-        @*Default password reminder*@
-        <p class="text-center text-muted" style="font-size:11px; color:#BCC6D4 !important;">Default: Polaris@2026</p>
     </form>
 </div>
 

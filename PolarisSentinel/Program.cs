@@ -1,3 +1,7 @@
+using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Hubs;
+using PolarisSentinel.Inference;
+using PolarisSentinel.Services;
 using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
@@ -5,18 +9,16 @@ using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Web.Data;
 using Microsoft.Extensions.DependencyInjection; 
 using PolarisSentinel.Web.Hubs;
-using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel
 {
     public class Program
     {
-        public static async Task Main(string[] args)//use await which can wait for database completing. To run the application asynchronously
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
             builder.Services.AddControllersWithViews();
 
             //Add SignalR
@@ -44,6 +46,7 @@ namespace PolarisSentinel
             builder.Services.AddHostedService<TrafficBroadcastService>();
 
             builder.Host.UseWindowsService();
+            builder.Services.AddSignalR();
 
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -55,14 +58,27 @@ namespace PolarisSentinel
                 options.Password.RequiredLength = 6;
             })
                 .AddEntityFrameworkStores<ApplicationDbContext>();
+            
+            // Program.cs
+
+            string modelPath = Path.GetFullPath(Path.Combine(
+                builder.Environment.ContentRootPath,
+                builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
+            builder.Services.AddSingleton(_ => new OnnxInferenceEngine(modelPath));
+            builder.Services.AddSingleton<IInferenceEngine>(
+                sp => sp.GetRequiredService<OnnxInferenceEngine>());
+
+            if (builder.Configuration.GetValue("Demo:Enabled", false))
+            {
+                builder.Services.AddHostedService<DemoReplayService>();
+            }
 
             var app = builder.Build();
-            
+
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/Home/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 
@@ -78,36 +94,57 @@ namespace PolarisSentinel
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
+            app.MapHub<DetectionHub>("/hubs/detections");
 
             //map the SignalR hub endpoint
             app.MapHub<TrafficHub>("/trafficHub");
 
             //Default Admin User Create
             using (var scope = app.Services.CreateScope())
+            app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-                var admin = await userManager.FindByNameAsync("admin");
+                classes = engine.ClassNames,
+                featureCount = engine.FeatureNames.Count,
+                rfThreshold = engine.RfConfidenceThreshold,
+                blockThreshold = engine.AutoBlockConfidenceThreshold,
+            }));
 
-                //Start to create the default admin user if it does not exist. 
-                //The default admin would not created again when admin not null.
-                if (admin == null)
+            //Apply pending migrations, then create the default admin user.
+            using (var scope = app.Services.CreateScope())
+            {
+                try
                 {
-                    admin = new IdentityUser
-                    {
-                        UserName = "admin",
-                        Email = "admin@polaris.local",
-                        EmailConfirmed = true
-                    };
+                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    await db.Database.MigrateAsync();
 
-                    // Create the admin user with a default password
-                    var result = await userManager.CreateAsync(admin, "Polaris@2026");
-                    if (!result.Succeeded)
+                    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+                    var admin = await userManager.FindByNameAsync("admin");
+
+                    //The default admin would not created again when admin not null.
+                    if (admin == null)
                     {
-                        foreach (var error in result.Errors)
+                        admin = new IdentityUser
                         {
-                            Console.WriteLine($"Failed to create admin user: {error.Description}");
+                            UserName = "admin",
+                            Email = "admin@polaris.local",
+                            EmailConfirmed = true
+                        };
+
+                        // Create the admin user with a default password
+                        var result = await userManager.CreateAsync(admin, "Polaris@2026");
+                        if (!result.Succeeded)
+                        {
+                            foreach (var error in result.Errors)
+                            {
+                                app.Logger.LogError("Failed to create admin user: {Error}", error.Description);
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    app.Logger.LogError(ex,
+                        "Identity database initialisation failed; login is unavailable until the database is reachable.");
                 }
             }
 
