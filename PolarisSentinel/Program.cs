@@ -7,7 +7,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Web.Data;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection; 
+using PolarisSentinel.Web.Hubs;
+using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel
 {
@@ -18,6 +20,31 @@ namespace PolarisSentinel
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddControllersWithViews();
+
+            //Add SignalR
+            builder.Services.AddSignalR();
+
+
+            //Register the ITrafficCaptureService as a singleton service
+            //sp is the service provider that allows you to resolve other services from the DI container. In this case, we are resolving IConfiguration to read the configuration values for the TrafficCaptureService.
+            builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
+            {
+
+                var config=sp.GetRequiredService<IConfiguration>();
+                var section= config.GetSection("PolicySettings");
+                int flowIdleTimeoutSeconds = section.GetValue<int>("FlowIdleTimeoutSeconds");
+                int preFilterMinPackets = section.GetValue<int>("PreFilterMinPackets");
+
+                // Use the null-coalescing operator to provide a default value of 5 if LiveSummaryIntervalSeconds is not set in the configuration
+                int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
+
+                //return a concrete TrafficCaptureService instance
+                return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
+            });
+
+            //add the registe background broadcast service
+            builder.Services.AddHostedService<TrafficBroadcastService>();
+
             builder.Host.UseWindowsService();
             builder.Services.AddSignalR();
 
@@ -31,7 +58,7 @@ namespace PolarisSentinel
                 options.Password.RequiredLength = 6;
             })
                 .AddEntityFrameworkStores<ApplicationDbContext>();
-
+            
             // Program.cs
 
             string modelPath = Path.GetFullPath(Path.Combine(
@@ -69,6 +96,11 @@ namespace PolarisSentinel
                 .WithStaticAssets();
             app.MapHub<DetectionHub>("/hubs/detections");
 
+            //map the SignalR hub endpoint
+            app.MapHub<TrafficHub>("/trafficHub");
+
+            //Default Admin User Create
+            using (var scope = app.Services.CreateScope())
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
                 classes = engine.ClassNames,
@@ -115,6 +147,8 @@ namespace PolarisSentinel
                         "Identity database initialisation failed; login is unavailable until the database is reachable.");
                 }
             }
+
+            //Run the application
             app.Run();
         }
     }

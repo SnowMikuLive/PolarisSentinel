@@ -5,6 +5,7 @@ using SharpPcap.LibPcap;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 
+
 namespace PolarisSentinel.TrafficCapture;
 
 public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
