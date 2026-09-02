@@ -1,0 +1,129 @@
+﻿@* Razor view for the Dashboard page in an ASP.NET Core MVC application. It sets the page title to "Dashboard" and displays a container with a heading, a description, and a card showing live traffic information. The live traffic value is dynamically populated from the ViewBag. *@
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="container-fluid">
+    <h2>Dashboard</h2>
+    <p>System Overview & Real-time Status</p>
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3">
+                @* it will be changed into Material Symbols icon later *@
+                <span class="material-symbols-outlined">wifi</span>
+                <div>Live Traffic</div>
+                @* Weak Typing to tranfer the data from controller to the view,it will be chage to strong typing *@
+                <h3 id="liveTrafficValue">@ViewBag.LiveTraffic</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3">
+                @* it will be changed into Material Symbols icon later *@
+                <span class="material-symbols-outlined">notifications</span>
+                <div>Alerts</div>
+                @* Weak Typing to tranfer the data from controller to the view,it will be chage to strong typing *@
+                <h3 id="alertsCount">@ViewBag.AlertsCount</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3">
+                @* it will be changed into Material Symbols icon later *@
+                <span class="material-symbols-outlined">psychology</span>
+                <div>AI Accuracy</div>
+                @* Weak Typing to tranfer the data from controller to the view,it will be chage to strong typing *@
+                <h3>@ViewBag.AiAccuracy</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm p-3">
+                @* it will be changed into Material Symbols icon later *@
+                <span class="material-symbols-outlined">shield</span>
+                <div>Active Rules</div>
+                @* Weak Typing to tranfer the data from controller to the view,it will be chage to strong typing *@
+                <h3>@ViewBag.ActiveRules</h3>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="card shadow-sm p-3">
+                <canvas id="trafficChart" height="200"></canvas>    
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card shadow-sm p-3">
+                <h5>AI Inference Results</h5>
+                <p class="text-muted">No data yet</p>
+                @*the AI inference results will be displayed here in the future. *@
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+@section Scripts {
+    @* Chart.js CDN (temporary) *@
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    @*SignalR client (CDN, later download to Local)*@
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+
+    <script>
+        // Create empty chart 
+        //ctx is the context of the canvas element
+        const ctx = document.getElementById('trafficChart').getContext('2d'); 
+        const trafficChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packets per second',
+                    data: [], 
+                    borderColor: '#1E2B3C',
+                    backgroundColor: 'rgba(30, 43, 60, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                scales: {
+                    y: {beginAtZero: true}
+                }
+            }
+        });
+        // SignalR connection to receive live traffic data
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/trafficHub")
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        connection.on("ReceiveLiveTrafficSummary", (summary) => {
+            //Update card which on the above of the Dashboard page.show the live traffic value in Kpps (Kilo packets per second) and leave the one decimal place.
+            document.getElementById("liveTrafficValue").innerText = (summary.packetsPerSecond/1000).toFixed(1)+"Kpps";
+            // strictly show the alerts count in the card, without show the unit, just the number.
+            document.getElementById("alertsCount").innerText = summary.activeFlowCount;
+
+            // Update the chart with new data
+            const now=new Date().toLocaleTimeString();
+            trafficChart.data.labels.push(now);
+            trafficChart.data.datasets[0].data.push(summary.packetsPerSecond);
+
+            //
+            if(trafficChart.data.labels.length>20)
+            {
+                trafficChart.data.labels.shift();
+                trafficChart.data.datasets[0].data.shift();
+            }
+
+            trafficChart.update();
+        });
+        //Connect the server. if failed, then send messages to console. prevent crash.
+        connection.start().catch(err=>console.error(err.toString()));
+    </script>
+}
