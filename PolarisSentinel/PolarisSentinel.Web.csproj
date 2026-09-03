@@ -31,4 +31,8 @@
     <ProjectReference Include="..\PolarisSentinel.Utility\PolarisSentinel.Utility.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\lib\fontsource\" />
+  </ItemGroup>
+
 </Project>
