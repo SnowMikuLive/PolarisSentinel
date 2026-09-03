@@ -6,16 +6,16 @@
 }
 
 @*Login card container*@
-<div class="card shadow rounded-4 p-5" style="width:420px;">
+<div class="card shadow rounded p-5 border-primary" style="width:420px;">
     <div class="text-center mb-4">
         @* it will changed into the PS logo later
         <span class="material-symbols-outlined" style="font-size: 36px;">bolt</span> *@
         @* Polaris Stential Logo *@
-        <img src="~/images/logofinal.svg" alt="Polaris Stinel Logo" style="height:36px; width:auto;"/>
+        <img src="~/images/logofinal.svg" alt="Polaris Sentinel Logo" style="height:36px; width:auto;"/>
         @*Project Name*@
         <h1 class="h4 fw-bold mt-2" style="color:#1E2B3C;">Polaris Sentinel</h1>
         @*Project tagline*@
-        <p class="text-muted small">AI-Driven Network Security</p>
+        <p class="text-muted small">AI-Driven Next-Generation Firewall<br>for Automated Threat Detection and Response</p>
     </div>
 
     @*Login form fields would go here*@
@@ -33,7 +33,7 @@
             <span asp-validation-for="Password" class="text-danger"></span>
         </div>
         @*Sign in button*@
-        <button class="btn btn-dark w-100 fw-bold" type="submit" style="height:40px;background-color: #1E2B3C;border:none">Sign In</button>
+        <button class="btn btn-primary w-100 fw-bold" type="submit" style="height:40px;">Sign In</button>
         @*Forgot password link*@
         <div class="text-center mt-3">
             <a href="#" class="small text-decoration-none text-secondary" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal">Forgot password?</a>
@@ -61,7 +61,7 @@
                         <label class="form-label fw-semibold small text-secondary">Email or Phone Number</label>
                         <input type="text" class="form-control" style="height:36px;border-color:#E6EAF0;" placeholder="Enter your email or phone number">
                     </div>
-                    <button type="submit" class="btn btn-dark w-100 fw-bold" style="height:36px; background-color:#1E2B3C; border:none;">Send Reset Link</button>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold" style="height:36px;">Send Reset Link</button>
                 </form>
                 <div class="text-center mt-3">
                     <a href="#" class="small text-decoration-none text-secondary d-inline-flex align-items-center gap-1" data-bs-dismiss="modal">
