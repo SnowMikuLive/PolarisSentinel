@@ -14,9 +14,6 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @*<link rel="stylesheet" href="~/PolarisSentinel.styles.css" asp-append-version="true" />*@
 
-    @* Local Material Symbols font *@
-    <link rel="stylesheet" href="~/lib/fontsource/material-symbols-outlined/400.css"/>
-
     @* Toastr CSS *@
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/css/toastr.min.css"/>
 </head>
@@ -41,12 +38,10 @@
                     <ul class="navbar-nav flex-grow-1">
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
-                            @* <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a> *@
                         </li>
-                        @* Polaris Sentinel does not require a public privacy policy page *@
-                        @*<li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li>*@
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="TrafficMonitor" asp-action="Index">Traffic Monitor</a>
+                        </li>
                     </ul>
                     @* add login partial to the right of the navbar *@
                     <partial name="_LoginPartial" />
