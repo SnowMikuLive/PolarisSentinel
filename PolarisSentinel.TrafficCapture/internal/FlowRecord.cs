@@ -26,7 +26,7 @@ internal sealed class FlowRecord
 
     public DateTime? LastFwdPacketTime { get; set; }
     public DateTime? LastBwdPacketTime { get; set; }
-
+    //For the prefilter to trigae benign
     public int SynCount { get; set; }
     public int AckCount { get; set; }
     public int FinCount { get; set; }

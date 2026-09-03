@@ -22,8 +22,29 @@ internal sealed class PreFilter
         // Rule 3: Unidirectional traffic (broadcast/multicast)
         if (flow.FwdPackets == 0 || flow.BwdPackets == 0)
             return false;
+        
+        // Rule 4: Suspicious patterns - SYN flood detection
+        bool isSynFlood =
+            flow.SynCount > 10 &&
+            flow.AckCount == 0 &&
+            flow.RstCount == 0 &&
+            flow.FwdPackets > flow.BwdPackets * 2;
 
-        // Rule 4: Normal HTTPS/HTTP traffic with balanced flows
+        if (isSynFlood)
+            return true;  // Definitely suspicious
+        
+        // Rule 5: Port scanning pattern
+        bool isPortScan =
+            flow.SynCount > 0 &&
+            flow.RstCount > flow.SynCount * 0.5 &&
+            flow.DurationSeconds < 2.0 &&
+            flow.FwdPackets > 5 &&
+            flow.BwdPackets <= flow.FwdPackets * 0.3;
+
+        if (isPortScan)
+            return true;  // Definitely suspicious
+
+        // Rule 6: Normal HTTPS/HTTP traffic with balanced flows
         bool isNormalWebTraffic =
             (flow.DestinationPort == 443 || flow.DestinationPort == 80) &&
             flow.FwdPackets > 5 &&
@@ -37,7 +58,7 @@ internal sealed class PreFilter
         if (isNormalWebTraffic)
             return false;
 
-        // Rule 5: Normal two-way conversation with clean handshake
+        // Rule 7: Normal two-way conversation with clean handshake
         bool isOrdinaryTwoWayTraffic =
             flow.FwdPackets > 0 &&
             flow.BwdPackets > 0 &&
@@ -46,6 +67,16 @@ internal sealed class PreFilter
 
         if (isOrdinaryTwoWayTraffic)
             return false;
+
+        // Rule 8: Suspicious flag combinations
+        bool hasSuspiciousFlags =
+            flow.RstCount > 5 ||  // Too many resets
+            flow.SynCount > 5 ||  // Too many SYN without proper handshake
+            (flow.SynCount == 0 && flow.FwdPackets > 10) ||  // No SYN in TCP traffic
+            (flow.FinCount > 10);  // Too many FINs
+
+        if (hasSuspiciousFlags)
+            return true;
 
         // Anything else - susipicious enough to sending to AI engine
         return true;

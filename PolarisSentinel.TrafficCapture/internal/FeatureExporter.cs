@@ -1,4 +1,5 @@
 ﻿using PolarisSentinel.Core.Models;
+using System.Diagnostics;
 
 namespace PolarisSentinel.TrafficCapture.Internal;
 
@@ -25,17 +26,22 @@ internal static class FeatureExporter
         "bwd_iat_std_ms",
         "bwd_iat_max_ms",
         "bwd_iat_min_ms",
-        "down_up_ratio",
-        "syn_count",    
-        "ack_count",      
-        "fin_count",      
-        "rst_count",     
-        "psh_count",     
-        "destination_port"
+        "flow_bytes_per_ms",
+        "flow_pkts_per_ms",
+        "down_up_ratio"
+            
     };
 
     public static FlowFeatureVector Export(FlowRecord flow, FlowKey key, string sourceIp, ushort sourcePort, string destinationIp, ushort destinationPort, byte protocol)
     {
+        float bytesPerMs = flow.DurationSeconds > 0
+           ? (float)(flow.TotalBytes / (flow.DurationSeconds * 1000))
+           : 0;
+
+        float pktsPerMs = flow.DurationSeconds > 0
+            ? (float)(flow.TotalPackets / (flow.DurationSeconds * 1000))
+            : 0;
+
         float[] features =
         {
             (float)flow.DurationSeconds,
@@ -55,13 +61,9 @@ internal static class FeatureExporter
             (float)flow.BwdIatStats.StdDev,
             (float)flow.BwdIatStats.Max,
             (float)flow.BwdIatStats.Min,
-            (float)flow.DownUpRatio,
-            flow.SynCount,
-            flow.AckCount,
-            flow.FinCount,
-            flow.RstCount,
-            flow.PshCount,
-            destinationPort
+            bytesPerMs,
+            pktsPerMs,
+            (float)flow.DownUpRatio
         };
 
         return new FlowFeatureVector

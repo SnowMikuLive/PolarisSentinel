@@ -7,5 +7,4 @@ public class FirewallRuleInfo
     public required bool Enabled { get; init; }
     public required bool IsBlockRule { get; init; }
 
-    public required bool IsManagedByPolarisSentinel { get; init; }
 }
