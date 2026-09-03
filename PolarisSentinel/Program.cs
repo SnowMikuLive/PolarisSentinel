@@ -30,8 +30,8 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
             {
 
-                var config=sp.GetRequiredService<IConfiguration>();
-                var section= config.GetSection("PolicySettings");
+                var config = sp.GetRequiredService<IConfiguration>();
+                var section = config.GetSection("PolicySettings");
                 int flowIdleTimeoutSeconds = section.GetValue<int>("FlowIdleTimeoutSeconds");
                 int preFilterMinPackets = section.GetValue<int>("PreFilterMinPackets");
 
@@ -46,7 +46,6 @@ namespace PolarisSentinel
             builder.Services.AddHostedService<TrafficBroadcastService>();
 
             builder.Host.UseWindowsService();
-            builder.Services.AddSignalR();
 
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -57,7 +56,16 @@ namespace PolarisSentinel
                 options.SignIn.RequireConfirmedAccount = false;
                 options.Password.RequiredLength = 6;
             })
-                .AddEntityFrameworkStores<ApplicationDbContext>();
+            .AddEntityFrameworkStores<ApplicationDbContext>();
+
+            //Configure Login path and Access Denied path for the application cookie
+            builder.Services.ConfigureApplicationCookie(options =>
+            {
+                options.LoginPath = "/Account/Login";
+                options.AccessDeniedPath = "/Account/AccessDenied";
+            }); 
+
+                
             
             // Program.cs
 
@@ -98,9 +106,6 @@ namespace PolarisSentinel
 
             //map the SignalR hub endpoint
             app.MapHub<TrafficHub>("/trafficHub");
-
-            //Default Admin User Create
-            using (var scope = app.Services.CreateScope())
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
                 classes = engine.ClassNames,
@@ -109,6 +114,7 @@ namespace PolarisSentinel
                 blockThreshold = engine.AutoBlockConfidenceThreshold,
             }));
 
+            //Default Admin User Create
             //Apply pending migrations, then create the default admin user.
             using (var scope = app.Services.CreateScope())
             {

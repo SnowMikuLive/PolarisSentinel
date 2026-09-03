@@ -18,7 +18,9 @@ html {
 }
 
 body {
-  margin-bottom: 60px;
+    margin-bottom: 60px;
+    background-color: #C8E0F7 !important;
+    font-family:'Segoe UI',Arial,sans-serif;
 }
 
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
@@ -33,4 +35,51 @@ body {
 .form-control::placeholder {
     color:#E6EAF0 !important;
     opacity:1;
+}
+
+/*Global styles for the application*/
+/*Add border to navbar*/
+.navbar{
+    border-bottom:3px solid #2563EB !important;
+}
+
+/*Change card mode*/
+.card{
+    border:1px solid #D1E0F0;
+    border-radius:12px;
+    transition:box-shadow 0.2s;
+}
+
+.card:hover{
+    box-shadow:0 6px 12px rgba(30,100,235,0.15);
+}
+
+/*Primary button color*/
+.btn-primary {
+    background-color: #2563EB;
+    border-color: #2563EB;
+}
+.btn-primary:hover {
+    background-color: #1D4ED8;
+    border-color: #1D4ED8;
+}
+
+/*Table header*/
+.table thead th {
+    background-color: #EFF6FF;
+    color: #1E3A8A;
+}
+
+/*link color*/
+a {
+    color: #2563EB;
+}
+a:hover {
+    color: #1D4ED8;
+}
+
+/*traffic chart Styles in the middle just for temporary use. It will change after AI reference card finish*/
+#trafficChart{
+    width:100% !important;
+    height:auto !important;
 }
