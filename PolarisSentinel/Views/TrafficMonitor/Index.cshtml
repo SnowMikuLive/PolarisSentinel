@@ -73,10 +73,14 @@
 @section Scripts {
     @* Chart.js CDN is temporary. It will be replaced with a local version later and run without internet *@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+     @* Show the data strictly *@
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     @* Signalr client library *@
     <script src="~/lib/signalr/signalr.min.js"></script>
 
     <script>
+        //Register datalabels plugin (required)
+        Chart.register(ChartDataLabels);
         // Protocol distribution chart initialization
         const protocolCtx=document.getElementById('protocolChart').getContext('2d');
         const protocolChart=new Chart(protocolCtx,{
@@ -98,10 +102,35 @@
                     legend:{
                         //display the legend at the bottom of the chart
                         position:'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = Math.round(context.parsed || 0);
+                                return label + ': ' + value + '%';
+                            }
+                        }
+                    },
+                    // Show the percentage
+                    datalabels: {
+                        color: '#fff',
+                        font: {
+                            weight: 'bold',
+                            size: 12
+                        },
+                        //Format as integer percentage
+                        formatter: (value) => {
+                            return Math.round(value) + '%';
+                        },
+                        display: (context) => {
+                            return context.dataset.data[context.dataIndex] > 0;
+                        }
                     }
                 }
             }
         });
+           
 
         //calculate the average rate and peak rate per second
         let peakPps=0;
