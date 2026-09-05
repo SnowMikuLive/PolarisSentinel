@@ -1,72 +1,8 @@
 ﻿@{
-    ViewData["Title"] = "Live Detections";
+    ViewData["Title"] = "Home";
 }
 
-<div class="d-flex justify-content-between align-items-baseline mb-3">
-    <h2>
-        Live Detections
-        <span class="badge bg-info align-middle">DEMO REPLAY</span>
-    </h2>
-    <small id="model-info" class="text-muted"></small>
+<div class="text-center">
+    <h1 class="display-4">Polaris Sentinel</h1>
+    <p>Network threat detection and response.</p>
 </div>
-
-<div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <div class="fs-2 fw-bold" id="c-flows">0</div>
-                <div class="text-muted">Flows analysed</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <div class="fs-2 fw-bold text-success" id="c-benign">0</div>
-                <div class="text-muted">Benign</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <div class="fs-2 fw-bold text-warning" id="c-alerts">0</div>
-                <div class="text-muted">Alerts (conf &ge; 0.6)</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card text-center">
-            <div class="card-body">
-                <div class="fs-2 fw-bold text-danger" id="c-blocks">0</div>
-                <div class="text-muted">Block-eligible (conf &ge; 0.8)</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<p class="mb-2">
-    <span class="badge bg-light text-dark border">DoS <span id="c-dos">0</span></span>
-    <span class="badge bg-light text-dark border">PortScan <span id="c-portscan">0</span></span>
-    <span class="badge bg-light text-dark border">BruteForce <span id="c-bruteforce">0</span></span>
-    <span id="conn-state" class="badge bg-secondary">connecting…</span>
-</p>
-
-<table class="table table-sm align-middle">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Source IP</th>
-            <th>Target port</th>
-            <th>Detected type</th>
-            <th>Confidence</th>
-            <th>Action tier</th>
-        </tr>
-    </thead>
-    <tbody id="det-body"></tbody>
-</table>
-
-@section Scripts {
-    <script src="~/lib/signalr/signalr.min.js"></script>
-    <script src="~/js/demo-dashboard.js" asp-append-version="true"></script>
-}
