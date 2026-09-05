@@ -8,7 +8,8 @@ The live traffic value is dynamically populated from the ViewBag. *@
 }
 
 <div class="container-fluid">
-    <h2>Dashboard</h2>
+    @* text-primary is the blue color in the default bootstrap 5 *@
+    <h2 class="text-primary">Dashboard</h2>
     <p>System Overview & Real-time Status</p>
 
     @* Hidden element by demo-dashboard.js for model info, will be used in the future for model version display and model update notification. *@
@@ -117,6 +118,7 @@ The live traffic value is dynamically populated from the ViewBag. *@
 @section Scripts {
     @* Chart.js CDN (temporary) *@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   
     @* SignalR client library *@
     <script src="~/lib/signalr/signalr.min.js"></script>
     @*demo dashboard logic*@
