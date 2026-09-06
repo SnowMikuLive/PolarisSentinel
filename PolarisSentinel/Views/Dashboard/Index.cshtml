@@ -1,63 +1,53 @@
-﻿@* Razor view for the Dashboard page in an ASP.NET Core MVC application. It sets the page title to "Dashboard" and displays a container with a heading, a description, and a card showing live traffic information. The live traffic value is dynamically populated from the ViewBag. *@
-@{
+﻿@{
     ViewData["Title"] = "Dashboard";
 }
 
 <div class="container-fluid">
-    @* text-primary is the blue color in the default bootstrap 5 *@
     <h2 class="text-primary">Dashboard</h2>
     <p>System Overview & Real-time Status</p>
-
-    @* Hidden element by demo-dashboard.js for model info, will be used in the future for model version display and model update notification. *@
-    <span id="model-info" class="d-none"></span>
 
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="card text-center border-primary shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold" id="c-flows" >0</div>
-                    <div class="text-muted">Flows analysed</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center border-success shadow-sm">
-                <div class="card-body">
-                    <div class="fs-2 fw-bold text-success" id="c-benign" >0</div>
-                    <div class="text-muted">Benign</div>
+                    <div class="fs-2 fw-bold">@ViewBag.LiveTraffic</div>
+                    <div class="text-muted">Live Traffic</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card text-center border-warning shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold text-warning" id="c-alerts">0</div>
-                    <div class="text-muted">Alerts (conf &ge; 0.6)</div>
+                    <div class="fs-2 fw-bold text-warning">@ViewBag.AlertsCount</div>
+                    <div class="text-muted">Alerts</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card text-center border-danger shadow-sm">
+            <div class="card text-center border-success shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold text-danger" id="c-blocks">0</div>
-                    @* show the confidence *@
-                    <div class="text-muted">Block-eligible (conf &ge; 0.8)</div>
+                    <div class="fs-2 fw-bold text-success">@ViewBag.AiAccuracy</div>
+                    <div class="text-muted">AI Accuracy</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-secondary shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold">@ViewBag.ActiveRules</div>
+                    <div class="text-muted">Active Rules</div>
                 </div>
             </div>
         </div>
     </div>
-               
 
     <div class="row mt-4">
-        @* <div class="col-md-8"> *@
-        @*Put the live traffic trend chart in the middle temporarily, and the AI inference results on the right. The chart will be updated in real-time using SignalR.*@
         <div class="col-md-10 offset-md-1">
             <div class="card shadow-sm border-primary">
                 <div class="card-header bg-primary text-white">
                     Live Traffic Trend
                 </div>
                 <div class="card-body">
-
                     <canvas id="trafficChart" height="200"></canvas>
                 </div>   
             </div>
@@ -109,31 +99,21 @@
                 </div>
             </div>
         </div>
-      </div>  
+    </div>
 </div>
 
 @section Scripts {
-    @* Chart.js CDN (temporary) *@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-   
-    @* SignalR client library *@
     <script src="~/lib/signalr/signalr.min.js"></script>
-    @*demo dashboard logic*@
-    <script src="~/js/demo-dashboard.js" asp-append-version="true"></script>
-    
-    @* Live traffic chart *@
     <script>
-        // Create empty chart 
-        //ctx is the context of the canvas element
-        const ctx = document.getElementById('trafficChart').getContext('2d'); 
-        //Chart with line type
+        const ctx = document.getElementById('trafficChart').getContext('2d');
         const trafficChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
                     label: 'Packets per second',
-                    data: [], 
+                    data: [],
                     borderColor: '#2563EB',
                     backgroundColor: 'rgba(40, 100, 235, 0.1)',
                     fill: true,
@@ -142,32 +122,29 @@
             },
             options: {
                 scales: {
-                    y: {beginAtZero: true}
+                    y: { beginAtZero: true }
                 }
             }
         });
 
-        // SignalR connection to receive live traffic data
-        const TrafficConnection = new signalR.HubConnectionBuilder()
+        const trafficConnection = new signalR.HubConnectionBuilder()
             .withUrl("/trafficHub")
             .configureLogging(signalR.LogLevel.Information)
             .build();
 
-        TrafficConnection.on("ReceiveLiveTrafficSummary", (summary) => {            
-            // Update the chart with new data
-            const now=new Date().toLocaleTimeString();
+        trafficConnection.on("ReceiveLiveTrafficSummary", (summary) => {
+            const now = new Date().toLocaleTimeString();
             trafficChart.data.labels.push(now);
             trafficChart.data.datasets[0].data.push(summary.packetsPerSecond);
 
-            if(trafficChart.data.labels.length>20)
-            {
+            if (trafficChart.data.labels.length > 20) {
                 trafficChart.data.labels.shift();
                 trafficChart.data.datasets[0].data.shift();
             }
 
             trafficChart.update();
         });
-        //Connect the server. if failed, then send messages to console. prevent crash.
-        TrafficConnection.start().catch(err=>console.error(err.toString()));
+
+        trafficConnection.start().catch(err => console.error(err.toString()));
     </script>
 }

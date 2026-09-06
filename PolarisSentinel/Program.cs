@@ -1,7 +1,5 @@
 using PolarisSentinel.Core.Interfaces;
-using PolarisSentinel.Hubs;
 using PolarisSentinel.Inference;
-using PolarisSentinel.Services;
 using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
@@ -76,11 +74,6 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
-            if (builder.Configuration.GetValue("Demo:Enabled", false))
-            {
-                builder.Services.AddHostedService<DemoReplayService>();
-            }
-
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -102,9 +95,6 @@ namespace PolarisSentinel
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
-            app.MapHub<DetectionHub>("/hubs/detections");
-
-            //map the SignalR hub endpoint
             app.MapHub<TrafficHub>("/trafficHub");
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {

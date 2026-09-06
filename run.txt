@@ -4,10 +4,6 @@ python -m venv ml\.venv
 ml\.venv\Scripts\Activate.ps1
 pip install -r ml\requirements.txt
 
-python ml\scripts\smoke_test_toolchain.py
-
-# 确认 8 个 CSV 都在、标签能对上
-python ml\scripts\check_dataset.py
 
 # 可选：看数据质量（NaN、重复行等）
 python ml\scripts\eda.py
@@ -24,8 +20,6 @@ python ml\scripts\tune_rf.py
 # 用 train+val 重训，导出你现在打开的那个 ONNX
 python ml\scripts\export_onnx.py
 
-# 可选：看 PreFilter 会拦掉多少攻击流
-python ml\scripts\analyze_prefilter_impact.py
 
 #可选：跑测试
 pytest ml\tests -q
