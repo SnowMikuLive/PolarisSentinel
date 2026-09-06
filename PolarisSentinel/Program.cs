@@ -108,9 +108,12 @@ namespace PolarisSentinel
             app.MapHub<TrafficHub>("/trafficHub");
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
+                //Categories the model can recognize (Benign,Dos,PortScan,BruteForce))
                 classes = engine.ClassNames,
                 featureCount = engine.FeatureNames.Count,
+                //Alert Threshold
                 rfThreshold = engine.RfConfidenceThreshold,
+                //Block Threshold
                 blockThreshold = engine.AutoBlockConfidenceThreshold,
             }));
 

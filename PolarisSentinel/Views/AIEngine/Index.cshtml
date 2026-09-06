@@ -1,0 +1,113 @@
+﻿@{
+    ViewData["Title"] = "AI Inference Engine";
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary">AI Inference Engine</h2>
+    <p>Model status and real-time inference results</p>
+    <div class="card shadow-sm border-primary mb-4">
+        <div class="card-header bg-primary text-white">
+            Model Status
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <span class="fw-bold">Model:</span>
+                    <span id="modelName">Loading...</span>
+                </div>
+                <div class="col-md-4">
+                    <span class="fw-bold">Classes:</span>
+                    <span id="modelClasses">-</span>
+                </div>
+                <div class="col-md-4">
+                    <span class="fw-bold">Thresholds:</span>
+                    @* placeholder for alert threshold and block threshold, the data come from OnnxInferenceEngine engine. *@
+                    Alert≥<span id="alertThreshold">-</span>,
+                    Block≥<span id="blockThreshold">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    @* Inference result table *@
+    <div class="card shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            Live Inference Results
+        </div>
+        <div class="card-body p-0">
+            @* the style will change when mouse hover on the top.  *@
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Source IP</th>
+                        <th>Target Port</th>
+                        <th>Attack Type</th>
+                        <th>Confidence</th>
+                        <th>Action Tier</th>
+                    </tr>
+                </thead>
+                <tbody id="inferenceBody">
+                    @* the information will add by SignalR automatically *@
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts{
+    @* SignalR client library *@
+    <script src="~/lib/signalR/signalr.min.js"></script>
+    <script>
+        //Fetch model info
+        fetch('/api/demo/info')
+        .then(r=>r.json())
+        .then(info=>{
+            document.getElementById('modelName').textContent='rf_model.onnx';
+            document.getElementById('modelClasses').textContent=info.classes.join(', ');
+            document.getElementById('alertThreshold').textContent=Math.round(info.rfThreshold*100)+'%';
+            document.getElementById('blockThreshold').textContent=Math.round(info.blockThreshold*100)+'%';
+        })
+        .catch(()=>{
+            document.getElementById('modelName').textContent='Unavailable';
+        });
+
+        //get detection event from the DetectionHub
+        const connection=new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/detections')
+            .withAutomaticReconnect()
+            .build();
+
+        //add the inference result row
+        function addInferenceRow(d)
+        {
+            const body=document.getElementById('inferenceBody');
+            const row=body.insertRow(0);
+            row.className=d.tier==='block'?'table-danger':
+                          d.tier==='alert'?'table-warning':'';
+            const badge=d.tier==='block'?'<span class="badge bg-danger">BLOCK-ELIGIBLE</span>':
+                        d.tier==='alert'?'<span class="badge bg-warning text-dark">ALERT</span>':
+                        '<span class="badge bg-secondary">LOW CONFIDENCE</span>';
+            //the data come from PolarisSentinel.Core/Models/DetectionResult.cs
+            row.innerHTML=
+                `<td>${d.time}</td>`+
+                `<td>${d.sourceIp}</td>`+
+                `<td>${d.destinationPort}</td>`+
+                `<td>${d.attackType}</td>`+
+                `<td>${(d.confidence*100).toFixed(1)}%</td>`+
+                `<td>${badge}</td>`;
+
+            
+            while(body.rows.length>50)body.deleteRow(50);
+        }
+        //connect to the detection hub to get detection events and add the inference rows and without benign traffic
+        connection.on('detection',(d)=>{
+            if(d.attackType!=='Benign'){
+                addInferenceRow(d);
+            }
+            
+        });
+        //Start the connection
+        connection.start().catch(err=>console.error(err.toString()));
+            
+    </script>
+}
