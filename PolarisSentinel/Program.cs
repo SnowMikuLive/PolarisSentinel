@@ -63,10 +63,6 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             }); 
 
-                
-            
-            // Program.cs
-
             string modelPath = Path.GetFullPath(Path.Combine(
                 builder.Environment.ContentRootPath,
                 builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));

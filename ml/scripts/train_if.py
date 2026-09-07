@@ -1,0 +1,168 @@
+import json
+import sys
+import time
+from pathlib import Path
+
+import joblib
+import numpy as np
+from sklearn.ensemble import IsolationForest
+from sklearn.metrics import roc_auc_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PowerTransformer, QuantileTransformer
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = ROOT / "data" / "prepared.npz"
+NOVELTY_PATH = ROOT / "data" / "novelty.npz"
+METRICS_PATH = ROOT / "artifacts" / "metrics_if_variants.json"
+MODEL_DIR = ROOT / "data"
+
+SEED = 42
+BENIGN = 0
+FIT_ROWS = 300_000  # common training subsample so variants are compared fairly
+
+# Random Forest already spends 0.229% of the <=1% total false-positive budget,
+# leaving roughly 0.7% for the anomaly detector.
+FPR_BUDGETS = [0.002, 0.005, 0.007, 0.01]
+REPORT_BUDGET = 0.007
+
+# max_samples drives how finely each tree can carve the feature space; the
+# sklearn default of 256 is very coarse for a 20-dimensional space.
+MAX_SAMPLES_GRID = [256, 4096, 32768]
+
+
+def build_transforms() -> dict[str, object | None]:
+    return {
+        "raw": None,
+        # output_distribution must stay "uniform": skl2onnx has no converter for "normal"
+        "quantile": QuantileTransformer(
+            output_distribution="uniform", n_quantiles=1000,
+            subsample=200_000, random_state=SEED),
+        "power": PowerTransformer(method="yeo-johnson"),
+    }
+
+
+def main() -> None:
+    data = np.load(DATA_PATH)
+    novelty = np.load(NOVELTY_PATH, allow_pickle=False)
+
+    X_train, y_train = data["X_train"], data["y_train"]
+    X_val, y_val = data["X_val"], data["y_val"]
+    class_names = data["class_names"].tolist()
+
+    X_novelty = novelty["X_novelty"]
+    novelty_groups = novelty["groups"]
+    group_names = sorted(set(novelty_groups.tolist()))
+
+    benign_train = X_train[y_train == BENIGN]
+    benign_val = X_val[y_val == BENIGN]
+    known_val = {cls: X_val[y_val == i] for i, cls in enumerate(class_names) if i != BENIGN}
+
+    rng = np.random.default_rng(SEED)
+    fit_idx = rng.choice(len(benign_train), size=min(FIT_ROWS, len(benign_train)), replace=False)
+    X_fit = benign_train[fit_idx]
+
+    print(f"Benign train pool : {len(benign_train):,} rows")
+    print(f"Fit subsample     : {len(X_fit):,} rows")
+    print(f"Benign val        : {len(benign_val):,} rows")
+    print(f"Novelty holdout   : {len(X_novelty):,} rows ({', '.join(group_names)})")
+    print()
+
+    results = []
+    for transform_name, transform in build_transforms().items():
+        if transform is None:
+            fit_seconds = 0.0
+            spaces = (X_fit, benign_val, X_novelty, known_val)
+        else:
+            start = time.perf_counter()
+            transform.fit(X_fit)
+            fit_seconds = time.perf_counter() - start
+            spaces = (
+                transform.transform(X_fit),
+                transform.transform(benign_val),
+                transform.transform(X_novelty),
+                {cls: transform.transform(rows) for cls, rows in known_val.items()},
+            )
+        T_fit, T_benign, T_novelty, T_known = spaces
+        print(f"=== transform: {transform_name} (fit {fit_seconds:.0f}s) ===")
+
+        for max_samples in MAX_SAMPLES_GRID:
+            forest = IsolationForest(
+                n_estimators=200, max_samples=max_samples,
+                random_state=SEED, n_jobs=-1,
+            )
+            start = time.perf_counter()
+            forest.fit(T_fit)
+            forest_seconds = time.perf_counter() - start
+
+            benign_scores = forest.decision_function(T_benign)
+            novelty_scores = forest.decision_function(T_novelty)
+
+            # lower score = more anomalous, so flip sign for AUC where 1 = novelty
+            auc = float(roc_auc_score(
+                np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))],
+                np.r_[-benign_scores, -novelty_scores],
+            ))
+
+            entry = {
+                "transform": transform_name,
+                "max_samples": max_samples,
+                "fit_seconds": round(forest_seconds, 1),
+                "novelty_auc": auc,
+                "budgets": {},
+            }
+            for budget in FPR_BUDGETS:
+                # threshold chosen purely on benign scores, so the FPR cost is by construction
+                threshold = float(np.quantile(benign_scores, budget))
+                entry["budgets"][f"{budget:.3f}"] = {
+                    "threshold": threshold,
+                    "benign_fpr": float((benign_scores < threshold).mean()),
+                    "novelty_overall": float((novelty_scores < threshold).mean()),
+                    "per_group": {
+                        g: float((novelty_scores[novelty_groups == g] < threshold).mean())
+                        for g in group_names
+                    },
+                }
+
+            report = entry["budgets"][f"{REPORT_BUDGET:.3f}"]
+            entry["known_attack_flag_rate"] = {
+                cls: float((forest.decision_function(rows) < report["threshold"]).mean())
+                for cls, rows in T_known.items()
+            }
+
+            detail = ", ".join(f"{g} {v:.1%}" for g, v in report["per_group"].items())
+            known = ", ".join(f"{k} {v:.1%}" for k, v in entry["known_attack_flag_rate"].items())
+            print(f"  max_samples {max_samples:>6} ({forest_seconds:>4.0f}s) | "
+                  f"AUC {auc:.4f} | novelty@{REPORT_BUDGET:.1%} "
+                  f"{report['novelty_overall']:>6.1%} | {detail}")
+            print(f"{'':>25}   known-class flagged: {known}")
+
+            model = forest if transform is None else Pipeline(
+                [("scale", transform), ("iforest", forest)])
+            joblib.dump(model, MODEL_DIR / f"if_{transform_name}_{max_samples}.joblib", compress=3)
+            results.append(entry)
+        print()
+
+    ranked = sorted(results, key=lambda r: -r["budgets"][f"{REPORT_BUDGET:.3f}"]["novelty_overall"])
+    print(f"Ranked by novelty detection at {REPORT_BUDGET:.1%} benign FPR budget:")
+    for entry in ranked[:5]:
+        detected = entry["budgets"][f"{REPORT_BUDGET:.3f}"]["novelty_overall"]
+        print(f"    {entry['transform']:<9} max_samples {entry['max_samples']:>6} | "
+              f"{detected:>6.1%} | AUC {entry['novelty_auc']:.4f}")
+
+    METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    METRICS_PATH.write_text(json.dumps({
+        "seed": SEED,
+        "fit_rows": int(len(X_fit)),
+        "benign_val_rows": int(len(benign_val)),
+        "novelty_rows": int(len(X_novelty)),
+        "report_budget": REPORT_BUDGET,
+        "results": results,
+        "best": {"transform": ranked[0]["transform"], "max_samples": ranked[0]["max_samples"]},
+    }, indent=2), encoding="utf-8")
+    print(f"\nSaved {METRICS_PATH}")
+
+
+if __name__ == "__main__":
+    main()
