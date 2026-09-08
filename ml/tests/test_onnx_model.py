@@ -1,3 +1,15 @@
+"""验证导出的随机森林 ONNX 模型与 sklearn 一致，且元数据符合 C# 端契约。
+Verify exported RF ONNX matches sklearn and metadata matches the C# contract.
+
+依赖产物（不存在时跳过）:
+- ml/data/prepared.npz      由 prepare_dataset.py 生成
+  produced by prepare_dataset.py
+- ml/data/rf_final.joblib   由 export_onnx.py 生成
+  produced by export_onnx.py
+- ml/artifacts/rf_model.onnx 由 export_onnx.py 生成
+  produced by export_onnx.py
+"""
+
 import json
 from pathlib import Path
 
@@ -21,6 +33,8 @@ needs_artifacts = pytest.mark.skipif(
 
 @needs_artifacts
 def test_onnx_parity_with_sklearn():
+    """ONNX 推理结果（标签与概率）应与 sklearn 完全一致。
+    ONNX inference labels and probabilities must match sklearn exactly."""
     model = joblib.load(MODEL_PATH)
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
     X_test = np.load(DATA_PATH)["X_test"]
@@ -37,6 +51,8 @@ def test_onnx_parity_with_sklearn():
 
 @needs_artifacts
 def test_onnx_metadata_matches_schema():
+    """ONNX 元数据中的特征名、类别顺序和策略阈值应与训练脚本一致。
+    ONNX metadata feature names, class order, and thresholds must match training scripts."""
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
     meta = session.get_modelmeta().custom_metadata_map
 

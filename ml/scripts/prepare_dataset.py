@@ -1,3 +1,14 @@
+"""加载 CIC-IDS2017 CSV，构建 20 维特征，划分 train/val/test。
+Load CIC-IDS2017 CSVs, build 20-D features, and split into train/val/test.
+
+采用按组划分，避免相同特征行泄漏到不同集合。
+Uses group-aware splitting so identical feature rows never cross splits.
+
+输出:
+- ml/data/prepared.npz  特征矩阵、标签及 schema 元数据
+  feature matrices, labels, and schema metadata
+"""
+
 import sys
 from pathlib import Path
 
@@ -35,6 +46,8 @@ LABEL_MAPPING = {
 }
 CLASS_NAMES = ["Benign", "BruteForce", "DoS", "PortScan"]
 
+# 来自 CIC-IDS2017 的 17 个基础特征 (internal_name, raw_csv_column)
+# 17 base features from CIC-IDS2017 (internal_name, raw_csv_column)
 BASE_FEATURES = [
     ("flow_duration_ms", " Flow Duration"),
     ("total_fwd_packets", " Total Fwd Packets"),
@@ -54,17 +67,23 @@ BASE_FEATURES = [
     ("bwd_iat_max_ms", " Bwd IAT Max"),
     ("bwd_iat_min_ms", " Bwd IAT Min"),
 ]
+# 3 个派生速率/比率特征，在训练阶段计算
+# 3 derived rate/ratio features computed at training time
 DERIVED_FEATURES = ["flow_bytes_per_ms", "flow_pkts_per_ms", "down_up_ratio"]
 FEATURE_NAMES = [name for name, _ in BASE_FEATURES] + DERIVED_FEATURES
 
 
 def build_features(df: pd.DataFrame) -> np.ndarray:
+    """将原始 CSV 列转换为 20 维 float32 特征矩阵。
+    Convert raw CSV columns to the 20-D float32 feature matrix."""
     cols: dict[str, np.ndarray] = {}
     for name, raw in BASE_FEATURES:
         values = df[raw].to_numpy(dtype=np.float64)
         if name.endswith("_ms"):
-            values = values / 1e3
-        cols[name] = np.maximum(values, 0.0)  # clip rare negative IAT artefacts
+            values = values / 1e3  # CIC 以微秒存储，此处转为毫秒
+                                    # CIC stores microseconds; we use milliseconds
+        cols[name] = np.maximum(values, 0.0)  # 裁剪偶发的负 IAT 异常值
+                                               # clip rare negative IAT artefacts
 
     duration = cols["flow_duration_ms"]
     fwd_pkts = cols["total_fwd_packets"]
@@ -85,6 +104,8 @@ def build_features(df: pd.DataFrame) -> np.ndarray:
 
 
 def print_split(name: str, y: np.ndarray) -> None:
+    """打印某个划分集的行数及各类别分布。
+    Print row count and per-class distribution for one split."""
     counts = np.bincount(y, minlength=len(CLASS_NAMES))
     dist = ", ".join(f"{cls}: {n:,}" for cls, n in zip(CLASS_NAMES, counts))
     print(f"    {name:<6} {len(y):>10,} rows | {dist}")
@@ -107,8 +128,8 @@ def main() -> None:
     class_index = {cls: i for i, cls in enumerate(CLASS_NAMES)}
     y = df["Class"].map(class_index).to_numpy(dtype=np.int8)
 
-    # Identical feature rows must not straddle splits (PortScan is 99% duplicates,
-    # a plain random split would just measure memorisation).
+    # 相同特征行不得跨集合（PortScan 约 99% 重复，随机划分只会测记忆能力）
+    # Identical feature rows must not straddle splits (PortScan is ~99% duplicates)
     groups = pd.util.hash_pandas_object(pd.DataFrame(X), index=False).to_numpy()
 
     splitter = GroupShuffleSplit(n_splits=1, test_size=0.30, random_state=SEED)

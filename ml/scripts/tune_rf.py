@@ -1,3 +1,11 @@
+"""在验证集上对比多组随机森林超参数配置。
+Compare Random Forest hyperparameter configs on the validation set.
+
+输出:
+- ml/artifacts/metrics_tuning.json  各配置在不同置信度阈值下的指标
+  per-config metrics at multiple confidence thresholds
+"""
+
 import json
 import sys
 import time
@@ -13,8 +21,13 @@ DATA_PATH = ROOT / "data" / "prepared.npz"
 METRICS_PATH = ROOT / "artifacts" / "metrics_tuning.json"
 SEED = 42
 BENIGN = 0
+
+# 策略层要扫描的置信度阈值
+# Policy confidence thresholds to sweep
 THRESHOLDS = [0.50, 0.60, 0.70, 0.80, 0.90]
 
+# （名称, sklearn 参数, 良性样本上限）— benign_cap 仅对良性样本下采样
+# (name, sklearn params, benign_cap) — benign_cap downsamples benign rows only
 CONFIGS = [
     ("leaf5_baseline", {"min_samples_leaf": 5}, None),
     ("leaf1", {"min_samples_leaf": 1}, None),
@@ -24,6 +37,8 @@ CONFIGS = [
 
 
 def summarize(y_true: np.ndarray, y_pred: np.ndarray, class_names: list[str]) -> dict:
+    """计算良性误报率与各攻击类召回率。
+    Compute benign FPR and per-attack recall."""
     benign_mask = y_true == BENIGN
     out = {"benign_fpr": float((y_pred[benign_mask] != BENIGN).mean())}
     for idx, name in enumerate(class_names):
@@ -35,6 +50,8 @@ def summarize(y_true: np.ndarray, y_pred: np.ndarray, class_names: list[str]) ->
 
 
 def fmt(row: dict) -> str:
+    """格式化单行指标用于控制台输出。
+    Format one metrics row for console output."""
     return (f"FPR {row['benign_fpr']:.4%} | "
             + ", ".join(f"{k.removesuffix('_recall')} {v:.2%}"
                         for k, v in row.items() if k.endswith("_recall")))
@@ -50,6 +67,8 @@ def main() -> None:
     for name, params, benign_cap in CONFIGS:
         X_fit, y_fit = X_train, y_train
         if benign_cap is not None:
+            # 保留全部攻击样本，随机下采样良性样本以加速训练
+            # Keep all attack rows; randomly cap benign rows for faster training
             rng = np.random.default_rng(SEED)
             benign_idx = np.flatnonzero(y_train == BENIGN)
             keep = rng.choice(benign_idx, size=benign_cap, replace=False)
@@ -78,7 +97,8 @@ def main() -> None:
         print(f"\n=== {name} (fit {fit_seconds:.0f}s, {len(y_fit):,} rows) ===")
         print(f"    argmax          {fmt(entry['argmax'])}")
 
-        # policy view: attack prediction below the confidence threshold is not acted on
+        # 策略视角：置信度不足的攻击预测降级为良性，不触发告警
+        # Policy view: low-confidence attack predictions are treated as benign
         for t in THRESHOLDS:
             gated = np.where((y_pred != BENIGN) & (confidence < t), BENIGN, y_pred)
             row = summarize(y_val, gated, class_names)

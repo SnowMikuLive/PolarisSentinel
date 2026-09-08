@@ -1,3 +1,16 @@
+"""对比多种孤立森林变体（特征变换 × max_samples）在新类攻击上的检测能力。
+Compare Isolation Forest variants (transform x max_samples) on novelty detection.
+
+仅在良性流量上训练；在良性验证集 + 新类攻击留出集上评估。
+Trains only on benign traffic; evaluates on benign val + novelty holdout.
+
+输出:
+- ml/data/if_{transform}_{max_samples}.joblib  每个网格点一个模型
+  one model per grid point
+- ml/artifacts/metrics_if_variants.json         完整对比报告
+  full comparison report
+"""
+
 import json
 import sys
 import time
@@ -20,22 +33,28 @@ MODEL_DIR = ROOT / "data"
 
 SEED = 42
 BENIGN = 0
-FIT_ROWS = 300_000  # common training subsample so variants are compared fairly
+# 固定子采样量，保证各变体在相同良性样本上公平对比
+# Fixed subsample so every variant trains on the same benign rows
+FIT_ROWS = 300_000
 
-# Random Forest already spends 0.229% of the <=1% total false-positive budget,
-# leaving roughly 0.7% for the anomaly detector.
+# 选取异常阈值时要扫描的良性误报预算
+# Benign FPR budgets to sweep when picking the anomaly threshold
+# 随机森林已占用约 0.23% 的总 1% 预算，剩余约 0.7% 给孤立森林
+# RF already spends ~0.23% of the 1% total budget, leaving ~0.7% for IF
 FPR_BUDGETS = [0.002, 0.005, 0.007, 0.01]
-REPORT_BUDGET = 0.007
+REPORT_BUDGET = 0.007  # 用于排序变体的主预算
+                        # Primary budget for ranking variants
 
-# max_samples drives how finely each tree can carve the feature space; the
-# sklearn default of 256 is very coarse for a 20-dimensional space.
+# max_samples 决定每棵树的采样粒度；20 维空间中默认 256 过于粗糙
+# max_samples controls tree granularity; sklearn default 256 is coarse for 20-D space
 MAX_SAMPLES_GRID = [256, 4096, 32768]
 
 
 def build_transforms() -> dict[str, object | None]:
+    """待对比的特征缩放方案。
+    Feature scaling options to compare."""
     return {
         "raw": None,
-        # output_distribution must stay "uniform": skl2onnx has no converter for "normal"
         "quantile": QuantileTransformer(
             output_distribution="uniform", n_quantiles=1000,
             subsample=200_000, random_state=SEED),
@@ -99,7 +118,8 @@ def main() -> None:
             benign_scores = forest.decision_function(T_benign)
             novelty_scores = forest.decision_function(T_novelty)
 
-            # lower score = more anomalous, so flip sign for AUC where 1 = novelty
+            # 分数越低越异常；取反后 AUC 以新类攻击为正类
+            # Lower score = more anomalous; flip sign so AUC treats novelty as positive class
             auc = float(roc_auc_score(
                 np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))],
                 np.r_[-benign_scores, -novelty_scores],
@@ -113,7 +133,8 @@ def main() -> None:
                 "budgets": {},
             }
             for budget in FPR_BUDGETS:
-                # threshold chosen purely on benign scores, so the FPR cost is by construction
+                # 阈值仅由良性分数决定，从而控制误报率
+                # Threshold from benign scores only → FPR cost is controlled by construction
                 threshold = float(np.quantile(benign_scores, budget))
                 entry["budgets"][f"{budget:.3f}"] = {
                     "threshold": threshold,

@@ -65,7 +65,7 @@ artifacts/
 !ml/artifacts/
 ml/artifacts/*
 !ml/artifacts/rf_model.onnx
-
+!ml/artifacts/if_model.onnx
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 

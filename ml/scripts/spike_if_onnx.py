@@ -1,3 +1,14 @@
+"""可行性验证：孤立森林（及常见流水线）能否导出为 ONNX？
+Spike test: can Isolation Forest (and common pipelines) be exported to ONNX?
+
+在确定 IF 的 ONNX 导出方案前运行；若裸 IsolationForest 无法转换则退出并报错。
+Runs before committing to an IF ONNX export path. Exits non-zero if the raw
+IsolationForest cannot be converted, signalling a fallback plan is needed.
+
+不写入文件，结果仅打印到控制台。
+No files are written; results print to stdout.
+"""
+
 import sys
 
 import numpy as np
@@ -14,18 +25,21 @@ N_FEATURES = 20
 SEED = 42
 TOLERANCE = 1e-4
 
-# skl2onnx 1.20 does not emit ai.onnx.ml v4 yet; the IsolationForest converter
-# needs the domain pinned to v3.
+# skl2onnx 1.20 尚不支持 ai.onnx.ml v4；孤立森林转换器需固定为 v3
+# skl2onnx 1.20 does not emit ai.onnx.ml v4; pin domain to v3 for IF converter
 TARGET_OPSET = {"": 18, "ai.onnx.ml": 3}
 
 
 def heavy_tailed_sample(rows: int) -> np.ndarray:
-    # mimics the real feature distribution: durations/rates span several orders of magnitude
+    """生成跨多个数量级的合成数据，模拟真实流量特征分布。
+    Synthetic data spanning several orders of magnitude (like real flows)."""
     rng = np.random.default_rng(SEED)
     return np.exp(rng.normal(0.0, 4.0, size=(rows, N_FEATURES))).astype(np.float32)
 
 
 def try_convert(name: str, model, X: np.ndarray) -> bool:
+    """尝试 ONNX 转换，并验证标签与分数与 sklearn 一致。
+    Attempt ONNX conversion and verify label/score parity with sklearn."""
     try:
         onnx_model = convert_sklearn(
             model,
@@ -46,8 +60,8 @@ def try_convert(name: str, model, X: np.ndarray) -> bool:
     ort_scores = np.asarray(results[outputs["scores"]]).ravel()
 
     label_match = float((ort_labels == model.predict(X)).mean())
-    # Identify which sklearn scoring function the ONNX "scores" output corresponds to,
-    # so the C# side knows exactly what it is reading.
+    # 确定 ONNX "scores" 输出对应 sklearn 的哪种评分函数，供 C# 端解读
+    # Identify which sklearn scoring function the ONNX "scores" output maps to
     diffs = {
         "decision_function": float(np.abs(ort_scores - model.decision_function(X)).max()),
         "score_samples": float(np.abs(ort_scores - model.score_samples(X)).max()),
@@ -66,7 +80,8 @@ def main() -> None:
 
     candidates = {
         "IsolationForest (raw)": IsolationForest(n_estimators=100, random_state=SEED),
-        # output_distribution="normal" has no converter; uniform does.
+        # output_distribution="normal" 无转换器支持，uniform 可以
+        # output_distribution="normal" has no converter; uniform does
         "Pipeline(Quantile + IF)": Pipeline([
             ("scale", QuantileTransformer(output_distribution="uniform", random_state=SEED)),
             ("iforest", IsolationForest(n_estimators=100, random_state=SEED)),

@@ -1,10 +1,21 @@
+"""对原始 CIC-IDS2017 CSV 做探索性数据分析（EDA）。
+Exploratory data analysis on the raw CIC-IDS2017 CSV files.
+
+检查列质量、TCP 标志可靠性、重复行比例及类别可分性。
+Checks column quality, flag reliability, duplicate rates, and class separation.
+
+不写入文件，结果仅打印到控制台。
+No files are written; results print to stdout.
+"""
+
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# CIC-IDS2017 labels contain U+FFFD, which the default GBK console codec cannot print.
+# CIC-IDS2017 标签含 U+FFFD 替换字符，GBK 控制台无法正确显示
+# CIC-IDS2017 labels contain U+FFFD; GBK console cannot print them
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 DATASET_DIR = Path(__file__).resolve().parents[2] / "CIC-IDS2017"
@@ -20,6 +31,8 @@ FILES = [
     "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
 ]
 
+# 将原始 CIC 标签映射到项目范围内的四类攻击 + 良性
+# Map raw CIC labels to the four in-scope attack families + Benign
 LABEL_MAPPING = {
     "BENIGN": "Benign",
     "DoS Hulk": "DoS",
@@ -32,7 +45,8 @@ LABEL_MAPPING = {
 }
 CLASSES = ["Benign", "DoS", "PortScan", "BruteForce"]
 
-# raw column names, exactly as in the CSV headers (leading spaces matter)
+# 原始列名与 CSV 表头完全一致（前导空格不能丢）
+# Raw column names exactly as in CSV headers (leading spaces matter)
 BASE_COLS = [
     " Flow Duration",
     " Total Fwd Packets",
@@ -76,6 +90,8 @@ def main() -> None:
     df = df.dropna(subset=["Class"])
     print(f"In-scope rows: {len(df):,}\n")
 
+    # 1. 列质量：缺失值 / 无穷 / 负值
+    # Column quality: NaN / Inf / negative values
     print("=== 1. Column quality (NaN / Inf / negative) ===")
     header = f"{'column':<32} {'NaN':>8} {'+/-Inf':>8} {'negative':>10}"
     print(header)
@@ -94,6 +110,8 @@ def main() -> None:
         print(f"Rows with negative Flow Duration: {len(neg_dur):,} "
               f"(classes: {neg_dur['Class'].value_counts().to_dict()})\n")
 
+    # 2. 各类别 TCP 标志分布（最终 20 维特征中已舍弃）
+    # TCP flag distributions per class (dropped from final 20-D schema)
     print("=== 2. Flag column reliability per class ===")
     for col in FLAG_COLS:
         parts = []
@@ -104,6 +122,8 @@ def main() -> None:
         print(f"{col.strip():<16} " + " | ".join(parts))
     print()
 
+    # 3. 基础特征重复行（说明为何需要按组划分数据集）
+    # Duplicate rows on base features (motivates group-aware split)
     print("=== 3. Duplicate feature rows (on base columns) ===")
     dup_mask = df.duplicated(subset=BASE_COLS, keep="first")
     for cls in CLASSES:
@@ -112,6 +132,8 @@ def main() -> None:
         print(f"    {cls:<12} {rate:.2%} of {int(cls_mask.sum()):,} rows")
     print()
 
+    # 4. 各类别特征分离度快照（中位数 / 95 分位）
+    # Per-class separation snapshot (median / p95)
     print("=== 4. Per-class separation snapshot (median / p95) ===")
     dur_ms = df[" Flow Duration"] / 1e3
     total_pkts = df[" Total Fwd Packets"] + df[" Total Backward Packets"]

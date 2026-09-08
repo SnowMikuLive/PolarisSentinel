@@ -1,3 +1,14 @@
+"""构建孤立森林评估用的新类攻击留出集。
+Build the novelty holdout set for Isolation Forest evaluation.
+
+随机森林四分类未包含的攻击族；分类器从未见过且无法命名，用于测试未知异常检测。
+Attack families excluded from the RF's four classes — tests true unknown-anomaly detection.
+
+输出:
+- ml/data/novelty.npz  新类特征矩阵、攻击族标签、特征名
+  X_novelty, groups, feature_names
+"""
+
 import sys
 from pathlib import Path
 
@@ -12,9 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = ROOT.parent / "CIC-IDS2017"
 OUT_PATH = ROOT / "data" / "novelty.npz"
 
-# Attack families excluded from the Random Forest's four classes. The classifier
-# has never seen them and cannot name them, which makes them a genuine held-out
-# test of the Isolation Forest's unknown-anomaly detection.
+# 新类攻击组：不在 RF 训练范围内的标签
+# Novelty groups: labels outside the RF training scope
 NOVELTY_GROUPS = {
     "DDoS": lambda label: label == "DDoS",
     "Bot": lambda label: label == "Bot",
@@ -25,6 +35,8 @@ NOVELTY_GROUPS = {
 
 
 def classify(label: str) -> str | None:
+    """将原始 CIC 标签映射到新类组名；若在 RF 范围内则返回 None。
+    Map a raw CIC label to a novelty group name, or None if in RF scope."""
     for group, matches in NOVELTY_GROUPS.items():
         if matches(label):
             return group
