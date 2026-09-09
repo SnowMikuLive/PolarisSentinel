@@ -1,0 +1,12 @@
+cd "c:\Users\chaiz\OneDrive\桌面\PolarisSentinel"
+ml\.venv\Scripts\Activate.ps1
+
+python ml\scripts\prepare_novelty.py
+python ml\scripts\train_if.py
+python ml\scripts\tune_if.py
+python ml\scripts\export_if_onnx.py
+
+可选：
+
+python ml\scripts\spike_if_onnx.py
+pytest ml\tests\test_isolation_forest.py -q

@@ -63,10 +63,15 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             }); 
 
+            // 双模型推理：RF 全量分类 + IF 异常检测（路径为空时退化为 RF 单模型）
+            // Dual-model inference: RF classifier + optional IF anomaly detector
             string modelPath = Path.GetFullPath(Path.Combine(
                 builder.Environment.ContentRootPath,
                 builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
-            builder.Services.AddSingleton(_ => new OnnxInferenceEngine(modelPath));
+            string? anomalyModelPath = builder.Configuration["Inference:AnomalyModelPath"] is { } configured
+                ? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, configured))
+                : null;
+            builder.Services.AddSingleton(_ => new OnnxInferenceEngine(modelPath, anomalyModelPath));
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
@@ -94,13 +99,20 @@ namespace PolarisSentinel
             app.MapHub<TrafficHub>("/trafficHub");
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
-                //Categories the model can recognize (Benign,Dos,PortScan,BruteForce))
+                // 模型可识别的类别（Benign, DoS, PortScan, BruteForce）
+                // Categories the model can recognize
                 classes = engine.ClassNames,
                 featureCount = engine.FeatureNames.Count,
-                //Alert Threshold
+                // 告警阈值（RF 置信度）
+                // Alert threshold (RF confidence)
                 rfThreshold = engine.RfConfidenceThreshold,
-                //Block Threshold
+                // 自动封禁阈值
+                // Auto-block threshold
                 blockThreshold = engine.AutoBlockConfidenceThreshold,
+                // IF 阶段：对 RF 判为良性的流检测 Unknown_Anomaly
+                // IF stage: Unknown_Anomaly on flows the classifier called benign
+                anomalyDetection = engine.AnomalyDetectionEnabled,
+                anomalyThreshold = engine.AnomalyThreshold,
             }));
 
             //Default Admin User Create

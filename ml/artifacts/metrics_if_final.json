@@ -1,0 +1,40 @@
+{
+  "onnx": {
+    "path": "if_model.onnx",
+    "size_mb": 19.1,
+    "score_diff_median": 3.673439402662737e-08,
+    "score_diff_p999": 0.0045952946736603885,
+    "score_diff_max": 0.008201969270542564,
+    "threshold_agreement": 0.9999978926383536,
+    "flows_per_second": 79989
+  },
+  "metadata": {
+    "model_type": "IsolationForest",
+    "transform": "PowerTransformer(yeo-johnson)",
+    "feature_names": "[\"flow_duration_ms\", \"total_fwd_packets\", \"total_bwd_packets\", \"total_fwd_bytes\", \"total_bwd_bytes\", \"pkt_len_min\", \"pkt_len_max\", \"pkt_len_mean\", \"pkt_len_std\", \"fwd_iat_mean_ms\", \"fwd_iat_std_ms\", \"fwd_iat_max_ms\", \"fwd_iat_min_ms\", \"bwd_iat_mean_ms\", \"bwd_iat_std_ms\", \"bwd_iat_max_ms\", \"bwd_iat_min_ms\", \"flow_bytes_per_ms\", \"flow_pkts_per_ms\", \"down_up_ratio\"]",
+    "anomaly_threshold": "-0.15080632694939178",
+    "score_at_confidence_060": "-0.15080632694939178",
+    "score_at_confidence_095": "-0.18741773015106825",
+    "if_fpr_budget": "0.001",
+    "max_samples": "32768",
+    "n_estimators": "100",
+    "seed": "42"
+  },
+  "test_set": {
+    "benign_rows": 342307,
+    "novelty_rows": 132220,
+    "rf_benign_fpr": 0.0021793302503308434,
+    "if_extra_fpr": 0.0010867437709424581,
+    "system_benign_fpr": 0.0032660740212733016,
+    "novelty_rf_named": 0.23018454091665405,
+    "novelty_if_added": 0.2166994403267282,
+    "novelty_combined": 0.44688398124338224,
+    "novelty_per_group": {
+      "Bot": 0.008138351983723296,
+      "DDoS": 0.46137924031649574,
+      "Heartbleed": 0.0,
+      "Infiltration": 0.027777777777777776,
+      "WebAttack": 0.00045871559633027525
+    }
+  }
+}
