@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
+using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentinel
 {
@@ -83,6 +84,9 @@ namespace PolarisSentinel
             builder.Services.AddSingleton(_ => new OnnxInferenceEngine(modelPath, anomalyModelPath));
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
+
+            //Register policy engine as singleton, used by TrafficBroadcastService
+            builder.Services.AddSingleton<IPolicyEngine, PolicyEngine>();
 
             var app = builder.Build();
 

@@ -11,10 +11,21 @@ namespace PolarisSentinel.Web.Service
     {
         private readonly IHubContext<TrafficHub> _hubContext;
         private readonly ITrafficCaptureService _trafficCaptureService;
-        public TrafficBroadcastService(IHubContext<TrafficHub> hubContext, ITrafficCaptureService trafficCaptureService)
+        private readonly IInferenceEngine  _inferenceEngine;
+        private readonly IPolicyEngine _policyEngine;
+
+        //add inference and policy engines
+        public TrafficBroadcastService(
+            IHubContext<TrafficHub> hubContext, 
+            ITrafficCaptureService trafficCaptureService,
+            IInferenceEngine inferenceEngine,
+            IPolicyEngine policyEngine
+            )
         {
             _hubContext = hubContext;
             _trafficCaptureService = trafficCaptureService;
+            _inferenceEngine= inferenceEngine;
+            _policyEngine= policyEngine;
         }
 
         //Subscribe to event when service starts
@@ -23,6 +34,9 @@ namespace PolarisSentinel.Web.Service
             //modify: Subscribe first, then start the traffic capture service to avoid missing any events
             // Subscribe to the OnLiveTrafficSummary event
             _trafficCaptureService.OnLiveTrafficSummary += OnLiveTrafficSummaryHandler;
+
+            //Subscribe to flow completion event for real inference and policy evaluation
+            _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
 
             //Select the device and start capture automatically.
             try
@@ -64,25 +78,59 @@ namespace PolarisSentinel.Web.Service
             }
                 return Task.CompletedTask;
         }
-        
+
+        //Handle live traffic summery event
         private async void OnLiveTrafficSummaryHandler(object? sender, LiveTrafficSummary summary)
         {
-            //add try catch to prevent the process from crashing, if SendAsync fails, it will log the error to the debug output and continue running.
             try
             {
-                // Broadcast the live traffic summary to all connected clients
                 await _hubContext.Clients.All.SendAsync("ReceiveLiveTrafficSummary", summary);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to boardcast live traffic summary:{ex.Message}");
+            }
+        }
+
+        //add: Handle flow completion events. The flow steps are inference to policy to push
+        private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
+        {
+            try
+            {
+                //Step 1: Inference
+                var detection = _inferenceEngine.Detect(flow);
+                //Step 2: Policy evaluation
+                var decision = _policyEngine.Evaluate(detection);
+                //Step 3: Push policy decision via Su=ignalR
+                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", new
+                { 
+                    alertId=decision.AlertId,
+                    sourceIp=decision.SourceIp,
+                    //Supplement target IP from streams
+                    destinationIp=flow.DestinationIp,
+                    //Supplementing the target port from the stream
+                    destinationPort=flow.DestinationPort,
+                    attackType=decision.AttackType,
+                    confidence=decision.Confidence,
+                    //Action:Ignore/Monitor/Block
+                    action=decision.Action.ToString(),
+                    decidedAt=decision.DecidedAt.ToString("HH:mm:ss"),
+                    reason=decision.Reason
+                });
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to broadcast live traffic summary: {ex.Message}");
             }
         }
-
+        
         public Task StopAsync(CancellationToken cancellationToken)
         {
             // Unsubscribe from the OnLiveTrafficSummary event
             _trafficCaptureService.OnLiveTrafficSummary -= OnLiveTrafficSummaryHandler;
+
+            //add: Unsubscribe from flow completionevent
+            _trafficCaptureService.OnFlowCompleted -= OnFlowCompletedHandler;
 
             //add stop traffic capture service
             _trafficCaptureService.Stop();
