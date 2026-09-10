@@ -1,4 +1,5 @@
 using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Core.Models;
 using PolarisSentinel.Inference;
 using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Web.Data;
 using Microsoft.Extensions.DependencyInjection; 
+using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
 
@@ -22,6 +24,10 @@ namespace PolarisSentinel
             //Add SignalR
             builder.Services.AddSignalR();
 
+            // 策略配置绑定：阈值、白名单、封禁时长等，支持 IOptionsMonitor 热重载
+            // Bind policy settings (thresholds, allowlist, block duration) with hot-reload support
+            builder.Services.Configure<PolicySettings>(
+                builder.Configuration.GetSection("PolicySettings"));
 
             //Register the ITrafficCaptureService as a singleton service
             //sp is the service provider that allows you to resolve other services from the DI container. In this case, we are resolving IConfiguration to read the configuration values for the TrafficCaptureService.
@@ -30,8 +36,11 @@ namespace PolarisSentinel
 
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
-                int flowIdleTimeoutSeconds = section.GetValue<int>("FlowIdleTimeoutSeconds");
-                int preFilterMinPackets = section.GetValue<int>("PreFilterMinPackets");
+                var settings = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>().CurrentValue;
+                // 采集层用秒，策略配置用毫秒，此处统一转换
+                // Capture layer uses seconds; policy config uses milliseconds
+                int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
+                int preFilterMinPackets = settings.PreFilterMinPackets;
 
                 // Use the null-coalescing operator to provide a default value of 5 if LiveSummaryIntervalSeconds is not set in the configuration
                 int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
