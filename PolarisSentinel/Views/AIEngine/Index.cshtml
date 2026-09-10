@@ -5,6 +5,8 @@
 <div class="container-fluid">
     <h2 class="text-primary">AI Inference Engine</h2>
     <p>Model status and real-time inference results</p>
+
+    @* Model status card *@
     <div class="card shadow-sm border-primary mb-4">
         <div class="card-header bg-primary text-white">
             Model Status
@@ -19,15 +21,62 @@
                     <span class="fw-bold">Classes:</span>
                     <span id="modelClasses">-</span>
                 </div>
+
                 <div class="col-md-4">
+                    @* Split RF and IF thresholds into two lines to avoid unit confusion *@
                     <span class="fw-bold">Thresholds:</span>
-                    @* placeholder for alert threshold and block threshold, the data come from OnnxInferenceEngine engine. *@
-                    Alert≥<span id="alertThreshold">-</span>,
-                    Block≥<span id="blockThreshold">-</span>
+                    <div class="small">
+                        <span class="text-primary">[RF]</span>
+                        Alert≥<span id="alertThreshold">-</span>,
+                        Block≥<span id="blockThreshold">-</span>
+                    </div>
+                    <div class="small">
+                        <span class="text-primary">[IF]</span>
+                        Anomal Score &lt; <span id="anomalyThreshold">-</span>
+                        <span class="text-muted">(Monitor only)</span>
+                    </div>
+                    
                 </div>
             </div>
         </div>
     </div>
+
+    @* Four stat card for adapting the new policy action *@
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-primary shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold" id="c-flows">0</div>
+                    <div class="text-muted">Flows analysed</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-success shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-success" id="c-benign">0</div>
+                    <div class="text-muted">Benign</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-warning shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-warning" id="c-monitor">0</div>
+                    <div class="text-muted">Monitor</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-danger shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-danger" id="c-block">0</div>
+                    <div class="text-muted">Block</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* Inference result table *@
     <div class="card shadow-sm border-primary">
         <div class="card-header bg-primary text-white">
@@ -40,10 +89,11 @@
                     <tr>
                         <th>Time</th>
                         <th>Source IP</th>
+                        <th>Target IP</th>
                         <th>Target Port</th>
                         <th>Attack Type</th>
                         <th>Confidence</th>
-                        <th>Action Tier</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="inferenceBody">
@@ -66,46 +116,76 @@
             document.getElementById('modelClasses').textContent=info.classes.join(', ');
             document.getElementById('alertThreshold').textContent=Math.round(info.rfThreshold*100)+'%';
             document.getElementById('blockThreshold').textContent=Math.round(info.blockThreshold*100)+'%';
+            // add if logic to detect anomaly status
+            if (info.anomalyDetection)
+            {
+                document.getElementById('anomalyThreshold').textContent=info.anomalyThreshold.toFixed(3);
+            }else{
+                document.getElementById('anomalyThreshold').textContent='N/A';
+            }
         })
         .catch(()=>{
             document.getElementById('modelName').textContent='Unavailable';
         });
 
-        //get detection event from the DetectionHub
-        const connection=new signalR.HubConnectionBuilder()
-            .withUrl('/hubs/detections')
-            .withAutomaticReconnect()
-            .build();
+        //Count for new policy actions
+        const counts={flows:0,benign:0,monitor:0,block:0};
+        function renderCounts()
+        {
+            document.getElementById('c-flows').textContent=counts.flows;
+            document.getElementById('c-benign').textContent=counts.benign;
+            document.getElementById('c-monitor').textContent=counts.monitor;
+            document.getElementById('c-block').textContent=counts.block;
+        }
 
-        //add the inference result row
+        //Add inference result row   
         function addInferenceRow(d)
         {
             const body=document.getElementById('inferenceBody');
             const row=body.insertRow(0);
-            row.className=d.tier==='block'?'table-danger':
-                          d.tier==='alert'?'table-warning':'';
-            const badge=d.tier==='block'?'<span class="badge bg-danger">BLOCK-ELIGIBLE</span>':
-                        d.tier==='alert'?'<span class="badge bg-warning text-dark">ALERT</span>':
-                        '<span class="badge bg-secondary">LOW CONFIDENCE</span>';
-            //the data come from PolarisSentinel.Core/Models/DetectionResult.cs
+            //put color on the policy action
+            row.className=d.action==='Block'?'table-danger':
+            //'' means still be defalt table style
+                          d.action==='Monitor'?'table-warning':'';
+
+            //Generate badge based on action
+            const badge=d.action==='Block'?'<span class="badge bg-danger">BLOCK</span>':
+                        (d.action==='Monitor' && d.attackType==='Unknown_Anomaly') ? '<span class="badge bg-warning text-dark">IF MONITOR</span>':
+                        d.action==='Monitor'?'<span class="badge bg-warning text-dark">RF MONITOR</span>':'<span class="badge bg-secondary">IGNORE</span>';
+
+            const scoreCell=d.attackType==='Unknown_Anomaly'?'<span class="text-muted small">anomaly</span>': (d.confidence*100).toFixed(1) + '%';
+
             row.innerHTML=
-                `<td>${d.time}</td>`+
+                `<td>${d.decidedAt}</td>`+
                 `<td>${d.sourceIp}</td>`+
+                `<td>${d.destinationIp}</td>`+
                 `<td>${d.destinationPort}</td>`+
                 `<td>${d.attackType}</td>`+
-                `<td>${(d.confidence*100).toFixed(1)}%</td>`+
+                `<td>${scoreCell}</td>`+
                 `<td>${badge}</td>`;
 
-            
             while(body.rows.length>50)body.deleteRow(50);
         }
-        //connect to the detection hub to get detection events and add the inference rows and without benign traffic
-        connection.on('detection',(d)=>{
-            if(d.attackType!=='Benign'){
-                addInferenceRow(d);
+
+        // Connect to TrafficHub
+        const connection=new signalR.HubConnectionBuilder()
+            .withUrl('/trafficHub')
+            .withAutomaticReconnect()
+            .build();
+
+        //Add: Listen for policy decision events
+        connection.on('ReceivePolicyDecision',(d)=>{counts.flows++;
+            if(d.attackType==='Benign'){
+                counts.benign++;
+            }else{
+                if(d.action==='Block')counts.block++;
+                else if(d.action==='Monitor')counts.monitor++;
             }
-            
+
+            addInferenceRow(d);
+            renderCounts();
         });
+
         //Start the connection
         connection.start().catch(err=>console.error(err.toString()));
             
