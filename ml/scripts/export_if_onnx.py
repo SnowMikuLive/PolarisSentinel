@@ -1,22 +1,5 @@
-"""导出孤立森林流水线为 ONNX，并在生产路径上验收阈值一致性。
-Export the Isolation Forest pipeline to ONNX and validate threshold parity on the production path.
-
-将异常阈值、置信度校准锚点和特征 schema 写入元数据，C# 端零硬编码。
-Embeds anomaly threshold, confidence calibration anchors, and feature schema into metadata.
-
-验收标准对准 ONNX 推理路径（非逐点分数相等）:
-- 阈值判定一致率 ≥ 99.99%（float32 切分阈值导致约 1.5% 行分数偏差可达 1e-2）
-- 系统级 IF 误报率与 sklearn 路径差异可忽略
-Acceptance targets the ONNX inference path (not per-row score equality):
-- Threshold agreement ≥ 99.99% (float32 split thresholds shift ~1.5% of rows by up to 1e-2)
-- System-level IF FPR difference vs sklearn path is negligible
-
-输出:
-- ml/artifacts/if_model.onnx          C# 异常检测用 ONNX 模型
-  ONNX model for C# anomaly detection
-- ml/artifacts/metrics_if_final.json  一致性报告 + 测试集 RF+IF 联合指标
-  parity report + test-set RF+IF combined metrics
-"""
+# IF 导出 ONNX 并验收阈值一致性。输出: if_model.onnx, metrics_if_final.json
+# Export IF to ONNX and validate threshold parity. Outputs: if_model.onnx, metrics_if_final.json
 
 import json
 import sys
@@ -43,28 +26,27 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_if_final.json"
 BENIGN = 0
 RF_CONFIDENCE_THRESHOLD = 0.60
 
-# ONNX TreeEnsemble 以 float32 存储切分阈值；经 PowerTransformer 后落在阈值邻域的
-# 样本可能走不同分支，约 1.5% 行分数偏差可达 1e-2。生产路径是 ONNX，因此验收
-# 标准是两侧对异常阈值的判定一致，而非逐点分数相等。
-# ONNX TreeEnsemble stores split thresholds as float32; rows whose transformed value
-# sits near a split may take a different branch (~1.5% of rows shift by up to 1e-2).
-# Production runs ONNX, so acceptance is threshold agreement, not per-row score equality.
+# float32 分数可能有偏差，检查异常判定是否一致
+# float32 scores may differ; check whether anomaly decisions agree
 THRESHOLD_AGREEMENT_MIN = 0.9999
 SCORE_DIFF_SANITY = 0.02
-
-# skl2onnx 1.20 尚不支持 ai.onnx.ml v4；孤立森林转换器需固定为 v3
-# skl2onnx 1.20 does not emit ai.onnx.ml v4; pin domain to v3 for IF converter
+# IF 转换需要 ai.onnx.ml v3
+# IF conversion needs ai.onnx.ml v3
 TARGET_OPSET = {"": 18, "ai.onnx.ml": 3}
 
 
-def rf_alerts(rf, X: np.ndarray) -> np.ndarray:
-    """RF 产生可执行（非良性）告警的位置为 True。
-    True where RF raises an actionable (non-benign) alert."""
+# RF 判为攻击且达到告警阈值的样本
+# RF attack predictions that meet the confidence threshold.
+def rf_alerts(rf, X):
     proba = rf.predict_proba(X)
-    return (proba.argmax(axis=1) != BENIGN) & (proba.max(axis=1) >= RF_CONFIDENCE_THRESHOLD)
+    predicted_class = proba.argmax(axis=1)
+    confidence = proba.max(axis=1)
+    is_attack = predicted_class != BENIGN
+    meets_threshold = confidence >= RF_CONFIDENCE_THRESHOLD
+    return is_attack & meets_threshold
 
 
-def main() -> None:
+def main():
     model = joblib.load(WINNER_PATH)
     system = json.loads(SYSTEM_METRICS_PATH.read_text(encoding="utf-8"))
     data = np.load(DATA_PATH)
@@ -83,8 +65,6 @@ def main() -> None:
         "model_type": "IsolationForest",
         "transform": "PowerTransformer(yeo-johnson)",
         "feature_names": json.dumps(feature_names),
-        # ONNX "scores" 输出等于 sklearn decision_function；分数越低越异常
-        # ONNX "scores" output equals sklearn decision_function; lower = more anomalous
         "anomaly_threshold": repr(threshold),
         "score_at_confidence_060": repr(anchors["score_at_confidence_060"]),
         "score_at_confidence_095": repr(anchors["score_at_confidence_095"]),
@@ -95,24 +75,28 @@ def main() -> None:
     }
     for key, value in metadata.items():
         prop = onnx_model.metadata_props.add()
-        prop.key, prop.value = key, value
+        prop.key = key
+        prop.value = value
 
     ONNX_PATH.parent.mkdir(parents=True, exist_ok=True)
     ONNX_PATH.write_bytes(onnx_model.SerializeToString())
     size_mb = ONNX_PATH.stat().st_size / 1e6
     print(f"Exported {ONNX_PATH.name} ({size_mb:.1f} MB), threshold {threshold:.6f}")
 
-    # 一致性校验：sklearn vs onnxruntime（真实测试集 + 新类攻击留出集）
-    # Parity check: sklearn vs onnxruntime on real test + novelty holdout
-    X_test, y_test = data["X_test"], data["y_test"]
+    X_test = data["X_test"]
+    y_test = data["y_test"]
     X_novelty = novelty["X_novelty"]
     benign_test = X_test[y_test == BENIGN]
 
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
-    outputs = {o.name: i for i, o in enumerate(session.get_outputs())}
+    outputs = {}
+    for index, output in enumerate(session.get_outputs()):
+        outputs[output.name] = index
 
-    def onnx_scores(X: np.ndarray) -> np.ndarray:
-        return np.asarray(session.run(None, {"input": X})[outputs["scores"]]).ravel()
+    def onnx_scores(X):
+        results = session.run(None, {"input": X})
+        scores = results[outputs["scores"]]
+        return np.asarray(scores).ravel()
 
     start = time.perf_counter()
     benign_scores = onnx_scores(benign_test)
@@ -122,11 +106,12 @@ def main() -> None:
     skl_benign = model.decision_function(benign_test)
     skl_novelty = model.decision_function(X_novelty)
 
-    diff = np.abs(np.r_[benign_scores, novelty_scores] - np.r_[skl_benign, skl_novelty])
-    flag_match = float((
-        (np.r_[benign_scores, novelty_scores] < threshold)
-        == (np.r_[skl_benign, skl_novelty] < threshold)
-    ).mean())
+    all_onnx_scores = np.concatenate([benign_scores, novelty_scores])
+    all_sklearn_scores = np.concatenate([skl_benign, skl_novelty])
+    diff = np.abs(all_onnx_scores - all_sklearn_scores)
+    onnx_anomalies = all_onnx_scores < threshold
+    sklearn_anomalies = all_sklearn_scores < threshold
+    flag_match = float((onnx_anomalies == sklearn_anomalies).mean())
 
     print("\n=== ONNX parity (sklearn vs onnxruntime, full test + novelty) ===")
     print(f"    score diff median / p99.9 / max : "
@@ -138,19 +123,21 @@ def main() -> None:
     assert diff.max() <= SCORE_DIFF_SANITY, "ONNX scores diverge far beyond float32 rounding"
     assert flag_match >= THRESHOLD_AGREEMENT_MIN, "ONNX and sklearn disagree on anomalous flows"
 
-    # 验证集选定的阈值在未触碰的测试集上是否仍成立（使用 ONNX 分数，与 C# 路径一致）
-    # Does the validation-chosen threshold hold on the untouched test set (ONNX scores, C# path)
     rf = joblib.load(RF_PATH)
     benign_rf = rf_alerts(rf, benign_test)
     novelty_rf = rf_alerts(rf, X_novelty)
 
     rf_fpr = float(benign_rf.mean())
-    if_extra = float((~benign_rf & (benign_scores < threshold)).mean())
+    benign_if_alerts = ~benign_rf & (benign_scores < threshold)
+    if_extra = float(benign_if_alerts.mean())
     if_catch = ~novelty_rf & (novelty_scores < threshold)
     combined = novelty_rf | if_catch
 
     groups = novelty["groups"]
-    per_group = {g: float(combined[groups == g].mean()) for g in sorted(set(groups.tolist()))}
+    per_group = {}
+    for group in sorted(set(groups.tolist())):
+        group_mask = groups == group
+        per_group[group] = float(combined[group_mask].mean())
 
     skl_if_extra = float((~benign_rf & (skl_benign < threshold)).mean())
 
@@ -159,9 +146,12 @@ def main() -> None:
           f"sklearn IF would give {skl_if_extra:.4%})")
     print(f"    novelty detected  : {combined.mean():.1%} "
           f"(RF names {novelty_rf.mean():.1%}, IF adds {if_catch.mean():.1%})")
-    print("    " + ", ".join(f"{g} {v:.0%}" for g, v in per_group.items()))
+    group_results = []
+    for group, rate in per_group.items():
+        group_results.append(f"{group} {rate:.0%}")
+    print("    " + ", ".join(group_results))
 
-    METRICS_PATH.write_text(json.dumps({
+    metrics = {
         "onnx": {
             "path": ONNX_PATH.name,
             "size_mb": round(size_mb, 1),
@@ -183,7 +173,9 @@ def main() -> None:
             "novelty_combined": float(combined.mean()),
             "novelty_per_group": per_group,
         },
-    }, indent=2), encoding="utf-8")
+    }
+    metrics_json = json.dumps(metrics, indent=2)
+    METRICS_PATH.write_text(metrics_json, encoding="utf-8")
     print(f"\nSaved {METRICS_PATH}")
 
 

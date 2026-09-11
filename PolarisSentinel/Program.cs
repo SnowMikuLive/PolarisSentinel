@@ -25,8 +25,8 @@ namespace PolarisSentinel
             //Add SignalR
             builder.Services.AddSignalR();
 
-            // 策略配置绑定：阈值、白名单、封禁时长等，支持 IOptionsMonitor 热重载
-            // Bind policy settings (thresholds, allowlist, block duration) with hot-reload support
+            // 策略配置热重载
+            // Policy settings hot-reload
             builder.Services.Configure<PolicySettings>(
                 builder.Configuration.GetSection("PolicySettings"));
 
@@ -38,8 +38,8 @@ namespace PolarisSentinel
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
                 var settings = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>().CurrentValue;
-                // 采集层用秒，策略配置用毫秒，此处统一转换
-                // Capture layer uses seconds; policy config uses milliseconds
+                // 毫秒→秒
+                // ms to seconds
                 int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
                 int preFilterMinPackets = settings.PreFilterMinPackets;
 
@@ -73,8 +73,8 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             }); 
 
-            // 双模型推理：RF 全量分类 + IF 异常检测（路径为空时退化为 RF 单模型）
-            // Dual-model inference: RF classifier + optional IF anomaly detector
+            // RF+IF 双模型
+            // Dual-model inference
             string modelPath = Path.GetFullPath(Path.Combine(
                 builder.Environment.ContentRootPath,
                 builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
@@ -85,7 +85,9 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
-            //Register policy engine as singleton, used by TrafficBroadcastService
+            // 冷却计时
+            // Cooldown timing
+            builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.AddSingleton<IPolicyEngine, PolicyEngine>();
 
             var app = builder.Build();
@@ -112,18 +114,10 @@ namespace PolarisSentinel
             app.MapHub<TrafficHub>("/trafficHub");
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
-                // 模型可识别的类别（Benign, DoS, PortScan, BruteForce）
-                // Categories the model can recognize
                 classes = engine.ClassNames,
                 featureCount = engine.FeatureNames.Count,
-                // 告警阈值（RF 置信度）
-                // Alert threshold (RF confidence)
                 rfThreshold = engine.RfConfidenceThreshold,
-                // 自动封禁阈值
-                // Auto-block threshold
                 blockThreshold = engine.AutoBlockConfidenceThreshold,
-                // IF 阶段：对 RF 判为良性的流检测 Unknown_Anomaly
-                // IF stage: Unknown_Anomaly on flows the classifier called benign
                 anomalyDetection = engine.AnomalyDetectionEnabled,
                 anomalyThreshold = engine.AnomalyThreshold,
             }));

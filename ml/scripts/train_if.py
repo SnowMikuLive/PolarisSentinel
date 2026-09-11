@@ -1,15 +1,5 @@
-"""对比多种孤立森林变体（特征变换 × max_samples）在新类攻击上的检测能力。
-Compare Isolation Forest variants (transform x max_samples) on novelty detection.
-
-仅在良性流量上训练；在良性验证集 + 新类攻击留出集上评估。
-Trains only on benign traffic; evaluates on benign val + novelty holdout.
-
-输出:
-- ml/data/if_{transform}_{max_samples}.joblib  每个网格点一个模型
-  one model per grid point
-- ml/artifacts/metrics_if_variants.json         完整对比报告
-  full comparison report
-"""
+# IF 变体对比。输出: if_*.joblib, metrics_if_variants.json
+# Compare IF variants. Outputs: if_*.joblib, metrics_if_variants.json
 
 import json
 import sys
@@ -33,26 +23,15 @@ MODEL_DIR = ROOT / "data"
 
 SEED = 42
 BENIGN = 0
-# 固定子采样量，保证各变体在相同良性样本上公平对比
-# Fixed subsample so every variant trains on the same benign rows
 FIT_ROWS = 300_000
-
-# 选取异常阈值时要扫描的良性误报预算
-# Benign FPR budgets to sweep when picking the anomaly threshold
-# 随机森林已占用约 0.23% 的总 1% 预算，剩余约 0.7% 给孤立森林
-# RF already spends ~0.23% of the 1% total budget, leaving ~0.7% for IF
 FPR_BUDGETS = [0.002, 0.005, 0.007, 0.01]
-REPORT_BUDGET = 0.007  # 用于排序变体的主预算
-                        # Primary budget for ranking variants
-
-# max_samples 决定每棵树的采样粒度；20 维空间中默认 256 过于粗糙
-# max_samples controls tree granularity; sklearn default 256 is coarse for 20-D space
+# 排序主预算
+# primary ranking budget
+REPORT_BUDGET = 0.007
 MAX_SAMPLES_GRID = [256, 4096, 32768]
 
 
-def build_transforms() -> dict[str, object | None]:
-    """待对比的特征缩放方案。
-    Feature scaling options to compare."""
+def build_transforms():
     return {
         "raw": None,
         "quantile": QuantileTransformer(
@@ -62,7 +41,7 @@ def build_transforms() -> dict[str, object | None]:
     }
 
 
-def main() -> None:
+def main():
     data = np.load(DATA_PATH)
     novelty = np.load(NOVELTY_PATH, allow_pickle=False)
 
@@ -76,7 +55,10 @@ def main() -> None:
 
     benign_train = X_train[y_train == BENIGN]
     benign_val = X_val[y_val == BENIGN]
-    known_val = {cls: X_val[y_val == i] for i, cls in enumerate(class_names) if i != BENIGN}
+    known_val = {}
+    for i, name in enumerate(class_names):
+        if i != BENIGN:
+            known_val[name] = X_val[y_val == i]
 
     rng = np.random.default_rng(SEED)
     fit_idx = rng.choice(len(benign_train), size=min(FIT_ROWS, len(benign_train)), replace=False)
@@ -92,18 +74,20 @@ def main() -> None:
     for transform_name, transform in build_transforms().items():
         if transform is None:
             fit_seconds = 0.0
-            spaces = (X_fit, benign_val, X_novelty, known_val)
+            T_fit = X_fit
+            T_benign = benign_val
+            T_novelty = X_novelty
+            T_known = known_val
         else:
             start = time.perf_counter()
             transform.fit(X_fit)
             fit_seconds = time.perf_counter() - start
-            spaces = (
-                transform.transform(X_fit),
-                transform.transform(benign_val),
-                transform.transform(X_novelty),
-                {cls: transform.transform(rows) for cls, rows in known_val.items()},
-            )
-        T_fit, T_benign, T_novelty, T_known = spaces
+            T_fit = transform.transform(X_fit)
+            T_benign = transform.transform(benign_val)
+            T_novelty = transform.transform(X_novelty)
+            T_known = {}
+            for name, rows in known_val.items():
+                T_known[name] = transform.transform(rows)
         print(f"=== transform: {transform_name} (fit {fit_seconds:.0f}s) ===")
 
         for max_samples in MAX_SAMPLES_GRID:
@@ -118,12 +102,10 @@ def main() -> None:
             benign_scores = forest.decision_function(T_benign)
             novelty_scores = forest.decision_function(T_novelty)
 
-            # 分数越低越异常；取反后 AUC 以新类攻击为正类
-            # Lower score = more anomalous; flip sign so AUC treats novelty as positive class
-            auc = float(roc_auc_score(
-                np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))],
-                np.r_[-benign_scores, -novelty_scores],
-            ))
+            auc_labels = np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))]
+            # 取反使新类为正类 / Flip scores for AUC.
+            auc_scores = np.r_[-benign_scores, -novelty_scores]
+            auc = float(roc_auc_score(auc_labels, auc_scores))
 
             entry = {
                 "transform": transform_name,
@@ -133,24 +115,24 @@ def main() -> None:
                 "budgets": {},
             }
             for budget in FPR_BUDGETS:
-                # 阈值仅由良性分数决定，从而控制误报率
-                # Threshold from benign scores only → FPR cost is controlled by construction
                 threshold = float(np.quantile(benign_scores, budget))
+                per_group = {}
+                for group in group_names:
+                    group_scores = novelty_scores[novelty_groups == group]
+                    per_group[group] = float((group_scores < threshold).mean())
                 entry["budgets"][f"{budget:.3f}"] = {
                     "threshold": threshold,
                     "benign_fpr": float((benign_scores < threshold).mean()),
                     "novelty_overall": float((novelty_scores < threshold).mean()),
-                    "per_group": {
-                        g: float((novelty_scores[novelty_groups == g] < threshold).mean())
-                        for g in group_names
-                    },
+                    "per_group": per_group,
                 }
 
             report = entry["budgets"][f"{REPORT_BUDGET:.3f}"]
-            entry["known_attack_flag_rate"] = {
-                cls: float((forest.decision_function(rows) < report["threshold"]).mean())
-                for cls, rows in T_known.items()
-            }
+            known_attack_flag_rate = {}
+            for name, rows in T_known.items():
+                scores = forest.decision_function(rows)
+                known_attack_flag_rate[name] = float((scores < report["threshold"]).mean())
+            entry["known_attack_flag_rate"] = known_attack_flag_rate
 
             detail = ", ".join(f"{g} {v:.1%}" for g, v in report["per_group"].items())
             known = ", ".join(f"{k} {v:.1%}" for k, v in entry["known_attack_flag_rate"].items())
@@ -159,8 +141,10 @@ def main() -> None:
                   f"{report['novelty_overall']:>6.1%} | {detail}")
             print(f"{'':>25}   known-class flagged: {known}")
 
-            model = forest if transform is None else Pipeline(
-                [("scale", transform), ("iforest", forest)])
+            if transform is None:
+                model = forest
+            else:
+                model = Pipeline([("scale", transform), ("iforest", forest)])
             joblib.dump(model, MODEL_DIR / f"if_{transform_name}_{max_samples}.joblib", compress=3)
             results.append(entry)
         print()
@@ -172,8 +156,7 @@ def main() -> None:
         print(f"    {entry['transform']:<9} max_samples {entry['max_samples']:>6} | "
               f"{detected:>6.1%} | AUC {entry['novelty_auc']:.4f}")
 
-    METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    METRICS_PATH.write_text(json.dumps({
+    metrics = {
         "seed": SEED,
         "fit_rows": int(len(X_fit)),
         "benign_val_rows": int(len(benign_val)),
@@ -181,7 +164,9 @@ def main() -> None:
         "report_budget": REPORT_BUDGET,
         "results": results,
         "best": {"transform": ranked[0]["transform"], "max_samples": ranked[0]["max_samples"]},
-    }, indent=2), encoding="utf-8")
+    }
+    METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    METRICS_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"\nSaved {METRICS_PATH}")
 
 

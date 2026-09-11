@@ -1,17 +1,5 @@
-"""在 train+val 上重训最终随机森林，导出 ONNX 并验证与 sklearn 的一致性。
-Retrain on train+val, export the final Random Forest to ONNX, and verify parity.
-
-将特征名、类别顺序和策略阈值写入 ONNX 元数据，C# 端无需硬编码。
-Embeds feature names, class order, and policy thresholds into ONNX metadata.
-
-输出:
-- ml/artifacts/rf_model.onnx       C# 推理用 ONNX 模型
-  ONNX model for C# inference
-- ml/data/rf_final.joblib          sklearn 模型存档
-  sklearn model archive
-- ml/artifacts/metrics_final.json  测试集指标 + ONNX 一致性报告
-  test-set metrics + ONNX parity report
-"""
+# RF 最终训练并导出 ONNX。输出: rf_model.onnx, metrics_final.json
+# Retrain RF and export ONNX. Outputs: rf_model.onnx, metrics_final.json
 
 import json
 import sys
@@ -35,42 +23,45 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_final.json"
 SEED = 42
 BENIGN = 0
 
-# 需与 C# PolicySettings 保持一致
-# Must match PolicySettings in C#
-RF_CONFIDENCE_THRESHOLD = 0.60   # 告警阈值 — alert tier
-AUTO_BLOCK_THRESHOLD = 0.80      # 封禁阈值 — block tier
-PROB_TOLERANCE = 1e-5            # sklearn 与 ONNX 概率最大允许偏差
-                                  # Max allowed sklearn vs ONNX probability diff
+# 告警和自动封禁的置信度阈值
+# Confidence thresholds for alerts and automatic blocking
+RF_CONFIDENCE_THRESHOLD = 0.60
+AUTO_BLOCK_THRESHOLD = 0.80
+PROB_TOLERANCE = 1e-5
 
 
-def summarize(y_true: np.ndarray, y_pred: np.ndarray, class_names: list[str]) -> dict:
-    """计算良性误报率与各攻击类召回率。
-    Compute benign FPR and per-attack recall."""
+# 良性误报率与各攻击召回
+# Benign FPR and per-attack recall.
+def summarize(y_true, y_pred, class_names):
     benign_mask = y_true == BENIGN
-    out = {"benign_fpr": float((y_pred[benign_mask] != BENIGN).mean())}
+    false_alerts = y_pred[benign_mask] != BENIGN
+    out = {"benign_fpr": float(false_alerts.mean())}
     for idx, name in enumerate(class_names):
         if idx == BENIGN:
             continue
         mask = y_true == idx
-        out[f"{name}_recall"] = float((y_pred[mask] == idx).mean())
+        correct_predictions = y_pred[mask] == idx
+        out[f"{name}_recall"] = float(correct_predictions.mean())
     return out
 
 
-def fmt(row: dict) -> str:
-    """格式化单行指标用于控制台输出。
-    Format one metrics row for console output."""
-    return (f"FPR {row['benign_fpr']:.4%} | "
-            + ", ".join(f"{k.removesuffix('_recall')} {v:.2%}"
-                        for k, v in row.items() if k.endswith("_recall")))
+def fmt(row):
+    recalls = []
+    for name, value in row.items():
+        if name.endswith("_recall"):
+            attack_name = name.removesuffix("_recall")
+            recalls.append(f"{attack_name} {value:.2%}")
+    return f"FPR {row['benign_fpr']:.4%} | " + ", ".join(recalls)
 
 
-def main() -> None:
+def main():
     data = np.load(DATA_PATH)
-    # 最终模型使用除测试集外的全部标注数据
-    # Final model uses all labelled data except the held-out test set
+    # train+val 训练
+    # train on train+val
     X_fit = np.concatenate([data["X_train"], data["X_val"]])
     y_fit = np.concatenate([data["y_train"], data["y_val"]])
-    X_test, y_test = data["X_test"], data["y_test"]
+    X_test = data["X_test"]
+    y_test = data["y_test"]
     class_names = data["class_names"].tolist()
     feature_names = data["feature_names"].tolist()
 
@@ -88,18 +79,21 @@ def main() -> None:
     print("\n=== Final test-set metrics ===")
     views = {"argmax": summarize(y_test, y_pred, class_names)}
     print(f"    argmax          {fmt(views['argmax'])}")
-    for label, t in [("monitor", RF_CONFIDENCE_THRESHOLD), ("autoblock", AUTO_BLOCK_THRESHOLD)]:
-        # 策略视角：置信度不足的攻击预测降级为良性
-        # Policy view: low-confidence attack predictions are treated as benign
-        gated = np.where((y_pred != BENIGN) & (confidence < t), BENIGN, y_pred)
-        views[label] = {"threshold": t, **summarize(y_test, gated, class_names)}
-        print(f"    conf >= {t:.2f}    {fmt(views[label])}")
+    thresholds = [("monitor", RF_CONFIDENCE_THRESHOLD), ("autoblock", AUTO_BLOCK_THRESHOLD)]
+    for label, threshold in thresholds:
+        # 低于阈值的攻击预测不计为告警
+        # Attack predictions below the threshold do not count as alerts
+        low_confidence_attack = (y_pred != BENIGN) & (confidence < threshold)
+        gated = np.where(low_confidence_attack, BENIGN, y_pred)
+        views[label] = {"threshold": threshold}
+        views[label].update(summarize(y_test, gated, class_names))
+        print(f"    conf >= {threshold:.2f}    {fmt(views[label])}")
 
-    # zipmap=False → 概率输出为普通张量（C# OnnxRuntime 需要）
-    # zipmap=False → probabilities as plain tensor (required by C# OnnxRuntime)
     onnx_model = convert_sklearn(
         model,
         initial_types=[("input", FloatTensorType([None, len(feature_names)]))],
+        # C# OnnxRuntime 需要普通张量
+        # plain tensor for C#
         options={id(model): {"zipmap": False}},
     )
     metadata = {
@@ -112,7 +106,8 @@ def main() -> None:
     }
     for key, value in metadata.items():
         prop = onnx_model.metadata_props.add()
-        prop.key, prop.value = key, value
+        prop.key = key
+        prop.value = value
 
     ONNX_PATH.parent.mkdir(parents=True, exist_ok=True)
     ONNX_PATH.write_bytes(onnx_model.SerializeToString())
@@ -133,7 +128,7 @@ def main() -> None:
     assert prob_diff <= PROB_TOLERANCE, "ONNX probabilities diverge beyond tolerance"
 
     joblib.dump(model, MODEL_PATH, compress=3)
-    METRICS_PATH.write_text(json.dumps({
+    metrics = {
         "model": "RandomForestClassifier(n_estimators=100, min_samples_leaf=5)",
         "seed": SEED,
         "trained_rows": int(len(y_fit)),
@@ -146,7 +141,9 @@ def main() -> None:
             "max_prob_diff": prob_diff,
             "flows_per_second": round(len(X_test) / ort_seconds),
         },
-    }, indent=2), encoding="utf-8")
+    }
+    metrics_json = json.dumps(metrics, indent=2)
+    METRICS_PATH.write_text(metrics_json, encoding="utf-8")
 
     print(f"\nSaved {ONNX_PATH} ({ONNX_PATH.stat().st_size / 1e6:.1f} MB)")
     print(f"Saved {MODEL_PATH} ({MODEL_PATH.stat().st_size / 1e6:.1f} MB)")

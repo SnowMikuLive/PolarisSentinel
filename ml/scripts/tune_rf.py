@@ -1,10 +1,5 @@
-"""在验证集上对比多组随机森林超参数配置。
-Compare Random Forest hyperparameter configs on the validation set.
-
-输出:
-- ml/artifacts/metrics_tuning.json  各配置在不同置信度阈值下的指标
-  per-config metrics at multiple confidence thresholds
-"""
+# RF 超参对比。输出: metrics_tuning.json
+# Compare RF hyperparameters. Outputs: metrics_tuning.json
 
 import json
 import sys
@@ -22,23 +17,23 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_tuning.json"
 SEED = 42
 BENIGN = 0
 
-# 策略层要扫描的置信度阈值
-# Policy confidence thresholds to sweep
+# 策略置信度扫描
+# Policy confidence sweep
 THRESHOLDS = [0.50, 0.60, 0.70, 0.80, 0.90]
 
-# （名称, sklearn 参数, 良性样本上限）— benign_cap 仅对良性样本下采样
-# (name, sklearn params, benign_cap) — benign_cap downsamples benign rows only
 CONFIGS = [
     ("leaf5_baseline", {"min_samples_leaf": 5}, None),
     ("leaf1", {"min_samples_leaf": 1}, None),
     ("leaf1_balanced", {"min_samples_leaf": 1, "class_weight": "balanced"}, None),
+    # benign_cap 仅下采样良性
+    # downsamples benign only
     ("leaf1_down500k", {"min_samples_leaf": 1}, 500_000),
 ]
 
 
-def summarize(y_true: np.ndarray, y_pred: np.ndarray, class_names: list[str]) -> dict:
-    """计算良性误报率与各攻击类召回率。
-    Compute benign FPR and per-attack recall."""
+# 良性误报率与各攻击召回
+# Benign FPR and per-attack recall.
+def summarize(y_true, y_pred, class_names):
     benign_mask = y_true == BENIGN
     out = {"benign_fpr": float((y_pred[benign_mask] != BENIGN).mean())}
     for idx, name in enumerate(class_names):
@@ -49,15 +44,17 @@ def summarize(y_true: np.ndarray, y_pred: np.ndarray, class_names: list[str]) ->
     return out
 
 
-def fmt(row: dict) -> str:
-    """格式化单行指标用于控制台输出。
-    Format one metrics row for console output."""
-    return (f"FPR {row['benign_fpr']:.4%} | "
-            + ", ".join(f"{k.removesuffix('_recall')} {v:.2%}"
-                        for k, v in row.items() if k.endswith("_recall")))
+def fmt(row):
+    recall_parts = []
+    for key, value in row.items():
+        if key.endswith("_recall"):
+            name = key.removesuffix("_recall")
+            recall_parts.append(f"{name} {value:.2%}")
+    recalls = ", ".join(recall_parts)
+    return f"FPR {row['benign_fpr']:.4%} | " + recalls
 
 
-def main() -> None:
+def main():
     data = np.load(DATA_PATH)
     X_train, y_train = data["X_train"], data["y_train"]
     X_val, y_val = data["X_val"], data["y_val"]
@@ -67,12 +64,11 @@ def main() -> None:
     for name, params, benign_cap in CONFIGS:
         X_fit, y_fit = X_train, y_train
         if benign_cap is not None:
-            # 保留全部攻击样本，随机下采样良性样本以加速训练
-            # Keep all attack rows; randomly cap benign rows for faster training
             rng = np.random.default_rng(SEED)
             benign_idx = np.flatnonzero(y_train == BENIGN)
             keep = rng.choice(benign_idx, size=benign_cap, replace=False)
-            idx = np.sort(np.concatenate([keep, np.flatnonzero(y_train != BENIGN)]))
+            attack_idx = np.flatnonzero(y_train != BENIGN)
+            idx = np.sort(np.concatenate([keep, attack_idx]))
             X_fit, y_fit = X_train[idx], y_train[idx]
 
         model = RandomForestClassifier(
@@ -86,9 +82,11 @@ def main() -> None:
         y_pred = np.argmax(proba, axis=1)
         confidence = proba.max(axis=1)
 
+        saved_params = params.copy()
+        saved_params["benign_cap"] = benign_cap
         entry = {
             "config": name,
-            "params": {**params, "benign_cap": benign_cap},
+            "params": saved_params,
             "fit_seconds": round(fit_seconds, 1),
             "train_rows": int(len(y_fit)),
             "argmax": summarize(y_val, y_pred, class_names),
@@ -97,9 +95,9 @@ def main() -> None:
         print(f"\n=== {name} (fit {fit_seconds:.0f}s, {len(y_fit):,} rows) ===")
         print(f"    argmax          {fmt(entry['argmax'])}")
 
-        # 策略视角：置信度不足的攻击预测降级为良性，不触发告警
-        # Policy view: low-confidence attack predictions are treated as benign
         for t in THRESHOLDS:
+            # 低置信攻击降级为良性
+            # Low-confidence attacks treated as benign
             gated = np.where((y_pred != BENIGN) & (confidence < t), BENIGN, y_pred)
             row = summarize(y_val, gated, class_names)
             entry["thresholds"][f"{t:.2f}"] = row

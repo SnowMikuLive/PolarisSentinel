@@ -1,8 +1,9 @@
-"""pytest 公共配置：将 ml/scripts 加入导入路径，使测试可直接 import 训练脚本。
-Shared pytest setup: add ml/scripts to sys.path so tests can import training modules.
-"""
+# pytest 配置：将 ml/scripts 加入导入路径
+# Add ml/scripts to sys.path.
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+ML_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_PATH = ML_ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS_PATH))

@@ -1,13 +1,5 @@
-"""构建孤立森林评估用的新类攻击留出集。
-Build the novelty holdout set for Isolation Forest evaluation.
-
-随机森林四分类未包含的攻击族；分类器从未见过且无法命名，用于测试未知异常检测。
-Attack families excluded from the RF's four classes — tests true unknown-anomaly detection.
-
-输出:
-- ml/data/novelty.npz  新类特征矩阵、攻击族标签、特征名
-  X_novelty, groups, feature_names
-"""
+# 构建 IF 新类攻击留出集。输出: novelty.npz
+# Build IF novelty holdout. Outputs: novelty.npz
 
 import sys
 from pathlib import Path
@@ -23,32 +15,30 @@ ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = ROOT.parent / "CIC-IDS2017"
 OUT_PATH = ROOT / "data" / "novelty.npz"
 
-# 新类攻击组：不在 RF 训练范围内的标签
-# Novelty groups: labels outside the RF training scope
-NOVELTY_GROUPS = {
-    "DDoS": lambda label: label == "DDoS",
-    "Bot": lambda label: label == "Bot",
-    "WebAttack": lambda label: label.startswith("Web Attack"),
-    "Infiltration": lambda label: label == "Infiltration",
-    "Heartbleed": lambda label: label == "Heartbleed",
-}
 
-
-def classify(label: str) -> str | None:
-    """将原始 CIC 标签映射到新类组名；若在 RF 范围内则返回 None。
-    Map a raw CIC label to a novelty group name, or None if in RF scope."""
-    for group, matches in NOVELTY_GROUPS.items():
-        if matches(label):
-            return group
+# CIC 标签→新类组名；RF 范围内返回 None
+# Map CIC label to novelty group.
+def classify(label):
+    if label == "DDoS":
+        return "DDoS"
+    if label == "Bot":
+        return "Bot"
+    if label.startswith("Web Attack"):
+        return "WebAttack"
+    if label == "Infiltration":
+        return "Infiltration"
+    if label == "Heartbleed":
+        return "Heartbleed"
     return None
 
 
-def main() -> None:
+def main():
     usecols = [raw for _, raw in BASE_FEATURES] + [" Label"]
-    df = pd.concat(
-        [pd.read_csv(DATASET_DIR / f, usecols=usecols) for f in FILES],
-        ignore_index=True,
-    )
+    frames = []
+    for filename in FILES:
+        frame = pd.read_csv(DATASET_DIR / filename, usecols=usecols)
+        frames.append(frame)
+    df = pd.concat(frames, ignore_index=True)
 
     known = set(LABEL_MAPPING)
     df["Group"] = df[" Label"].map(classify)
