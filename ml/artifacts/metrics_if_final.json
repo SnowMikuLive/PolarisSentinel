@@ -6,7 +6,7 @@
     "score_diff_p999": 0.0045952946736603885,
     "score_diff_max": 0.008201969270542564,
     "threshold_agreement": 0.9999978926383536,
-    "flows_per_second": 79989
+    "flows_per_second": 44326
   },
   "metadata": {
     "model_type": "IsolationForest",
