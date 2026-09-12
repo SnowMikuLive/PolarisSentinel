@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
 using PolarisSentinel.PolicyDecision;
+using PolarisSentinel.FirewallEnforement;
 
 namespace PolarisSentinel
 {
@@ -29,6 +30,10 @@ namespace PolarisSentinel
             // Policy settings hot-reload
             builder.Services.Configure<PolicySettings>(
                 builder.Configuration.GetSection("PolicySettings"));
+            // 防火墙配置（DryRun、封禁时长等）
+            // Firewall settings (DryRun, block duration, etc.)
+            builder.Services.Configure<FirewallOptions>(
+                builder.Configuration.GetSection("Firewall"));
 
             //Register the ITrafficCaptureService as a singleton service
             //sp is the service provider that allows you to resolve other services from the DI container. In this case, we are resolving IConfiguration to read the configuration values for the TrafficCaptureService.

@@ -103,7 +103,8 @@ def main():
             novelty_scores = forest.decision_function(T_novelty)
 
             auc_labels = np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))]
-            # 取反使新类为正类 / Flip scores for AUC.
+            # 取反使新类为正类
+            # Flip scores for AUC.
             auc_scores = np.r_[-benign_scores, -novelty_scores]
             auc = float(roc_auc_score(auc_labels, auc_scores))
 
