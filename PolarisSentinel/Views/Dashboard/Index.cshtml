@@ -6,99 +6,78 @@
     <h2 class="text-primary">Dashboard</h2>
     <p>System Overview & Real-time Status</p>
 
+    @* Four cards on the top now show the overview of system, all driven by SignalR *@
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="card text-center border-primary shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold">@ViewBag.LiveTraffic</div>
-                    <div class="text-muted">Live Traffic</div>
+                    <div class="fs-2 fw-bold" id="c-live-traffic">0</div>
+                    <div class="text-muted">Live Traffic (Kpps)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-info shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-info" id="c-active-flows">0</div>
+                    <div class="text-muted">Active Flows</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card text-center border-warning shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold text-warning">@ViewBag.AlertsCount</div>
-                    <div class="text-muted">Alerts</div>
+                    <div class="fs-2 fw-bold text-warning" id="c-alerts">0</div>
+                    <div class="text-muted">Alerts (Cumulative)</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card text-center border-success shadow-sm">
+            <div class="card text-center border-danger shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold text-success">@ViewBag.AiAccuracy</div>
-                    <div class="text-muted">AI Accuracy</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center border-secondary shadow-sm">
-                <div class="card-body">
-                    <div class="fs-2 fw-bold">@ViewBag.ActiveRules</div>
-                    <div class="text-muted">Active Rules</div>
+                    <div class="fs-2 fw-bold text-danger" id="c-blocks">0</div>
+                    <div class="text-muted">Blocks (Cumulative)</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row mt-4">
-        <div class="col-md-10 offset-md-1">
-            <div class="card shadow-sm border-primary">
+    @* Left: live traffic trend chart *@
+    <div class="row mt-4 g-3">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-primary h-100">
                 <div class="card-header bg-primary text-white">
                     Live Traffic Trend
                 </div>
                 <div class="card-body">
-                    <canvas id="trafficChart" height="200"></canvas>
+                    <canvas id="trafficChart" height="220"></canvas>
                 </div>   
             </div>
         </div>
 
-        @* it will add soon *@
-        @* <div class="col-md-4"> *@
-            @* <div class="card shadow-sm border-secondary"> *@
-                @*<div class="card-header bg-secondary text-white">
+        @* Right: AI Inference Results (latest 8 policy decisions) *@
+        <div class="col-md-6"> 
+             <div class="card shadow-sm border-primary h-100"> 
+                <div class="card-header bg-primary text-white">
                     AI Inference Results
                 </div>
-                <div class="card-body">
-                    <p class="text-muted">No data yet</p>
-                    @*the AI inference results will be displayed here in the future. *@
-                @* </div> *@
-            @* </div> *@
-        @* </div> *@
-
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-info text-white">
-                    Live Detections
-                </div>
                 <div class="card-body p-0">
-                    <p class="mb-2">
-                        <span class="badge bg-light text-dark border">DoS <span id="c-dos">0</span></span>
-                        <span class="badge bg-light text-dark border">PortScan <span id="c-portscan">0</span></span>
-                        <span class="badge bg-light text-dark border">BruteForce <span id="c-bruteforce">0</span></span>
-                        <span id="conn-state" class="badge bg-secondary">connecting…</span>
-                    </p>
-
-                    <table class="table table-sm align-middle">
+                    <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
                                 <th>Time</th>
-                                <th>Source IP</th>
-                                <th>Target port</th>
-                                <th>Detected type</th>
-                                <th>Confidence</th>
-                                <th>Action tier</th>
+                                <th>Type</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
-                        <tbody id="det-body"></tbody>
+                        @* id="aiResultBody" filled by SignalR *@
+                        <tbody id="aiResultBody">
+                        </tbody>
                     </table>
-                    @*the system status will be displayed here in the future. *@
-                </div>
-            </div>
-        </div>
+                </div> 
+             </div>
+         </div>
+
     </div>
 </div>
 
@@ -121,18 +100,73 @@
                 }]
             },
             options: {
+                responsive:true,
+                maintainAspectRatio:false,
                 scales: {
-                    y: { beginAtZero: true }
+                    y: { 
+                        beginAtZero: true,
+                        grid:{color:'rgba(37,99,235,0.1)'},
+                        ticks:{color:'#2563EB'}
+                        },
+                    x: { 
+                        grid:{color:'rgba(37,99,235,0.1)'},
+                        ticks:{color:'#2563EB'}
+                        }
                 }
             }
         });
 
-        const trafficConnection = new signalR.HubConnectionBuilder()
+        //SessionStorage cache
+        const CACHE_KEY='dashboard_state';
+        const MAX_CACHED_ROWS=8;
+
+        //Load the cache from the sessionStorage
+        function loadCache(){
+            try{
+                // Read previous saved data from sessionStorage
+                const raw=sessionStorage.getItem(CACHE_KEY);
+                // If the data is read (raw means not null). then use JSON.parse to parse it into an object. otherwise, return the default empty data.
+                return raw ? JSON.parse(raw):{alerts:0,blocks:0,rows:[]};
+                }catch{
+                    //If any error occur during or parsing, return the default empty data directly.
+                    return{alerts:0,blocks:0,rows:[]};
+                }
+        }
+        // Save cache to sessionStorage
+        function saveCache(){
+            try{
+                sessionStorage.setItem(CACHE_KEY,JSON.stringify({
+                    alerts:cumulativeAlerts,
+                    blocks:cumulativeBlocks,
+                    rows:cachedRows.slice(0,MAX_CACHED_ROWS)
+                }));
+                }
+            catch{/*Ignore the storage quota errors*/}
+        }
+
+        //Restore cache
+        let cache=loadCache();
+        let cumulativeAlerts=cache.alerts;
+        let cumulativeBlocks=cache.blocks;
+        let cachedRows=cache.rows;
+
+        //Restore topcard values
+        document.getElementById('c-alerts').textContent=cumulativeAlerts;
+        document.getElementById('c-blocks').textContent=cumulativeBlocks;
+
+        // Connect the SignalR
+        const connection = new signalR.HubConnectionBuilder()
             .withUrl("/trafficHub")
-            .configureLogging(signalR.LogLevel.Information)
+            .withAutomaticReconnect()
             .build();
 
-        trafficConnection.on("ReceiveLiveTrafficSummary", (summary) => {
+        // Cumulative alerts and blocks counters
+        // let cumulativeAlerts=0;
+        // let cumulativeBlocks=0;
+
+       
+        // Receive live traffic summary: update chart + two live cards
+        connection.on("ReceiveLiveTrafficSummary", (summary) => {
             const now = new Date().toLocaleTimeString();
             trafficChart.data.labels.push(now);
             trafficChart.data.datasets[0].data.push(summary.packetsPerSecond);
@@ -143,8 +177,65 @@
             }
 
             trafficChart.update();
+
+            // Live Traffic card show Kpps
+            document.getElementById('c-live-traffic').textContent=(summary.packetsPerSecond/1000).toFixed(1);
+            
+            // Active Flows card
+            document.getElementById('c-active-flows').textContent=summary.activeFlowCount;
         });
 
-        trafficConnection.start().catch(err => console.error(err.toString()));
+        //Receive policy decisions:accumulate Alerts/Blocks + add to AI results
+        connection.on('ReceivePolicyDecision',(d)=>{
+            if(d.attackType==='Benign')return;
+            cumulativeAlerts++;
+            if(d.action==='Block')cumulativeBlocks++;
+            document.getElementById('c-alerts').textContent=cumulativeAlerts;
+            document.getElementById('c-blocks').textContent=cumulativeBlocks;
+
+            //Prepend to cache and persist
+            cachedRows.unshift(d);
+            if(cachedRows.length>MAX_CACHED_ROWS) cachedRows.pop();
+            saveCache();
+
+            addAiResultRow(d);
+        });
+
+        // AI results function shows
+        function addAiResultRow(d)
+        {
+            const body=document.getElementById('aiResultBody');
+            const row=body.insertRow(0);
+
+            //color depende on the policy action
+            row.className=d.action==='Block'?'table-danger':
+                          d.action==='Monitor'?'table-warning':'';
+
+            // the budge which can distinguish the IF and RF
+            const badge=d.action==='Block'?
+                            '<span class="badge bg-danger">BLOCK</span>':
+                            (d.action==='Monitor' && d.attackType==='Unknown_Anomaly') ?
+                            '<span class="badge bg-warning text-dark">IF</span>':
+                            '<span class="badge bg-warning text-dark">RF</span>';
+
+            // Short attack type for narrow column
+            //const typeShort=d.attackType;
+
+            row.innerHTML=
+                    `<td>${d.decidedAt}</td>`+
+                    `<td>${d.attackType}</td>`+
+                    `<td>${badge}</td>`;
+
+            //Keep max 8 rows
+            while (body.rows.length>MAX_CACHED_ROWS)body.deleteRow(MAX_CACHED_ROWS);
+        }
+
+        //Restore table from cache on page load
+        //Cache is neww=est first; insert oldest first so the newest can stay on the top
+        for(let i=cachedRows.length -1;i>=0;i--)
+        {
+            addAiResultRow(cachedRows[i]);
+        }
+        connection.start().catch(err => console.error(err.toString()));
     </script>
 }

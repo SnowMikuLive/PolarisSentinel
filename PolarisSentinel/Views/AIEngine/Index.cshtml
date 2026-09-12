@@ -128,14 +128,52 @@
             document.getElementById('modelName').textContent='Unavailable';
         });
 
+        //SessionStorage cache
+        const CACHE_KEY='aiEngine_decisions';
+        const MAX_CACHED=50;
+
+        //Load the cache from the sessionStorage
+        function loadCache(){
+            try{
+                // Read previous saved data from sessionStorage
+                const raw=sessionStorage.getItem(CACHE_KEY);
+                // If the data is read (raw means not null). then use JSON.parse to parse it into an object. otherwise, return the default empty data.
+                return raw ? JSON.parse(raw):[];
+                }catch{
+                    //If any error occur during or parsing, return the default empty data directly.
+                    return [];
+                }
+        }
+
+        //Save catch to sessionStorage
+        function saveCache(decisions){
+            try{
+                sessionStorage.setItem(
+                    CACHE_KEY,JSON.stringify(decisions.slice(0,MAX_CACHED)));
+            }catch{/*Ignore the storage quota errors*/}
+        }
+
+        //Restore from cache
+        let cachedDecisions=loadCache();
+
         //Count for new policy actions
         const counts={flows:0,benign:0,monitor:0,block:0};
+
         function renderCounts()
         {
             document.getElementById('c-flows').textContent=counts.flows;
             document.getElementById('c-benign').textContent=counts.benign;
             document.getElementById('c-monitor').textContent=counts.monitor;
             document.getElementById('c-block').textContent=counts.block;
+        }
+
+        //Restore and counts from cache
+        function restoreCountsFromCache(){
+            counts.flows=cachedDecisions.length;
+            counts.benign=cachedDecisions.filter(d=>d.attackType==='Benign').length;
+            counts.monitor=cachedDecisions.filter(d=>d.action==='Monitor').length;
+            counts.block=cachedDecisions.filter(d=>d.action==='Block').length;
+            renderCounts();
         }
 
         //Add inference result row   
@@ -148,12 +186,12 @@
             //'' means still be defalt table style
                           d.action==='Monitor'?'table-warning':'';
 
-            //Generate badge based on action
+            //Generate badge based on action to distinguish the IF and RF
             const badge=d.action==='Block'?'<span class="badge bg-danger">BLOCK</span>':
                         (d.action==='Monitor' && d.attackType==='Unknown_Anomaly') ? '<span class="badge bg-warning text-dark">IF MONITOR</span>':
                         d.action==='Monitor'?'<span class="badge bg-warning text-dark">RF MONITOR</span>':'<span class="badge bg-secondary">IGNORE</span>';
 
-            const scoreCell=d.attackType==='Unknown_Anomaly'?'<span class="text-muted small">anomaly</span>': (d.confidence*100).toFixed(1) + '%';
+            const scoreCell=d.attackType==='Unknown_Anomaly'?'<span class="text-muted small">N/A</span>': (d.confidence*100).toFixed(1) + '%';
 
             row.innerHTML=
                 `<td>${d.decidedAt}</td>`+
@@ -164,8 +202,14 @@
                 `<td>${scoreCell}</td>`+
                 `<td>${badge}</td>`;
 
-            while(body.rows.length>50)body.deleteRow(50);
+            while(body.rows.length>MAX_CACHED)body.deleteRow(MAX_CACHED);
         }
+
+        //add Restore table and counts on load
+        for(let i=cachedDecisions.length -1;i>=0;i--){
+            addInferenceRow(cachedDecisions[i]);
+        }
+        restoreCountsFromCache();
 
         // Connect to TrafficHub
         const connection=new signalR.HubConnectionBuilder()
@@ -173,7 +217,7 @@
             .withAutomaticReconnect()
             .build();
 
-        //Add: Listen for policy decision events
+        //Listen for policy decision events
         connection.on('ReceivePolicyDecision',(d)=>{counts.flows++;
             if(d.attackType==='Benign'){
                 counts.benign++;
@@ -181,6 +225,12 @@
                 if(d.action==='Block')counts.block++;
                 else if(d.action==='Monitor')counts.monitor++;
             }
+
+            //Prepend to cache and persist
+            cachedDecisions.unshift(d);
+            if(cachedDecisions.length>MAX_CACHED) cachedDecisions.pop();
+            saveCache(cachedDecisions);
+
 
             addInferenceRow(d);
             renderCounts();
