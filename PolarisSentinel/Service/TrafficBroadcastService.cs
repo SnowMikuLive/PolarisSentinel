@@ -14,18 +14,23 @@ namespace PolarisSentinel.Web.Service
         private readonly IInferenceEngine  _inferenceEngine;
         private readonly IPolicyEngine _policyEngine;
 
+        //Inject global state service
+        private readonly DetectionStateService _state;
+
         //add inference and policy engines
         public TrafficBroadcastService(
             IHubContext<TrafficHub> hubContext, 
             ITrafficCaptureService trafficCaptureService,
             IInferenceEngine inferenceEngine,
-            IPolicyEngine policyEngine
+            IPolicyEngine policyEngine,
+            DetectionStateService state
             )
         {
             _hubContext = hubContext;
             _trafficCaptureService = trafficCaptureService;
             _inferenceEngine= inferenceEngine;
             _policyEngine= policyEngine;
+            _state = state;
         }
 
         //Subscribe to event when service starts
@@ -43,13 +48,6 @@ namespace PolarisSentinel.Web.Service
             {
                 var devices = _trafficCaptureService.GetAvailableDevices().ToList();
 
-                //Output the available devices to debug the window
-                System.Diagnostics.Debug.WriteLine($"Avaliable devices:{devices.Count}");
-                foreach (var device in devices)
-                {
-                    System.Diagnostics.Debug.WriteLine($"-{device.DisplayName}");
-                }
-
                 //Make the Wi-Fi or Ethernet device as the default capture device if it exists, otherwise use the first available device.
                 //d is also the device object , it will check the DisplayName of the device.
                 var selectedDevice = devices.FirstOrDefault(d =>
@@ -61,14 +59,14 @@ namespace PolarisSentinel.Web.Service
 
                 if (selectedDevice != null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Starting capture on:{selectedDevice.DisplayName}");
+                    //System.Diagnostics.Debug.WriteLine($"Starting capture on:{selectedDevice.DisplayName}");
                     _trafficCaptureService.Start(selectedDevice.DeviceName);
-                    System.Diagnostics.Debug.WriteLine("Traffic capture service started successfully."); ;
+                    //System.Diagnostics.Debug.WriteLine("Traffic capture service started successfully."); ;
                 }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("No network devices found for capture");
-                }
+                //else
+                //{
+                //    System.Diagnostics.Debug.WriteLine("No network devices found for capture");
+                //}
 
             }
             catch (Exception ex)
@@ -97,30 +95,31 @@ namespace PolarisSentinel.Web.Service
         {
             try
             {
-                //Step 1: Inference
+                //Inference
                 var detection = _inferenceEngine.Detect(flow);
-                //Step 2: Policy evaluation
+                //Policy evaluation
                 var decision = _policyEngine.Evaluate(detection);
-                //Step 3: Push policy decision via Su=ignalR
-                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", new
-                { 
-                    alertId=decision.AlertId,
-                    sourceIp=decision.SourceIp,
-                    //Supplement target IP from streams
-                    destinationIp=flow.DestinationIp,
-                    //Supplementing the target port from the stream
-                    destinationPort=flow.DestinationPort,
-                    attackType=decision.AttackType,
-                    confidence=decision.Confidence,
-                    //Action:Ignore/Monitor/Block
-                    action=decision.Action.ToString(),
-                    decidedAt=decision.DecidedAt.ToString("HH:mm:ss"),
-                    reason=decision.Reason
-                });
+                //Build unified record object
+                var record = new DetectionRecord(
+                    decision.AlertId,
+                    decision.SourceIp,
+                    flow.DestinationIp,
+                    flow.DestinationPort,
+                    decision.AttackType,
+                    decision.Confidence,
+                    decision.Action.ToString(),
+                    decision.DecidedAt.ToString("HH:mm:ss"),
+                    decision.Reason);
+
+                //Record to global state first
+                _state.Record(record);
+
+                //Push policy decision via SignalR
+                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to broadcast live traffic summary: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Pipeline failed for flow: {ex.Message}");
             }
         }
         
@@ -141,7 +140,5 @@ namespace PolarisSentinel.Web.Service
         {
             StopAsync(CancellationToken.None).GetAwaiter().GetResult();
         }
-
-
     }
 }
