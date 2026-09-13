@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -402,8 +401,7 @@ namespace PolarisSentienlUnitTestProject
 
         private PolicyEngine CreateEngine(PolicySettings settings, TimeProvider clock)
         {
-            var monitor = new SimpleOptionsMonitor(settings);
-            return new PolicyEngine(monitor, clock, NullLogger<PolicyEngine>.Instance);
+            return new PolicyEngine(() => settings, clock, NullLogger<PolicyEngine>.Instance);
         }
 
         // 默认公网高置信 DoS
@@ -422,28 +420,6 @@ namespace PolarisSentienlUnitTestProject
                 AttackType = attackType,
                 Source = source
             };
-        }
-
-        // 测试用 IOptionsMonitor，无需启动 Web 宿主
-        // Test IOptionsMonitor without starting the web host
-        private class SimpleOptionsMonitor : IOptionsMonitor<PolicySettings>
-        {
-            public PolicySettings CurrentValue { get; set; }
-
-            public SimpleOptionsMonitor(PolicySettings value)
-            {
-                CurrentValue = value;
-            }
-
-            public PolicySettings Get(string? name)
-            {
-                return CurrentValue;
-            }
-
-            public IDisposable OnChange(Action<PolicySettings, string?> listener)
-            {
-                return null!;
-            }
         }
 
         #endregion

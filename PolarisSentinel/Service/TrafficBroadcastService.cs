@@ -3,33 +3,36 @@ using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Web.Hubs;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace PolarisSentinel.Web.Service
 {
-    //Background service to subscribe to traffic capture events and push them through SignalR.
+    // Presentation-layer adapter: subscribes to traffic capture events and pushes
+    // results through SignalR. It delegates the detection -> decision -> enforcement
+    // pipeline to the application layer (IDetectionPipeline) and persists results
+    // through IDetectionRepository. It contains no business logic itself.
     public class TrafficBroadcastService:IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
         private readonly ITrafficCaptureService _trafficCaptureService;
-        private readonly IInferenceEngine  _inferenceEngine;
-        private readonly IPolicyEngine _policyEngine;
+        private readonly IDetectionPipeline _pipeline;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         //Inject global state service
         private readonly DetectionStateService _state;
 
-        //add inference and policy engines
         public TrafficBroadcastService(
             IHubContext<TrafficHub> hubContext, 
             ITrafficCaptureService trafficCaptureService,
-            IInferenceEngine inferenceEngine,
-            IPolicyEngine policyEngine,
+            IDetectionPipeline pipeline,
+            IServiceScopeFactory scopeFactory,
             DetectionStateService state
             )
         {
             _hubContext = hubContext;
             _trafficCaptureService = trafficCaptureService;
-            _inferenceEngine= inferenceEngine;
-            _policyEngine= policyEngine;
+            _pipeline = pipeline;
+            _scopeFactory = scopeFactory;
             _state = state;
         }
 
@@ -90,15 +93,14 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        //add: Handle flow completion events. The flow steps are inference to policy to push
+        //Handle flow completion events: delegate the pipeline to the application layer.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
             {
-                //Inference
-                var detection = _inferenceEngine.Detect(flow);
-                //Policy evaluation
-                var decision = _policyEngine.Evaluate(detection);
+                //Run the detection -> decision -> enforcement pipeline.
+                var decision = _pipeline.ProcessFlow(flow);
+
                 //Build unified record object
                 var record = new DetectionRecord(
                     decision.AlertId,
@@ -110,6 +112,24 @@ namespace PolarisSentinel.Web.Service
                     decision.Action.ToString(),
                     decision.DecidedAt.ToString("HH:mm:ss"),
                     decision.Reason);
+
+                //Persist the detection event within a short-lived scope, because the
+                //repository depends on a scoped DbContext while this service is a singleton.
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    var repository = scope.ServiceProvider.GetRequiredService<IDetectionRepository>();
+                    await repository.AddAsync(new DetectionEvent
+                    {
+                        SourceIp = decision.SourceIp,
+                        DestinationIp = flow.DestinationIp,
+                        DestinationPort = flow.DestinationPort,
+                        AttackType = decision.AttackType,
+                        Confidence = decision.Confidence,
+                        Action = decision.Action,
+                        Reason = decision.Reason,
+                        DecidedAt = decision.DecidedAt
+                    });
+                }
 
                 //Record to global state first
                 _state.Record(record);

@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="PolarisSentienlTrafficCaptureTest/PolarisSentienlTrafficCaptureTest.csproj" Id="11f0ed25-f6d5-4ccc-bf0f-58468b8e55ae" />
+  <Project Path="PolarisSentinel.Application/PolarisSentinel.Application.csproj" />
   <Project Path="PolarisSentinel.Core/PolarisSentinel.Core.csproj" />
   <Project Path="PolarisSentinel.Data/PolarisSentinel.Data.csproj" />
   <Project Path="PolarisSentinel.FirewallEnforement/PolarisSentinel.Firewall.csproj" />
