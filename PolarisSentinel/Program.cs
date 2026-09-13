@@ -19,6 +19,7 @@ namespace PolarisSentinel
     {
         public static async Task Main(string[] args)
         {
+            //builder.Service
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddControllersWithViews();
@@ -76,7 +77,14 @@ namespace PolarisSentinel
             {
                 options.LoginPath = "/Account/Login";
                 options.AccessDeniedPath = "/Account/AccessDenied";
-            }); 
+            });
+
+            //Register global detection state service as singleton
+            builder.Services.AddSingleton<DetectionStateService>(); 
+
+
+
+
 
             // RF+IF 双模型
             // Dual-model inference
@@ -117,6 +125,10 @@ namespace PolarisSentinel
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
+
+            //Expose detection state API, fetched by fronted on page Load
+            app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()));
+
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
                 classes = engine.ClassNames,

@@ -85,6 +85,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script>
+        const MAX_ROWS=8;
         const ctx = document.getElementById('trafficChart').getContext('2d');
         const trafficChart = new Chart(ctx, {
             type: 'line',
@@ -116,54 +117,36 @@
             }
         });
 
-        //SessionStorage cache
-        const CACHE_KEY='dashboard_state';
-        const MAX_CACHED_ROWS=8;
+        //local counters for SignalR updates
+        let cumulativeAlerts=0;
+        let cumulativeBlocks=0;
 
-        //Load the cache from the sessionStorage
-        function loadCache(){
-            try{
-                // Read previous saved data from sessionStorage
-                const raw=sessionStorage.getItem(CACHE_KEY);
-                // If the data is read (raw means not null). then use JSON.parse to parse it into an object. otherwise, return the default empty data.
-                return raw ? JSON.parse(raw):{alerts:0,blocks:0,rows:[]};
-                }catch{
-                    //If any error occur during or parsing, return the default empty data directly.
-                    return{alerts:0,blocks:0,rows:[]};
+        //add: Fetch state from API on load
+        fetch('/api/detections/state')
+            .then(r=>r.json())
+            .then(state=>{
+                //Restore cumulative counters
+                cumulativeAlerts=state.monitor+state.block;
+                cumulativeBlocks=state.block;
+                document.getElementById('c-alerts').textContent=cumulativeAlerts;
+                document.getElementById('c-blocks').textContent=cumulativeBlocks;
+
+
+                //Restore AI results table (non-benign only, newest first, max 8)
+                const nonBenign=state.recent;//.filter(d=>d.attackType !=='Benign');
+
+                for (let i=Math.min(nonBenign.length, MAX_ROWS)-1;i>=0;i--)
+                {
+                    addAiResultRow(nonBenign[i]);
                 }
-        }
-        // Save cache to sessionStorage
-        function saveCache(){
-            try{
-                sessionStorage.setItem(CACHE_KEY,JSON.stringify({
-                    alerts:cumulativeAlerts,
-                    blocks:cumulativeBlocks,
-                    rows:cachedRows.slice(0,MAX_CACHED_ROWS)
-                }));
-                }
-            catch{/*Ignore the storage quota errors*/}
-        }
-
-        //Restore cache
-        let cache=loadCache();
-        let cumulativeAlerts=cache.alerts;
-        let cumulativeBlocks=cache.blocks;
-        let cachedRows=cache.rows;
-
-        //Restore topcard values
-        document.getElementById('c-alerts').textContent=cumulativeAlerts;
-        document.getElementById('c-blocks').textContent=cumulativeBlocks;
+        })
+        .catch(err=>console.error('Failed to fetch state',err));
 
         // Connect the SignalR
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/trafficHub")
             .withAutomaticReconnect()
             .build();
-
-        // Cumulative alerts and blocks counters
-        // let cumulativeAlerts=0;
-        // let cumulativeBlocks=0;
-
        
         // Receive live traffic summary: update chart + two live cards
         connection.on("ReceiveLiveTrafficSummary", (summary) => {
@@ -188,15 +171,12 @@
         //Receive policy decisions:accumulate Alerts/Blocks + add to AI results
         connection.on('ReceivePolicyDecision',(d)=>{
             if(d.attackType==='Benign')return;
+
             cumulativeAlerts++;
             if(d.action==='Block')cumulativeBlocks++;
+
             document.getElementById('c-alerts').textContent=cumulativeAlerts;
             document.getElementById('c-blocks').textContent=cumulativeBlocks;
-
-            //Prepend to cache and persist
-            cachedRows.unshift(d);
-            if(cachedRows.length>MAX_CACHED_ROWS) cachedRows.pop();
-            saveCache();
 
             addAiResultRow(d);
         });
@@ -218,24 +198,15 @@
                             '<span class="badge bg-warning text-dark">IF</span>':
                             '<span class="badge bg-warning text-dark">RF</span>';
 
-            // Short attack type for narrow column
-            //const typeShort=d.attackType;
-
             row.innerHTML=
                     `<td>${d.decidedAt}</td>`+
                     `<td>${d.attackType}</td>`+
                     `<td>${badge}</td>`;
 
             //Keep max 8 rows
-            while (body.rows.length>MAX_CACHED_ROWS)body.deleteRow(MAX_CACHED_ROWS);
+            while (body.rows.length>MAX_ROWS)body.deleteRow(MAX_ROWS);
         }
 
-        //Restore table from cache on page load
-        //Cache is neww=est first; insert oldest first so the newest can stay on the top
-        for(let i=cachedRows.length -1;i>=0;i--)
-        {
-            addAiResultRow(cachedRows[i]);
-        }
         connection.start().catch(err => console.error(err.toString()));
     </script>
 }
