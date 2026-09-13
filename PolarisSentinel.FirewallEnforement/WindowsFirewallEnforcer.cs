@@ -83,6 +83,9 @@ namespace PolarisSentinel.FirewallEnforement
                 {
                     var now = _timeProvider.GetUtcNow();
                     var expiresAt = now.Add(duration);
+                    // 日志原因码：created / extended
+                    // Log reason codes: created / extended
+                    string reason = "created";
                     var metadata = new FirewallRuleMetadata
                     {
                         AlertId = decision.AlertId,
@@ -109,6 +112,7 @@ namespace PolarisSentinel.FirewallEnforement
                         }
                         rule = existingRule;
                         metadata = existing;
+                        reason = "extended";
                         break;
                     }
 
@@ -125,8 +129,8 @@ namespace PolarisSentinel.FirewallEnforement
                     {
                         _rules[rule.Name] = rule;
                     }
-                    _logger.LogInformation("Saved block for {Ip}, alert {AlertId}, expires {ExpiresAt}, dry-run {DryRun}",
-                        ip, metadata.AlertId, expiresAt, IsDryRun);
+                    _logger.LogInformation("Firewall {Reason} for {Ip}, alert {AlertId}, expires {ExpiresAt}, dry-run {DryRun}",
+                        reason, ip, metadata.AlertId, expiresAt, IsDryRun);
                 }
                 catch (Exception ex)
                 {
@@ -170,21 +174,25 @@ namespace PolarisSentinel.FirewallEnforement
         {
             if (!string.IsNullOrEmpty(ruleName) && ruleName.StartsWith(FirewallRuleNaming.Prefix, StringComparison.Ordinal))
             {
-                RemoveRules(ruleName, false);
+                RemoveRules(ruleName, "manual");
             }
         }
 
         public int RemoveExpiredRules()
         {
-            return RemoveRules(null, true);
+            return RemoveRules(null, "expired");
         }
 
+        // API 回滚时删除全部托管规则
+        // Remove all managed rules during API rollback
         public int RemoveAllManagedRules()
         {
-            return RemoveRules(null, false);
+            return RemoveRules(null, "rollback");
         }
 
-        private int RemoveRules(string? ruleName, bool expiredOnly)
+        // 删除原因码：manual / expired / rollback
+        // Removal reason codes: manual / expired / rollback
+        private int RemoveRules(string? ruleName, string reason)
         {
             int removed = 0;
             lock (_lock)
@@ -199,7 +207,7 @@ namespace PolarisSentinel.FirewallEnforement
                             continue;
                         }
                         var metadata = ReadMetadata(rule);
-                        if (expiredOnly && (metadata == null || metadata.ExpiresAt > now))
+                        if (reason == "expired" && (metadata == null || metadata.ExpiresAt > now))
                         {
                             continue;
                         }
@@ -212,7 +220,6 @@ namespace PolarisSentinel.FirewallEnforement
                             _rules.Remove(rule.Name);
                         }
                         removed++;
-                        string reason = expiredOnly ? "expired" : "manual";
                         _logger.LogInformation("Removed rule {RuleName} for {Ip}, alert {AlertId}, reason {Reason}, dry-run {DryRun}",
                             rule.Name, rule.RemoteAddress, metadata?.AlertId, reason, IsDryRun);
                     }

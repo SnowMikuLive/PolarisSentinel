@@ -55,6 +55,10 @@ namespace PolarisSentinel
                 return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
             });
 
+            // 先清理遗留规则，再启动抓包
+            // Clean up old rules before capture starts
+            builder.Services.AddHostedService<FirewallRuleSweeper>();
+
             //add the registe background broadcast service
             builder.Services.AddHostedService<TrafficBroadcastService>();
 
@@ -95,6 +99,10 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
             builder.Services.AddSingleton<IPolicyEngine, PolicyEngine>();
 
+            // 防火墙执行器
+            // Firewall enforcer
+            builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
+
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -112,6 +120,10 @@ namespace PolarisSentinel
             app.UseAuthorization();
 
             app.MapStaticAssets();
+
+            // Web API 控制器（含防火墙接口）
+            // Web API controllers (includes firewall endpoints)
+            app.MapControllers();
             app.MapControllerRoute(
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}")
