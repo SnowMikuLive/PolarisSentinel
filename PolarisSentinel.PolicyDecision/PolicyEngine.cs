@@ -1,6 +1,5 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -9,11 +8,13 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.PolicyDecision
 {
-    // 根据检测结果决定是否告警或封禁。
     // Decide whether to ignore, monitor or block a detection.
+    // The policy settings are supplied via a Func<PolicySettings> provider so the
+    // engine stays free of framework abstractions (IOptionsMonitor) while still
+    // reading the latest settings on every evaluation (hot-reload friendly).
     public class PolicyEngine : IPolicyEngine
     {
-        private readonly IOptionsMonitor<PolicySettings> _options;
+        private readonly Func<PolicySettings> _settingsProvider;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<PolicyEngine> _logger;
         private readonly object _lock = new object();
@@ -21,9 +22,9 @@ namespace PolarisSentinel.PolicyDecision
         private string[] _allowlistEntries = Array.Empty<string>();
         private AddressAllowlist? _allowlist;
 
-        public PolicyEngine(IOptionsMonitor<PolicySettings> options, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
+        public PolicyEngine(Func<PolicySettings> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
         {
-            _options = options;
+            _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
             _timeProvider = timeProvider;
             _logger = logger;
         }
@@ -35,11 +36,10 @@ namespace PolarisSentinel.PolicyDecision
                 throw new ArgumentNullException(nameof(result));
             }
 
-            // 同时到达的流依次检查，避免同一 IP 重复 Block。
             // Check one flow at a time to avoid duplicate Blocks for the same IP.
             lock (_lock)
             {
-                var settings = _options.CurrentValue;
+                var settings = _settingsProvider();
                 var cooldown = TimeSpan.FromSeconds(Math.Max(0, settings.DecisionCooldownSeconds));
                 RemoveExpiredCooldowns(_timeProvider.GetUtcNow(), cooldown);
 
@@ -150,9 +150,9 @@ namespace PolarisSentinel.PolicyDecision
         {
             lock (_lock)
             {
-                GetAllowlist(_options.CurrentValue);
+                GetAllowlist(_settingsProvider());
             }
-            _logger.LogInformation("Policy settings refreshed from the current options");
+            _logger.LogInformation("Policy settings refreshed");
             return Task.CompletedTask;
         }
 

@@ -12,6 +12,8 @@ using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
 using PolarisSentinel.PolicyDecision;
 using PolarisSentinel.FirewallEnforement;
+using PolarisSentinel.Application;
+using PolarisSentinel.Data;
 
 namespace PolarisSentinel
 {
@@ -19,6 +21,7 @@ namespace PolarisSentinel
     {
         public static async Task Main(string[] args)
         {
+            //builder.Service
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddControllersWithViews();
@@ -67,6 +70,10 @@ namespace PolarisSentinel
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+            //Detection/audit persistence context (business data)
+            builder.Services.AddDbContext<SentinelDbContext>(options =>
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
             //Add DbContext service
             builder.Services.AddDefaultIdentity<IdentityUser>(options =>
             {
@@ -80,7 +87,14 @@ namespace PolarisSentinel
             {
                 options.LoginPath = "/Account/Login";
                 options.AccessDeniedPath = "/Account/AccessDenied";
-            }); 
+            });
+
+            //Register global detection state service as singleton
+            builder.Services.AddSingleton<DetectionStateService>(); 
+
+
+
+
 
             // RF+IF 双模型
             // Dual-model inference
@@ -94,10 +108,38 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
-            // 冷却计时
             // Cooldown timing
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-            builder.Services.AddSingleton<IPolicyEngine, PolicyEngine>();
+
+            // Policy engine receives a Func<PolicySettings> so it can read the latest
+            // settings on every evaluation without coupling to IOptionsMonitor.
+            builder.Services.AddSingleton<IPolicyEngine>(sp =>
+            {
+                var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
+                return new PolicyEngine(
+                    () => monitor.CurrentValue,
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILogger<PolicyEngine>>());
+            });
+
+            // Firewall enforcer (DryRun in-memory rules by default)
+            builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
+
+            // Detection pipeline (application-layer use case)
+            builder.Services.AddSingleton<IDetectionPipeline>(sp =>
+            {
+                var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
+                int blockMinutes = monitor.CurrentValue.BlockDurationMinutes;
+                return new DetectionPipeline(
+                    sp.GetRequiredService<IInferenceEngine>(),
+                    sp.GetRequiredService<IPolicyEngine>(),
+                    sp.GetRequiredService<IFirewallEnforcer>(),
+                    blockMinutes,
+                    sp.GetRequiredService<ILogger<DetectionPipeline>>());
+            });
+
+            // Detection persistence
+            builder.Services.AddScoped<IDetectionRepository, DetectionRepository>();
 
             // 防火墙执行器
             // Firewall enforcer
@@ -129,6 +171,10 @@ namespace PolarisSentinel
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
+
+            //Expose detection state API, fetched by fronted on page Load
+            app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()));
+
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
                 classes = engine.ClassNames,

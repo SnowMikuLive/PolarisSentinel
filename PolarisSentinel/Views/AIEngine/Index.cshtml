@@ -83,23 +83,25 @@
             Live Inference Results
         </div>
         <div class="card-body p-0">
+            <div class="table-responsive">
             @* the style will change when mouse hover on the top.  *@
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>Time</th>
-                        <th>Source IP</th>
-                        <th>Target IP</th>
-                        <th>Target Port</th>
-                        <th>Attack Type</th>
-                        <th>Confidence</th>
-                        <th>Action</th>
+                        <th class="text-nowrap">Time</th>
+                        <th class="text-nowrap">Source IP</th>
+                        <th class="text-nowrap">Target IP</th>
+                        <th class="text-nowrap">Target Port</th>
+                        <th class="text-nowrap">Attack Type</th>
+                        <th class="text-nowrap">Confidence</th>
+                        <th class="text-nowrap">Action</th>
                     </tr>
                 </thead>
                 <tbody id="inferenceBody">
                     @* the information will add by SignalR automatically *@
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
@@ -108,6 +110,8 @@
     @* SignalR client library *@
     <script src="~/lib/signalR/signalr.min.js"></script>
     <script>
+        const MAX_ROWS=50;
+
         //Fetch model info
         fetch('/api/demo/info')
         .then(r=>r.json())
@@ -116,65 +120,61 @@
             document.getElementById('modelClasses').textContent=info.classes.join(', ');
             document.getElementById('alertThreshold').textContent=Math.round(info.rfThreshold*100)+'%';
             document.getElementById('blockThreshold').textContent=Math.round(info.blockThreshold*100)+'%';
-            // add if logic to detect anomaly status
-            if (info.anomalyDetection)
-            {
-                document.getElementById('anomalyThreshold').textContent=info.anomalyThreshold.toFixed(3);
-            }else{
-                document.getElementById('anomalyThreshold').textContent='N/A';
-            }
+            document.getElementById('anomalyThreshold').textContent=info.anomalyDetection?info.anomalyThreshold.toFixed(3):'N/A';
         })
         .catch(()=>{
             document.getElementById('modelName').textContent='Unavailable';
         });
 
-        //SessionStorage cache
-        const CACHE_KEY='aiEngine_decisions';
-        const MAX_CACHED=50;
+        //add: Fetch state from API on load
+        fetch('/api/detections/state')
+            .then(r=>r.json())
+            .then(state=>{
+                //Restore four cards
+                document.getElementById('c-flows').textContent=state.flows;
+                document.getElementById('c-benign').textContent=state.benign;
+                document.getElementById('c-monitor').textContent=state.monitor;
+                document.getElementById('c-block').textContent=state.block;
 
-        //Load the cache from the sessionStorage
-        function loadCache(){
-            try{
-                // Read previous saved data from sessionStorage
-                const raw=sessionStorage.getItem(CACHE_KEY);
-                // If the data is read (raw means not null). then use JSON.parse to parse it into an object. otherwise, return the default empty data.
-                return raw ? JSON.parse(raw):[];
-                }catch{
-                    //If any error occur during or parsing, return the default empty data directly.
-                    return [];
+                //Restore table (non-benign only, newest first, max 50)
+                const nonBenign=state.recent;//.filter(d=>d.attackType !=='Benign');
+
+                for (let i=Math.min(nonBenign.length, MAX_ROWS)-1;i>=0;i--)
+                {
+                    addInferenceRow(nonBenign[i]);
                 }
-        }
+        })
+        .catch(err=>console.error('Failed to fetch state',err));
 
-        //Save catch to sessionStorage
-        function saveCache(decisions){
-            try{
-                sessionStorage.setItem(
-                    CACHE_KEY,JSON.stringify(decisions.slice(0,MAX_CACHED)));
-            }catch{/*Ignore the storage quota errors*/}
-        }
+        // Connect to TrafficHub
+        const connection=new signalR.HubConnectionBuilder()
+            .withUrl('/trafficHub')
+            .withAutomaticReconnect()
+            .build();
 
-        //Restore from cache
-        let cachedDecisions=loadCache();
+        //Listen for policy decision events
+        connection.on('ReceivePolicyDecision',(d)=>{
+            const flowsEl=document.getElementById('c-flows');
+            flowsEl.textContent=parseInt(flowsEl.textContent)+1;
 
-        //Count for new policy actions
-        const counts={flows:0,benign:0,monitor:0,block:0};
+            if(d.attackType==='Benign'){
+                const benignEl=document.getElementById('c-benign');
+                benignEl.textContent=parseInt(benignEl.textContent)+1;
+                //addInferenceRow(d);
+            }else{
+                if(d.action==='Block'){
+                    const blockEl=document.getElementById('c-block');
+                    blockEl.textContent=parseInt(blockEl.textContent)+1;
+                }
+                else if(d.action==='Monitor'){
+                    const monitorEl=document.getElementById('c-monitor');
+                    monitorEl.textContent=parseInt(monitorEl.textContent)+1;
+                }
+                //Table shows non-benign only
+                addInferenceRow(d);
+            }
 
-        function renderCounts()
-        {
-            document.getElementById('c-flows').textContent=counts.flows;
-            document.getElementById('c-benign').textContent=counts.benign;
-            document.getElementById('c-monitor').textContent=counts.monitor;
-            document.getElementById('c-block').textContent=counts.block;
-        }
-
-        //Restore and counts from cache
-        function restoreCountsFromCache(){
-            counts.flows=cachedDecisions.length;
-            counts.benign=cachedDecisions.filter(d=>d.attackType==='Benign').length;
-            counts.monitor=cachedDecisions.filter(d=>d.action==='Monitor').length;
-            counts.block=cachedDecisions.filter(d=>d.action==='Block').length;
-            renderCounts();
-        }
+        });
 
         //Add inference result row   
         function addInferenceRow(d)
@@ -183,7 +183,7 @@
             const row=body.insertRow(0);
             //put color on the policy action
             row.className=d.action==='Block'?'table-danger':
-            //'' means still be defalt table style
+            // means still be defalt table style
                           d.action==='Monitor'?'table-warning':'';
 
             //Generate badge based on action to distinguish the IF and RF
@@ -202,39 +202,8 @@
                 `<td>${scoreCell}</td>`+
                 `<td>${badge}</td>`;
 
-            while(body.rows.length>MAX_CACHED)body.deleteRow(MAX_CACHED);
+            while(body.rows.length>MAX_ROWS)body.deleteRow(MAX_ROWS);
         }
-
-        //add Restore table and counts on load
-        for(let i=cachedDecisions.length -1;i>=0;i--){
-            addInferenceRow(cachedDecisions[i]);
-        }
-        restoreCountsFromCache();
-
-        // Connect to TrafficHub
-        const connection=new signalR.HubConnectionBuilder()
-            .withUrl('/trafficHub')
-            .withAutomaticReconnect()
-            .build();
-
-        //Listen for policy decision events
-        connection.on('ReceivePolicyDecision',(d)=>{counts.flows++;
-            if(d.attackType==='Benign'){
-                counts.benign++;
-            }else{
-                if(d.action==='Block')counts.block++;
-                else if(d.action==='Monitor')counts.monitor++;
-            }
-
-            //Prepend to cache and persist
-            cachedDecisions.unshift(d);
-            if(cachedDecisions.length>MAX_CACHED) cachedDecisions.pop();
-            saveCache(cachedDecisions);
-
-
-            addInferenceRow(d);
-            renderCounts();
-        });
 
         //Start the connection
         connection.start().catch(err=>console.error(err.toString()));
