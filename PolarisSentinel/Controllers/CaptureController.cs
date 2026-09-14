@@ -1,0 +1,61 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PolarisSentinel.Web.Service;
+
+namespace PolarisSentinel.Web.Controllers
+{
+    // API for listing and switching capture devices.
+    [Authorize]
+    [ApiController]
+    [Route("api/capture")]
+    public class CaptureController : ControllerBase
+    {
+        private readonly CaptureControlService _captureControl;
+
+        public CaptureController(CaptureControlService captureControl)
+        {
+            _captureControl = captureControl;
+        }
+
+        // List all devices plus the currently selected one.
+        [HttpGet("devices")]
+        public IActionResult GetDevices()
+        {
+            var devices = _captureControl.GetDevices()
+                .Select(d => new
+                {
+                    deviceName = d.DeviceName,
+                    displayName = d.DisplayName,
+                    ipAddress = d.IpAddress,
+                    isCurrent = d.DeviceName == _captureControl.CurrentDevice,
+                    isWifi = d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase)
+                })
+                .ToList();
+
+            return Ok(new { current = _captureControl.CurrentDevice, devices });
+        }
+
+        // Switch capture to the given device.
+        [HttpPost("select")]
+        public IActionResult Select([FromBody] SelectDeviceRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.DeviceName))
+            {
+                return BadRequest(new { error = "deviceName is required" });
+            }
+
+            var ok = _captureControl.SwitchTo(request.DeviceName);
+            if (!ok)
+            {
+                return NotFound(new { error = "device not found or failed to start" });
+            }
+
+            return Ok(new { current = _captureControl.CurrentDevice });
+        }
+    }
+
+    public class SelectDeviceRequest
+    {
+        public string? DeviceName { get; set; }
+    }
+}

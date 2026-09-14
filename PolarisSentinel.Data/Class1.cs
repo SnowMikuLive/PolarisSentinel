@@ -1,7 +1,2 @@
-﻿namespace PolarisSentinel.Data
-{
-    public class Class1
-    {
-
-    }
-}
+﻿// Removed placeholder.
+namespace PolarisSentinel.Data;

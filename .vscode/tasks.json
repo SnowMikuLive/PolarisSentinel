@@ -1,0 +1,43 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "dotnet build PolarisSentinel.slnx",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "dotnet build PolarisSentinel.slnx",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "test",
+			"type": "shell",
+			"command": "dotnet test PolarisSentinelTestProject/PolarisSentinelTestProject.csproj --no-build --filter PolicyEngineUnitTest",
+			"problemMatcher": []
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "dotnet build PolarisSentinel.slnx -clp:ErrorsOnly",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "build",
+			"type": "shell",
+			"command": "dotnet build PolarisSentinel.slnx -clp:ErrorsOnly",
+			"problemMatcher": [
+				"$msCompile"
+			]
+		}
+	]
+}

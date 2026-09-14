@@ -14,6 +14,7 @@ using PolarisSentinel.PolicyDecision;
 using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.Application;
 using PolarisSentinel.Data;
+using Microsoft.Extensions.Hosting.WindowsServices;
 
 namespace PolarisSentinel
 {
@@ -26,8 +27,12 @@ namespace PolarisSentinel
 
             builder.Services.AddControllersWithViews();
 
-            //Add SignalR
-            builder.Services.AddSignalR();
+            //Add SignalR with camelCase JSON so frontend JS can read properties directly
+            builder.Services.AddSignalR()
+                .AddJsonProtocol(options =>
+                {
+                    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                });
 
             // 策略配置热重载
             // Policy settings hot-reload
@@ -63,6 +68,12 @@ namespace PolarisSentinel
 
             builder.Host.UseWindowsService();
 
+            //Tray icon only in desktop mode, not when running as a Windows service.
+            if (!WindowsServiceHelpers.IsWindowsService())
+            {
+                builder.Services.AddHostedService<TrayIconService>();
+            }
+
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -87,6 +98,9 @@ namespace PolarisSentinel
 
             //Register global detection state service as singleton
             builder.Services.AddSingleton<DetectionStateService>(); 
+
+            //Capture device control (list + switch)
+            builder.Services.AddSingleton<CaptureControlService>();
 
 
 
@@ -135,7 +149,7 @@ namespace PolarisSentinel
             });
 
             // Detection persistence
-            builder.Services.AddScoped<IDetectionRepository, DetectionRepository>();
+            builder.Services.AddScoped<IAlertRepository, AlertRepository>();
 
             var app = builder.Build();
 
