@@ -22,16 +22,11 @@ namespace PolarisSentinel.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("PolarisSentinel.Core.Models.DetectionEvent", b =>
+            modelBuilder.Entity("PolarisSentinel.Core.Models.Alert", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
 
                     b.Property<string>("AttackType")
                         .IsRequired()
@@ -41,9 +36,6 @@ namespace PolarisSentinel.Data.Migrations
                     b.Property<float>("Confidence")
                         .HasColumnType("real");
 
-                    b.Property<DateTime>("DecidedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("DestinationIp")
                         .IsRequired()
                         .HasMaxLength(45)
@@ -52,14 +44,11 @@ namespace PolarisSentinel.Data.Migrations
                     b.Property<int>("DestinationPort")
                         .HasColumnType("int");
 
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                    b.Property<DateTime>("DetectedAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<string>("RuleName")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                    b.Property<byte>("Protocol")
+                        .HasColumnType("tinyint");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -71,13 +60,158 @@ namespace PolarisSentinel.Data.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("nvarchar(45)");
 
+                    b.Property<int>("SourcePort")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("DecidedAt");
+                    b.HasIndex("DetectedAt");
 
                     b.HasIndex("SourceIp");
 
-                    b.ToTable("DetectionEvents", (string)null);
+                    b.ToTable("Alerts", (string)null);
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.Policy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<float>("AutoBlockConfidenceThreshold")
+                        .HasColumnType("real");
+
+                    b.Property<int>("BlockDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DecisionCooldownSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<float>("RfConfidenceThreshold")
+                        .HasColumnType("real");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Policies", (string)null);
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<Guid>("AlertId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RemoteAddress")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlertId");
+
+                    b.HasIndex("PolicyId");
+
+                    b.ToTable("Rules", (string)null);
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.Policy", b =>
+                {
+                    b.HasOne("PolarisSentinel.Core.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
+                {
+                    b.HasOne("PolarisSentinel.Core.Models.Alert", "Alert")
+                        .WithMany()
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PolarisSentinel.Core.Models.Policy", "Policy")
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Alert");
+
+                    b.Navigation("Policy");
                 });
 #pragma warning restore 612, 618
         }

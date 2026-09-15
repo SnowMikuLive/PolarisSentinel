@@ -217,6 +217,7 @@ namespace PolarisSentienlUnitTestProject
                 SourceIp = ip,
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
+                Source = DetectionSource.RandomForest,
                 DecidedAt = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc)
             };
         }

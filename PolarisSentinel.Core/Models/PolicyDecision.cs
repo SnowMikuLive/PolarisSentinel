@@ -16,15 +16,17 @@ public class PolicyDecision
 
     public required float Confidence { get; init; }
 
-    public DetectionSource Source { get; init; }
+    // 检测来源（随机森林 / 孤立森林 / 无）
+    // Detection source (RandomForest / IsolationForest / None)
+    public required DetectionSource Source { get; init; }
 
-    // 执行器中实际使用的规则名
-    // Actual rule name used by the enforcer
-    public string? RuleName { get; set; }
-
-    public required DateTime DecidedAt { get; init; }
+    public required DateTime DecidedAt { get; init; } = DateTime.UtcNow;
 
     // 原因码
     // Reason code
     public string Reason { get; init; } = string.Empty;
+
+    // 封禁时命中的防火墙规则名，复用已有规则时填充
+    // Firewall rule name populated when a Block reuses an existing rule
+    public string? RuleName { get; set; }
 }

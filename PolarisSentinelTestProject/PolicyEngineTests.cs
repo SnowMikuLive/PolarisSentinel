@@ -17,117 +17,58 @@ namespace PolarisSentienlUnitTestProject
         #region Basic Functionality Tests
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_ShouldReturnADecision()
+        public void PolicyEngineEvaluateShouldReturnADecision()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult();
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.IsNotNull(decision);
-            Assert.IsNotNull(decision.Action);
+            Assert.IsTrue(Enum.IsDefined(typeof(PolicyAction), decision.Action));
             engine.RefreshSettingsAsync().GetAwaiter().GetResult();
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_BenignTraffic_ShouldIgnore()
+        public void PolicyEngineEvaluateBenignTrafficShouldIgnore()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.Benign, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Ignore, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_HighConfidenceAttack_ShouldBlock()
+        public void PolicyEngineEvaluateHighConfidenceAttackShouldBlock()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult();
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyDecision_Properties_ShouldBeSetCorrectly()
+        public void PolicyEngineEvaluateLowConfidenceShouldIgnore()
         {
-            // Arrange
-            var decidedAt = DateTime.UtcNow;
-            var decision = new PolicyDecision
-            {
-                AlertId = Guid.NewGuid(),
-                Action = PolicyAction.Monitor,
-                SourceIp = "192.168.1.100",
-                AttackType = AttackTypes.DoS,
-                Confidence = 0.7f,
-                DecidedAt = decidedAt,
-                Reason = "test"
-            };
-
-            // Assert
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("192.168.1.100", decision.SourceIp);
-            Assert.AreEqual(AttackTypes.DoS, decision.AttackType);
-            Assert.AreEqual(0.7f, decision.Confidence);
-            Assert.AreEqual(decidedAt, decision.DecidedAt);
-            Assert.AreEqual("test", decision.Reason);
-        }
-
-        #endregion
-
-        #region Threshold Tests
-
-        [TestMethod]
-        public void PolicyEngine_Evaluate_LowConfidence_ShouldIgnore()
-        {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.50f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Ignore, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_MediumConfidence_ShouldMonitor()
+        public void PolicyEngineEvaluateMediumConfidenceShouldMonitor()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_UnknownAnomaly_ShouldMonitor()
+        public void PolicyEngineEvaluateUnknownAnomalyShouldMonitor()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.UnknownAnomaly, DetectionSource.IsolationForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             // 未知异常永不自动 Block
             // Unknown anomalies are never auto-blocked
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
@@ -135,30 +76,20 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_NoDetectionSource_ShouldIgnore()
+        public void PolicyEngineEvaluateNoDetectionSourceShouldIgnore()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.None);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Ignore, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_PortScan_ShouldBlockWhenConfidenceIsHigh()
+        public void PolicyEngineEvaluatePortScanShouldBlockWhenConfidenceIsHigh()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("1.1.1.1", 0.95f, AttackTypes.PortScan, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
@@ -170,60 +101,40 @@ namespace PolarisSentienlUnitTestProject
         // Block downgraded to Monitor for protected addresses
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_PrivateIp_ShouldMonitor()
+        public void PolicyEngineEvaluatePrivateIpShouldMonitor()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("192.168.1.100", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_Localhost_ShouldMonitor()
+        public void PolicyEngineEvaluateLocalhostShouldMonitor()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("127.0.0.1", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_AllowlistIp_ShouldMonitor()
+        public void PolicyEngineEvaluateAllowlistIpShouldMonitor()
         {
-            // Arrange
             var settings = new PolicySettings();
             settings.Allowlist = new string[] { "8.8.8.8" };
             var engine = CreateEngine(settings);
             var detection = CreateDetectionResult();
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_PublicIp_ShouldBlock()
+        public void PolicyEngineEvaluatePublicIpShouldBlock()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, decision.Action);
             Assert.IsNotNull(decision.Reason);
         }
@@ -236,72 +147,39 @@ namespace PolarisSentienlUnitTestProject
         // Repeated Block for same IP is suppressed within cooldown
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_SameIpTwice_ShouldIgnoreSecondBlock()
+        public void PolicyEngineEvaluateSameIpTwiceShouldIgnoreSecondBlock()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult();
-
-            // Act
             var first = engine.Evaluate(detection);
             var second = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Ignore, second.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_AfterCooldown_ShouldBlockAgain()
+        public void PolicyEngineEvaluateAfterCooldownShouldBlockAgain()
         {
-            // Arrange
             var clock = new FakeTimeProvider();
             var engine = CreateEngine(new PolicySettings(), clock);
             var detection = CreateDetectionResult();
-
-            // Act
             var first = engine.Evaluate(detection);
             // 冷却期满（60s）后可再次 Block
             // Block allowed again after cooldown expires
             clock.Advance(TimeSpan.FromSeconds(60));
             var second = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Block, second.Action);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_DifferentIps_ShouldBlockBoth()
+        public void PolicyEngineEvaluateDifferentIpsShouldBlockBoth()
         {
-            // Arrange
             var engine = CreateEngine();
-
-            // Act
             var first = engine.Evaluate(CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest));
             var second = engine.Evaluate(CreateDetectionResult("1.1.1.1", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest));
-
-            // Assert
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Block, second.Action);
-        }
-
-        [TestMethod]
-        public void PolicyEngine_RefreshSettingsAsync_ShouldNotThrow()
-        {
-            // Arrange
-            var engine = CreateEngine();
-
-            // Act & Assert
-            try
-            {
-                engine.RefreshSettingsAsync().GetAwaiter().GetResult();
-                Assert.IsTrue(true);
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"RefreshSettingsAsync threw exception: {ex.Message}");
-            }
         }
 
         #endregion
@@ -309,9 +187,8 @@ namespace PolarisSentienlUnitTestProject
         #region Config Tests
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_AfterThresholdChange_ShouldUseNewValue()
+        public void PolicyEngineEvaluateAfterThresholdChangeShouldUseNewValue()
         {
-            // Arrange
             var settings = new PolicySettings();
             var engine = CreateEngine(settings);
             var detection = CreateDetectionResult("8.8.8.8", 0.65f, AttackTypes.DoS, DetectionSource.RandomForest);
@@ -322,11 +199,7 @@ namespace PolarisSentienlUnitTestProject
             // 修改阈值后下一次 Evaluate 立即生效
             // Next Evaluate uses updated threshold immediately
             settings.RfConfidenceThreshold = 0.9;
-
-            // Act
             var after = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(PolicyAction.Ignore, after.Action);
         }
 
@@ -335,54 +208,25 @@ namespace PolarisSentienlUnitTestProject
         #region Decision Result Tests
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_ShouldCopySourceIpAndAttackType()
+        public void PolicyEngineEvaluateShouldCopySourceIpAndAttackType()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.BruteForce, DetectionSource.RandomForest);
-
-            // Act
             var decision = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreEqual(detection.SourceIp, decision.SourceIp);
             Assert.AreEqual(detection.AttackType, decision.AttackType);
             Assert.AreEqual(detection.Confidence, decision.Confidence);
         }
 
         [TestMethod]
-        public void PolicyEngine_Evaluate_ShouldGenerateAlertId()
+        public void PolicyEngineEvaluateShouldGenerateAlertId()
         {
-            // Arrange
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            // Act
             var first = engine.Evaluate(detection);
             var second = engine.Evaluate(detection);
-
-            // Assert
             Assert.AreNotEqual(Guid.Empty, first.AlertId);
             Assert.AreNotEqual(first.AlertId, second.AlertId);
-        }
-
-        [TestMethod]
-        public void PolicyEngine_Evaluate_ShouldNotThrow()
-        {
-            // Arrange
-            var engine = CreateEngine();
-            var detection = CreateDetectionResult();
-
-            // Act & Assert
-            try
-            {
-                engine.Evaluate(detection);
-                Assert.IsTrue(true);
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Evaluate threw exception: {ex.Message}");
-            }
         }
 
         #endregion
