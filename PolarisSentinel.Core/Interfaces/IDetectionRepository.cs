@@ -1,0 +1,14 @@
+// Replaced by IAlertRepository.
+namespace PolarisSentinel.Core.Interfaces;
+<<<<<<< HEAD
+
+// 检测事件持久化接口
+// Persistence contract for detection events
+public interface IDetectionRepository
+{
+    Task AddAsync(DetectionEvent detectionEvent, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DetectionEvent>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
+}
+=======
+>>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad

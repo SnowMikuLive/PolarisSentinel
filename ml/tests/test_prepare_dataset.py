@@ -1,12 +1,9 @@
 # prepare_dataset 特征工程测试
 # Feature engineering tests for prepare_dataset.
-
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
-
 from prepare_dataset import (
     BASE_FEATURES,
     CLASS_NAMES,

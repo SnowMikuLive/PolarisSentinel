@@ -1,11 +1,9 @@
 # IF 导出 ONNX 并验收阈值一致性。输出: if_model.onnx, metrics_if_final.json
 # Export IF to ONNX and validate threshold parity. Outputs: if_model.onnx, metrics_if_final.json
-
 import json
 import sys
 import time
 from pathlib import Path
-
 import joblib
 import numpy as np
 import onnxruntime as ort

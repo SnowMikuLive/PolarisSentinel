@@ -1,12 +1,9 @@
 # 构建 IF 新类攻击留出集。输出: novelty.npz
 # Build IF novelty holdout. Outputs: novelty.npz
-
 import sys
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
-
 from prepare_dataset import BASE_FEATURES, FEATURE_NAMES, FILES, LABEL_MAPPING, build_features
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
