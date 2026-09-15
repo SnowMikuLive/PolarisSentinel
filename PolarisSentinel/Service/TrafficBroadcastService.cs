@@ -5,13 +5,12 @@ using PolarisSentinel.Core.Models;
 using PolarisSentinel.Web.Hubs;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using PolarisSentinel.Inference;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Presentation-layer adapter: subscribes to traffic capture events and pushes
-    // results through SignalR. It delegates the detection -> decision -> enforcement
-    // pipeline to the application layer (IDetectionPipeline) and persists results
-    // through IDetectionRepository. It contains no business logic itself.
+    // 抓包事件适配器：调用检测管线、推送 SignalR、持久化结果
+    // Capture adapter: runs detection pipeline, pushes SignalR, persists results
     public class TrafficBroadcastService:IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
@@ -19,8 +18,8 @@ namespace PolarisSentinel.Web.Service
         private readonly IDetectionPipeline _pipeline;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CaptureControlService _captureControl;
+        private readonly ILogger<TrafficBroadcastService> _logger;
 
-        //Inject global state service
         private readonly DetectionStateService _state;
 
         public TrafficBroadcastService(
@@ -29,7 +28,8 @@ namespace PolarisSentinel.Web.Service
             IDetectionPipeline pipeline,
             IServiceScopeFactory scopeFactory,
             CaptureControlService captureControl,
-            DetectionStateService state
+            DetectionStateService state,
+            ILogger<TrafficBroadcastService> logger
             )
         {
             _hubContext = hubContext;
@@ -38,6 +38,7 @@ namespace PolarisSentinel.Web.Service
             _scopeFactory = scopeFactory;
             _captureControl = captureControl;
             _state = state;
+            _logger = logger;
         }
 
         //Subscribe to event when service starts
@@ -58,7 +59,7 @@ namespace PolarisSentinel.Web.Service
             catch (Exception ex)
             {
                 // Log the exception to the debug output
-                System.Diagnostics.Debug.WriteLine($"Failed to start traffic capture service: {ex.Message}");
+                _logger.LogError(ex, "Failed to start traffic capture");
             }
                 return Task.CompletedTask;
         }
@@ -76,15 +77,31 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        //Handle flow completion events: delegate the pipeline to the application layer.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
             {
-                //Run the detection -> decision -> enforcement pipeline.
-                var decision = _pipeline.ProcessFlow(flow);
+                // 抓包特征转为模型契约，保留流地址和时间
+                // Convert capture features and keep the flow addresses and times
+                var modelFlow = new FlowFeatureVector
+                {
+                    Features = LegacyFeatureAdapter.ToContract(flow.Features),
+                    SourceIp = flow.SourceIp,
+                    SourcePort = flow.SourcePort,
+                    DestinationIp = flow.DestinationIp,
+                    DestinationPort = flow.DestinationPort,
+                    Protocol = flow.Protocol,
+                    FlowStartTime = flow.FlowStartTime,
+                    FlowEndTime = flow.FlowEndTime,
+                    TotalPackets = flow.TotalPackets,
+                    TotalBytes = flow.TotalBytes
+                };
+                var decision = _pipeline.ProcessFlow(modelFlow);
+                _logger.LogInformation(
+                    "Flow {SourceIp}: {InputCount}->20 features, {AttackType}, {Source}, {Action}, {Reason}",
+                    decision.SourceIp, flow.Features.Length, decision.AttackType,
+                    decision.Source, decision.Action, decision.Reason);
 
-                //Build unified record object
                 var record = new DetectionRecord(
                     decision.AlertId,
                     decision.SourceIp,
@@ -94,15 +111,24 @@ namespace PolarisSentinel.Web.Service
                     decision.Confidence,
                     decision.Action.ToString(),
                     decision.DecidedAt.ToString("HH:mm:ss"),
-                    decision.Reason);
+                    decision.Reason,
+                    decision.Source.ToString(),
+                    decision.RuleName);
 
-                //Persist the alert (5-tuple + inference result) in a short-lived scope,
-                //because the unit of work depends on a scoped DbContext while this is a singleton.
-                await using (var scope = _scopeFactory.CreateAsyncScope())
+                // 先推送结果，写库失败不影响实时页面
+                // Push results first so a database error does not stop live updates
+                _state.Record(record);
+                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
+
+                // 单例服务内用短生命周期 scope 写库
+                // Persist via a short-lived scope because DbContext is scoped
+                try
                 {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
                     var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                     unitOfWork.Alerts.Add(new Alert
                     {
+                        Id = decision.AlertId,
                         SourceIp = flow.SourceIp,
                         SourcePort = flow.SourcePort,
                         DestinationIp = flow.DestinationIp,
@@ -110,21 +136,20 @@ namespace PolarisSentinel.Web.Service
                         Protocol = flow.Protocol,
                         AttackType = decision.AttackType,
                         Confidence = decision.Confidence,
-                        Source = DetectionSource.RandomForest,
+                        Source = decision.Source,
                         DetectedAt = decision.DecidedAt
                     });
                     await unitOfWork.SaveChangesAsync();
                 }
 
-                //Record to global state first
-                _state.Record(record);
-
-                //Push policy decision via SignalR
-                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Cannot save detection {AlertId}", decision.AlertId);
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Pipeline failed for flow: {ex.Message}");
+                _logger.LogError(ex, "Pipeline failed for flow from {SourceIp}", flow.SourceIp);
             }
         }
         

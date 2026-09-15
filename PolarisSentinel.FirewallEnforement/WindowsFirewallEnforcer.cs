@@ -49,6 +49,8 @@ namespace PolarisSentinel.FirewallEnforement
                 }
                 using var identity = WindowsIdentity.GetCurrent();
                 var principal = new WindowsPrincipal(identity);
+                // 非管理员无法写系统防火墙，降级为内存模式
+                // Non-admin execution falls back to in-memory dry-run
                 if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
                 {
                     _logger.LogError("Administrator rights are required; using dry-run");
@@ -152,7 +154,9 @@ namespace PolarisSentinel.FirewallEnforement
                         result.Add(new FirewallRuleInfo
                         {
                             Name = rule.Name,
-                            RemoteAddress = rule.RemoteAddress,
+                            // 去掉 Windows 返回的主机掩码，便于元数据比对与 API 展示
+                            // Strip host mask from Windows RemoteAddresses for metadata parity and API display
+                            RemoteAddress = NormalizeIp(rule.RemoteAddress, true) ?? rule.RemoteAddress,
                             Enabled = rule.Enabled,
                             IsBlockRule = rule.IsBlockRule,
                             AlertId = metadata?.AlertId,
@@ -248,6 +252,8 @@ namespace PolarisSentinel.FirewallEnforement
                 var metadata = JsonSerializer.Deserialize<FirewallRuleMetadata>(rule.Description, JsonOptions);
                 if (metadata != null && metadata.AlertId != Guid.Empty &&
                     rule.Name == FirewallRuleNaming.BuildRuleName(metadata.AlertId) &&
+                    // Description 中的 IP 与 COM 返回地址需同一规范化口径
+                    // Compare Description IP against normalized COM RemoteAddresses
                     NormalizeIp(metadata.Ip) != null && NormalizeIp(metadata.Ip) == NormalizeIp(rule.RemoteAddress, true) &&
                     metadata.CreatedAt != default && metadata.ExpiresAt > metadata.CreatedAt &&
                     float.IsFinite(metadata.Confidence) && metadata.Confidence >= 0 && metadata.Confidence <= 1)

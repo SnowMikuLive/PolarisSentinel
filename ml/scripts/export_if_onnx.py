@@ -128,6 +128,8 @@ def main():
     novelty_rf = rf_alerts(rf, X_novelty)
 
     rf_fpr = float(benign_rf.mean())
+    # 并联评估：IF 仅看 RF 未达告警阈值的流；C# 对 RF 攻击类直接返回，口径不同
+    # Parallel eval: IF scores flows RF did not alert on; C# returns RF attacks directly
     benign_if_alerts = ~benign_rf & (benign_scores < threshold)
     if_extra = float(benign_if_alerts.mean())
     if_catch = ~novelty_rf & (novelty_scores < threshold)
