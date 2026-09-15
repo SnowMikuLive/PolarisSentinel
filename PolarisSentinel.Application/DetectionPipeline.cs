@@ -5,10 +5,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
-// Orchestrates the detection use case: inference -> policy decision -> enforcement.
-// This is the application-layer use case; it depends only on domain contracts
-// (IInferenceEngine, IPolicyEngine, IFirewallEnforcer) and knows nothing about
-// the presentation or persistence layers.
+// 检测用例编排：推理 → 策略 → 防火墙执行
+// Orchestrates inference, policy decision, and firewall enforcement
 public class DetectionPipeline : IDetectionPipeline
 {
     private readonly IInferenceEngine _inference;
@@ -33,19 +31,20 @@ public class DetectionPipeline : IDetectionPipeline
 
     public PolicyDecision ProcessFlow(FlowFeatureVector flow)
     {
-        // Step 1: run inference on the completed flow.
         var detection = _inference.Detect(flow);
-
-        // Step 2: evaluate the policy against the detection.
         var decision = _policy.Evaluate(detection);
 
-        // Step 3: enforce Block decisions by creating a firewall rule.
         if (decision.Action == PolicyAction.Block)
         {
             var duration = TimeSpan.FromMinutes(_blockDurationMinutes);
             _firewall.BlockIp(decision, duration);
+            // 同一 IP 可能复用已有规则
+            // The same IP may reuse an existing rule
+            decision.RuleName = _firewall.GetAllRules().FirstOrDefault(rule =>
+                rule.RemoteAddress == decision.SourceIp && rule.Enabled && rule.IsBlockRule &&
+                rule.ExpiresAt > new DateTimeOffset(decision.DecidedAt))?.Name;
             _logger.LogInformation(
-                "Blocked {SourceIp} for {Minutes} minutes (attack {AttackType})",
+                "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
                 decision.SourceIp, _blockDurationMinutes, decision.AttackType);
         }
 

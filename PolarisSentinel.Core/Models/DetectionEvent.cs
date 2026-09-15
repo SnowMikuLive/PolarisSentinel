@@ -2,9 +2,8 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// Persisted record of one detection pipeline run: the detection result and the
-// policy decision that followed it. This is the aggregate root for the
-// detection/audit bounded context.
+// 单次检测管线的持久化记录
+// Persisted record of one detection pipeline run
 public class DetectionEvent
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -18,6 +17,10 @@ public class DetectionEvent
     public required string AttackType { get; set; }
 
     public float Confidence { get; set; }
+
+    public DetectionSource Source { get; set; }
+
+    public string? RuleName { get; set; }
 
     public PolicyAction Action { get; set; }
 

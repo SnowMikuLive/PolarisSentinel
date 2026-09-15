@@ -16,6 +16,12 @@ public class PolicyDecision
 
     public required float Confidence { get; init; }
 
+    public DetectionSource Source { get; init; }
+
+    // 执行器中实际使用的规则名
+    // Actual rule name used by the enforcer
+    public string? RuleName { get; set; }
+
     public required DateTime DecidedAt { get; init; }
 
     // 原因码

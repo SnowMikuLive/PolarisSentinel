@@ -2,8 +2,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-// Persistence contract for detection events (application layer boundary).
-// Implemented in the infrastructure/persistence layer.
+// 检测事件持久化接口
+// Persistence contract for detection events
 public interface IDetectionRepository
 {
     Task AddAsync(DetectionEvent detectionEvent, CancellationToken cancellationToken = default);

@@ -4,7 +4,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Data;
 
-// EF Core implementation of the detection repository.
+// 检测事件 EF Core 仓储
+// EF Core implementation of the detection repository
 public class DetectionRepository : IDetectionRepository
 {
     private readonly SentinelDbContext _context;

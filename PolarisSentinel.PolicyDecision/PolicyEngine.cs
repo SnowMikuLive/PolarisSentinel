@@ -8,10 +8,8 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.PolicyDecision
 {
-    // Decide whether to ignore, monitor or block a detection.
-    // The policy settings are supplied via a Func<PolicySettings> provider so the
-    // engine stays free of framework abstractions (IOptionsMonitor) while still
-    // reading the latest settings on every evaluation (hot-reload friendly).
+    // 推理结果 → Ignore / Monitor / Block；Unknown 仅 Monitor
+    // Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
     public class PolicyEngine : IPolicyEngine
     {
         private readonly Func<PolicySettings> _settingsProvider;
@@ -36,7 +34,8 @@ namespace PolarisSentinel.PolicyDecision
                 throw new ArgumentNullException(nameof(result));
             }
 
-            // Check one flow at a time to avoid duplicate Blocks for the same IP.
+            // 串行评估，避免同 IP 并发重复 Block
+            // Evaluate serially to avoid concurrent duplicate Blocks per IP
             lock (_lock)
             {
                 var settings = _settingsProvider();
@@ -176,6 +175,7 @@ namespace PolarisSentinel.PolicyDecision
                 SourceIp = result.SourceIp,
                 AttackType = result.AttackType,
                 Confidence = result.Confidence,
+                Source = result.Source,
                 DecidedAt = _timeProvider.GetUtcNow().UtcDateTime,
                 Reason = reason
             };

@@ -70,7 +70,8 @@ namespace PolarisSentinel
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            //Detection/audit persistence context (business data)
+            // 检测审计数据库上下文
+            // Detection/audit persistence context
             builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -89,8 +90,9 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             });
 
-            //Register global detection state service as singleton
-            builder.Services.AddSingleton<DetectionStateService>(); 
+            // 检测状态服务（累计计数 + 最近决策）
+            // Detection state service (counters and recent decisions)
+            builder.Services.AddSingleton<DetectionStateService>();
 
 
 
@@ -108,11 +110,12 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
+            // 冷却计时
             // Cooldown timing
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-            // Policy engine receives a Func<PolicySettings> so it can read the latest
-            // settings on every evaluation without coupling to IOptionsMonitor.
+            // 策略引擎通过 Func 读取最新配置，支持热重载
+            // Policy engine reads latest settings via Func for hot-reload
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
             {
                 var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
@@ -122,10 +125,12 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<PolicyEngine>>());
             });
 
-            // Firewall enforcer (DryRun in-memory rules by default)
+            // 防火墙执行器
+            // Firewall enforcer
             builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
 
-            // Detection pipeline (application-layer use case)
+            // 检测管线（推理 → 策略 → 封禁）
+            // Detection pipeline (inference → policy → enforcement)
             builder.Services.AddSingleton<IDetectionPipeline>(sp =>
             {
                 var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
@@ -138,12 +143,9 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<DetectionPipeline>>());
             });
 
-            // Detection persistence
+            // 检测事件持久化
+            // Detection event persistence
             builder.Services.AddScoped<IDetectionRepository, DetectionRepository>();
-
-            // 防火墙执行器
-            // Firewall enforcer
-            builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
 
             var app = builder.Build();
 
@@ -172,8 +174,10 @@ namespace PolarisSentinel
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
 
-            //Expose detection state API, fetched by fronted on page Load
-            app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()));
+            // 检测状态 API，页面加载时拉取
+            // Detection state API for page load
+            app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()))
+                .RequireAuthorization();
 
             app.MapGet("/api/demo/info", (OnnxInferenceEngine engine) => Results.Json(new
             {
@@ -193,6 +197,11 @@ namespace PolarisSentinel
                 {
                     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                     await db.Database.MigrateAsync();
+
+                    // 建立检测记录表
+                    // Create the detection records table
+                    var sentinelDb = scope.ServiceProvider.GetRequiredService<SentinelDbContext>();
+                    await sentinelDb.Database.MigrateAsync();
 
                     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
                     var admin = await userManager.FindByNameAsync("admin");
@@ -221,7 +230,7 @@ namespace PolarisSentinel
                 catch (Exception ex)
                 {
                     app.Logger.LogError(ex,
-                        "Identity database initialisation failed; login is unavailable until the database is reachable.");
+                        "Database initialisation failed; check the connection and migrations.");
                 }
             }
 
