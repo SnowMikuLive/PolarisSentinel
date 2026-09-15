@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Web.Data;
-using Microsoft.Extensions.DependencyInjection; 
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
@@ -14,6 +14,7 @@ using PolarisSentinel.PolicyDecision;
 using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.Application;
 using PolarisSentinel.Data;
+using Microsoft.Extensions.Hosting.WindowsServices;
 
 namespace PolarisSentinel
 {
@@ -26,8 +27,12 @@ namespace PolarisSentinel
 
             builder.Services.AddControllersWithViews();
 
-            //Add SignalR
-            builder.Services.AddSignalR();
+            //Add SignalR with camelCase JSON so frontend JS can read properties directly
+            builder.Services.AddSignalR()
+                .AddJsonProtocol(options =>
+                {
+                    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                });
 
             // 策略配置热重载
             // Policy settings hot-reload
@@ -67,6 +72,12 @@ namespace PolarisSentinel
 
             builder.Host.UseWindowsService();
 
+            //Tray icon only in desktop mode, not when running as a Windows service.
+            if (!WindowsServiceHelpers.IsWindowsService())
+            {
+                builder.Services.AddHostedService<TrayIconService>();
+            }
+
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -93,6 +104,9 @@ namespace PolarisSentinel
             // 检测状态服务（累计计数 + 最近决策）
             // Detection state service (counters and recent decisions)
             builder.Services.AddSingleton<DetectionStateService>();
+
+            //Capture device control (list + switch)
+            builder.Services.AddSingleton<CaptureControlService>();
 
 
 
@@ -143,9 +157,9 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<DetectionPipeline>>());
             });
 
-            // 检测事件持久化
-            // Detection event persistence
-            builder.Services.AddScoped<IDetectionRepository, DetectionRepository>();
+            // Detection persistence (single transaction boundary over SentinelDbContext)
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IAlertRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Alerts);
 
             var app = builder.Build();
 

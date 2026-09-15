@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Web.Hubs;
@@ -16,6 +17,7 @@ namespace PolarisSentinel.Web.Service
         private readonly ITrafficCaptureService _trafficCaptureService;
         private readonly IDetectionPipeline _pipeline;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly CaptureControlService _captureControl;
         private readonly ILogger<TrafficBroadcastService> _logger;
 
         private readonly DetectionStateService _state;
@@ -25,6 +27,7 @@ namespace PolarisSentinel.Web.Service
             ITrafficCaptureService trafficCaptureService,
             IDetectionPipeline pipeline,
             IServiceScopeFactory scopeFactory,
+            CaptureControlService captureControl,
             DetectionStateService state,
             ILogger<TrafficBroadcastService> logger
             )
@@ -33,6 +36,7 @@ namespace PolarisSentinel.Web.Service
             _trafficCaptureService = trafficCaptureService;
             _pipeline = pipeline;
             _scopeFactory = scopeFactory;
+            _captureControl = captureControl;
             _state = state;
             _logger = logger;
         }
@@ -47,32 +51,10 @@ namespace PolarisSentinel.Web.Service
             //Subscribe to flow completion event for real inference and policy evaluation
             _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
 
-            //Select the device and start capture automatically.
+            //Auto-select a device (Wi-Fi preferred) and start capture.
             try
             {
-                var devices = _trafficCaptureService.GetAvailableDevices().ToList();
-
-                //Make the Wi-Fi or Ethernet device as the default capture device if it exists, otherwise use the first available device.
-                //d is also the device object , it will check the DisplayName of the device.
-                var selectedDevice = devices.FirstOrDefault(d =>
-                    d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
-                    // Check for Ethernet devices
-                    d.DisplayName.Contains("Ethernet", StringComparison.OrdinalIgnoreCase))
-                    // If no Wi-Fi or Ethernet device is found, select the first available device
-                    ?? devices.FirstOrDefault();
-
-                if (selectedDevice != null)
-                {
-                    //System.Diagnostics.Debug.WriteLine($"Starting capture on:{selectedDevice.DisplayName}");
-                    _trafficCaptureService.Start(selectedDevice.DeviceName);
-                    _logger.LogInformation("Traffic capture started on {Device}", selectedDevice.DisplayName);
-                    //System.Diagnostics.Debug.WriteLine("Traffic capture service started successfully."); ;
-                }
-                else
-                {
-                    _logger.LogWarning("No network devices found for capture");
-                }
-
+                _captureControl.AutoStart();
             }
             catch (Exception ex)
             {
@@ -142,22 +124,22 @@ namespace PolarisSentinel.Web.Service
                 // Persist via a short-lived scope because DbContext is scoped
                 try
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var repository = scope.ServiceProvider.GetRequiredService<IDetectionRepository>();
-                    await repository.AddAsync(new DetectionEvent
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    unitOfWork.Alerts.Add(new Alert
                     {
                         Id = decision.AlertId,
-                        SourceIp = decision.SourceIp,
+                        SourceIp = flow.SourceIp,
+                        SourcePort = flow.SourcePort,
                         DestinationIp = flow.DestinationIp,
                         DestinationPort = flow.DestinationPort,
+                        Protocol = flow.Protocol,
                         AttackType = decision.AttackType,
                         Confidence = decision.Confidence,
                         Source = decision.Source,
-                        RuleName = decision.RuleName,
-                        Action = decision.Action,
-                        Reason = decision.Reason,
-                        DecidedAt = decision.DecidedAt
+                        DetectedAt = decision.DecidedAt
                     });
+                    await unitOfWork.SaveChangesAsync();
                 }
 
                 catch (Exception ex)
