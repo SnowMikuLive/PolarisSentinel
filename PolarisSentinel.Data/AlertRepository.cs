@@ -13,10 +13,9 @@ public class AlertRepository : IAlertRepository
         _context = context;
     }
 
-    public async Task AddAsync(Alert alert, CancellationToken cancellationToken = default)
+    public void Add(Alert alert)
     {
-        await _context.Alerts.AddAsync(alert, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        _context.Alerts.Add(alert);
     }
 
     public async Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default)

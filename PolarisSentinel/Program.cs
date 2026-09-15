@@ -152,8 +152,9 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<DetectionPipeline>>());
             });
 
-            // Detection persistence
-            builder.Services.AddScoped<IAlertRepository, AlertRepository>();
+            // Detection persistence (single transaction boundary over SentinelDbContext)
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IAlertRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Alerts);
 
             // 防火墙执行器
             // Firewall enforcer

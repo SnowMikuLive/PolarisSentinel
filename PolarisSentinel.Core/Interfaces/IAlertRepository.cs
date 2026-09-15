@@ -4,7 +4,8 @@ namespace PolarisSentinel.Core.Interfaces;
 
 public interface IAlertRepository
 {
-    Task AddAsync(Alert alert, CancellationToken cancellationToken = default);
+    // Stages an alert; commit happens via IUnitOfWork.SaveChangesAsync.
+    void Add(Alert alert);
 
     Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
 }

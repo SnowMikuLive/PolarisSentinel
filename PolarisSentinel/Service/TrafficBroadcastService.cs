@@ -97,11 +97,11 @@ namespace PolarisSentinel.Web.Service
                     decision.Reason);
 
                 //Persist the alert (5-tuple + inference result) in a short-lived scope,
-                //because the repository depends on a scoped DbContext while this is a singleton.
-                using (var scope = _scopeFactory.CreateScope())
+                //because the unit of work depends on a scoped DbContext while this is a singleton.
+                await using (var scope = _scopeFactory.CreateAsyncScope())
                 {
-                    var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
-                    await repository.AddAsync(new Alert
+                    var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    unitOfWork.Alerts.Add(new Alert
                     {
                         SourceIp = flow.SourceIp,
                         SourcePort = flow.SourcePort,
@@ -113,6 +113,7 @@ namespace PolarisSentinel.Web.Service
                         Source = DetectionSource.RandomForest,
                         DetectedAt = decision.DecidedAt
                     });
+                    await unitOfWork.SaveChangesAsync();
                 }
 
                 //Record to global state first
