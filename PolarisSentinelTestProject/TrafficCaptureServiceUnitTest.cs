@@ -23,7 +23,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsNotNull(service);
 
             var featureNames = TrafficCaptureService.FeatureNames;
-            Assert.AreEqual(20, featureNames.Length);
+            Assert.HasCount(20, featureNames);
 
             service.Dispose();
         }
@@ -32,7 +32,7 @@ namespace PolarisSentienlUnitTestProject
         public void TrafficCaptureServiceFeatureNamesShouldContainCorrectFeatures()
         {
             var featureNames = TrafficCaptureService.FeatureNames;
-            Assert.AreEqual(20, featureNames.Length);
+            Assert.HasCount(20, featureNames);
 
             CollectionAssert.Contains(featureNames, "flow_duration_seconds");
             CollectionAssert.Contains(featureNames, "total_fwd_packets");
@@ -72,7 +72,7 @@ namespace PolarisSentienlUnitTestProject
             using var service = new TrafficCaptureService(30, 3, 5);
             var devices = service.GetAvailableDevices().ToList();
             Assert.IsNotNull(devices);
-            Assert.IsTrue(devices.Count > 0);
+            Assert.IsNotEmpty(devices);
 
             foreach (var device in devices)
             {
@@ -114,7 +114,7 @@ namespace PolarisSentienlUnitTestProject
             });
 
             Assert.IsNotNull(exception);
-            Assert.IsTrue(exception.Message.Contains("No capture device found"));
+            Assert.Contains("No capture device found", exception.Message);
         }
 
         [TestMethod]
@@ -135,7 +135,7 @@ namespace PolarisSentienlUnitTestProject
                 service.Stop();
             }
             var devicesAfter = service.GetAvailableDevices().ToList();
-            Assert.IsTrue(devicesAfter.Count > 0);
+            Assert.IsNotEmpty(devicesAfter);
         }
 
         #endregion
