@@ -16,7 +16,7 @@ public class PolicyDecision
 
     public required float Confidence { get; init; }
 
-    public required DateTime DecidedAt { get; init; }
+    public required DateTime DecidedAt { get; init; } = DateTime.UtcNow;
 
     // 原因码
     // Reason code
