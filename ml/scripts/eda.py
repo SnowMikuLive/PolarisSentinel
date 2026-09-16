@@ -1,12 +1,9 @@
 # CIC-IDS2017 探索性分析。仅打印，不写文件
 # EDA on raw CIC-IDS2017 CSVs. Prints only, no files written.
-
 import sys
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
-
 # GBK 控制台兼容
 # GBK console compat
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

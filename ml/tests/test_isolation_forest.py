@@ -1,14 +1,11 @@
 # IF 留出集与 ONNX 测试
 # IF novelty holdout and ONNX tests.
-
 import json
 from pathlib import Path
-
 import joblib
 import numpy as np
 import onnxruntime as ort
 import pytest
-
 from prepare_dataset import FEATURE_NAMES, LABEL_MAPPING
 from prepare_novelty import classify
 

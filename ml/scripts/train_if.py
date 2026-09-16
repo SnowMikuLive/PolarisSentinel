@@ -1,11 +1,9 @@
 # IF 变体对比。输出: if_*.joblib, metrics_if_variants.json
 # Compare IF variants. Outputs: if_*.joblib, metrics_if_variants.json
-
 import json
 import sys
 import time
 from pathlib import Path
-
 import joblib
 import numpy as np
 from sklearn.ensemble import IsolationForest

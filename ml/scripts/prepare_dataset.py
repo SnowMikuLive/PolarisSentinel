@@ -1,9 +1,7 @@
 # 构建 20 维特征并划分数据集。输出: prepared.npz
 # Build 20-D features and split. Outputs: prepared.npz
-
 import sys
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
