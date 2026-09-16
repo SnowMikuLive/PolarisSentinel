@@ -67,6 +67,9 @@ public class SentinelDbContext : DbContext
             e.Property(x => x.AttackType).HasMaxLength(64).IsRequired();
             e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.RuleName).HasMaxLength(128);
+            e.Property(x => x.Reason).HasMaxLength(128).IsRequired();
             e.HasIndex(x => x.DetectedAt);
             e.HasIndex(x => x.SourceIp);
         });

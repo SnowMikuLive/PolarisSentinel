@@ -28,6 +28,11 @@ namespace PolarisSentinel.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("AttackType")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -49,6 +54,15 @@ namespace PolarisSentinel.Data.Migrations
 
                     b.Property<byte>("Protocol")
                         .HasColumnType("tinyint");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("RuleName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.Property<string>("Severity")
                         .HasMaxLength(16)

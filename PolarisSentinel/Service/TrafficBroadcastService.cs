@@ -17,11 +17,8 @@ namespace PolarisSentinel.Web.Service
         private readonly ITrafficCaptureService _trafficCaptureService;
         private readonly IDetectionPipeline _pipeline;
         private readonly IServiceScopeFactory _scopeFactory;
-<<<<<<< HEAD
-        private readonly ILogger<TrafficBroadcastService> _logger;
-=======
         private readonly CaptureControlService _captureControl;
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
+        private readonly ILogger<TrafficBroadcastService> _logger;
 
         private readonly DetectionStateService _state;
 
@@ -30,13 +27,9 @@ namespace PolarisSentinel.Web.Service
             ITrafficCaptureService trafficCaptureService,
             IDetectionPipeline pipeline,
             IServiceScopeFactory scopeFactory,
-<<<<<<< HEAD
+            CaptureControlService captureControl,
             DetectionStateService state,
             ILogger<TrafficBroadcastService> logger
-=======
-            CaptureControlService captureControl,
-            DetectionStateService state
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
             )
         {
             _hubContext = hubContext;
@@ -61,33 +54,7 @@ namespace PolarisSentinel.Web.Service
             //Auto-select a device (Wi-Fi preferred) and start capture.
             try
             {
-<<<<<<< HEAD
-                var devices = _trafficCaptureService.GetAvailableDevices().ToList();
-
-                //Make the Wi-Fi or Ethernet device as the default capture device if it exists, otherwise use the first available device.
-                //d is also the device object , it will check the DisplayName of the device.
-                var selectedDevice = devices.FirstOrDefault(d =>
-                    d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
-                    // Check for Ethernet devices
-                    d.DisplayName.Contains("Ethernet", StringComparison.OrdinalIgnoreCase))
-                    // If no Wi-Fi or Ethernet device is found, select the first available device
-                    ?? devices.FirstOrDefault();
-
-                if (selectedDevice != null)
-                {
-                    //System.Diagnostics.Debug.WriteLine($"Starting capture on:{selectedDevice.DisplayName}");
-                    _trafficCaptureService.Start(selectedDevice.DeviceName);
-                    _logger.LogInformation("Traffic capture started on {Device}", selectedDevice.DisplayName);
-                    //System.Diagnostics.Debug.WriteLine("Traffic capture service started successfully."); ;
-                }
-                else
-                {
-                    _logger.LogWarning("No network devices found for capture");
-                }
-
-=======
                 _captureControl.AutoStart();
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
             }
             catch (Exception ex)
             {
@@ -148,50 +115,35 @@ namespace PolarisSentinel.Web.Service
                     decision.Source.ToString(),
                     decision.RuleName);
 
-<<<<<<< HEAD
                 // 先推送结果，写库失败不影响实时页面
                 // Push results first so a database error does not stop live updates
                 _state.Record(record);
                 await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
 
-                // 单例服务内用短生命周期 scope 写库
-                // Persist via a short-lived scope because DbContext is scoped
-                try
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var repository = scope.ServiceProvider.GetRequiredService<IDetectionRepository>();
-                    await repository.AddAsync(new DetectionEvent
-                    {
-                        Id = decision.AlertId,
-                        SourceIp = decision.SourceIp,
-=======
                 //Persist the alert (5-tuple + inference result) in a short-lived scope,
                 //because the unit of work depends on a scoped DbContext while this is a singleton.
-                await using (var scope = _scopeFactory.CreateAsyncScope())
+                try
                 {
-                    var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                    unitOfWork.Alerts.Add(new Alert
+                    await using (var scope = _scopeFactory.CreateAsyncScope())
                     {
-                        SourceIp = flow.SourceIp,
-                        SourcePort = flow.SourcePort,
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
-                        DestinationIp = flow.DestinationIp,
-                        DestinationPort = flow.DestinationPort,
-                        Protocol = flow.Protocol,
-                        AttackType = decision.AttackType,
-                        Confidence = decision.Confidence,
-<<<<<<< HEAD
-                        Source = decision.Source,
-                        RuleName = decision.RuleName,
-                        Action = decision.Action,
-                        Reason = decision.Reason,
-                        DecidedAt = decision.DecidedAt
-=======
-                        Source = DetectionSource.RandomForest,
-                        DetectedAt = decision.DecidedAt
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
-                    });
-                    await unitOfWork.SaveChangesAsync();
+                        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                        unitOfWork.Alerts.Add(new Alert
+                        {
+                            SourceIp = flow.SourceIp,
+                            SourcePort = flow.SourcePort,
+                            DestinationIp = flow.DestinationIp,
+                            DestinationPort = flow.DestinationPort,
+                            Protocol = flow.Protocol,
+                            AttackType = decision.AttackType,
+                            Confidence = decision.Confidence,
+                            Source = decision.Source,
+                            Action = decision.Action,
+                            RuleName = decision.RuleName,
+                            Reason = decision.Reason,
+                            DetectedAt = decision.DecidedAt
+                        });
+                        await unitOfWork.SaveChangesAsync();
+                    }
                 }
 
                 catch (Exception ex)

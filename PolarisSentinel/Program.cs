@@ -157,15 +157,9 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<DetectionPipeline>>());
             });
 
-<<<<<<< HEAD
-            // 检测事件持久化
-            // Detection event persistence
-            builder.Services.AddScoped<IDetectionRepository, DetectionRepository>();
-=======
             // Detection persistence (single transaction boundary over SentinelDbContext)
             builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
             builder.Services.AddScoped<IAlertRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Alerts);
->>>>>>> a2e4aeebbed2da61e08be9661cc010e1a59515ad
 
             var app = builder.Build();
 
