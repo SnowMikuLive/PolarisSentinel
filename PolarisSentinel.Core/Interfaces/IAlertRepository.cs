@@ -8,4 +8,8 @@ public interface IAlertRepository
     void Add(Alert alert);
 
     Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<Alert?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

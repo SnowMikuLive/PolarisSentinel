@@ -25,4 +25,28 @@ public class RuleRepository : IRuleRepository
             .Where(r => r.ExpiresAt == null || r.ExpiresAt > DateTime.UtcNow)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Rules
+            .AsNoTracking()
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Rule?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.Rules
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+    }
+
+    public void Update(Rule rule)
+    {
+        _context.Rules.Update(rule);
+    }
+
+    public void Remove(Rule rule)
+    {
+        _context.Rules.Remove(rule);
+    }
 }

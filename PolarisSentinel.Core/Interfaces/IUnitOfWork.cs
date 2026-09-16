@@ -10,7 +10,5 @@ public interface IUnitOfWork : IAsyncDisposable
 
     IPolicyRepository Policies { get; }
 
-    IUserRepository Users { get; }
-
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

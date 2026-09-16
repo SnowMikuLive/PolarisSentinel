@@ -50,6 +50,10 @@ namespace PolarisSentinel.Data.Migrations
                     b.Property<byte>("Protocol")
                         .HasColumnType("tinyint");
 
+                    b.Property<string>("Severity")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -78,6 +82,11 @@ namespace PolarisSentinel.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<float>("AutoBlockConfidenceThreshold")
                         .HasColumnType("real");
 
@@ -101,14 +110,42 @@ namespace PolarisSentinel.Data.Migrations
                     b.Property<float>("RfConfidenceThreshold")
                         .HasColumnType("real");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("Policies", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-111111111111"),
+                            Action = "Monitor",
+                            AutoBlockConfidenceThreshold = 0.8f,
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DecisionCooldownSeconds = 60,
+                            IsActive = true,
+                            Name = "Default Monitor",
+                            RfConfidenceThreshold = 0.6f,
+                            UserId = ""
+                        },
+                        new
+                        {
+                            Id = new Guid("22222222-2222-2222-2222-222222222222"),
+                            Action = "Block",
+                            AutoBlockConfidenceThreshold = 0.9f,
+                            BlockDurationMinutes = 120,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DecisionCooldownSeconds = 30,
+                            IsActive = true,
+                            Name = "Default Block",
+                            RfConfidenceThreshold = 0.7f,
+                            UserId = ""
+                        });
                 });
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
@@ -122,7 +159,7 @@ namespace PolarisSentinel.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
-                    b.Property<Guid>("AlertId")
+                    b.Property<Guid?>("AlertId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAt")
@@ -131,13 +168,18 @@ namespace PolarisSentinel.Data.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("PolicyId")
+                    b.Property<Guid?>("PolicyId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("RemoteAddress")
                         .IsRequired()
                         .HasMaxLength(45)
                         .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
 
                     b.HasKey("Id");
 
@@ -148,66 +190,17 @@ namespace PolarisSentinel.Data.Migrations
                     b.ToTable("Rules", (string)null);
                 });
 
-            modelBuilder.Entity("PolarisSentinel.Core.Models.User", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.ToTable("Users", (string)null);
-                });
-
-            modelBuilder.Entity("PolarisSentinel.Core.Models.Policy", b =>
-                {
-                    b.HasOne("PolarisSentinel.Core.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
                 {
                     b.HasOne("PolarisSentinel.Core.Models.Alert", "Alert")
                         .WithMany()
                         .HasForeignKey("AlertId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("PolarisSentinel.Core.Models.Policy", "Policy")
                         .WithMany()
                         .HasForeignKey("PolicyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Alert");
 

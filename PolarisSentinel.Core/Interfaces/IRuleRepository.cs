@@ -7,4 +7,12 @@ public interface IRuleRepository
     void Add(Rule rule);
 
     Task<IReadOnlyList<Rule>> GetActiveAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    Task<Rule?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    void Update(Rule rule);
+
+    void Remove(Rule rule);
 }

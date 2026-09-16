@@ -1,0 +1,71 @@
+@model IReadOnlyList<PolarisSentinel.Core.Models.Rule>
+@{
+    ViewData["Title"] = "Rules";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="text-primary">Rules</h2>
+        <a asp-action="Create" class="btn btn-primary">Create New</a>
+    </div>
+
+    <div class="card shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            Rule List
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-striped table-hover mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Remote Address</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Policy</th>
+                        <th>Alert</th>
+                        <th>Created</th>
+                        <th>Expires</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No rules yet.</td>
+                        </tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="fw-bold">@item.RemoteAddress</td>
+                            <td><span class="badge bg-secondary">@item.Action</span></td>
+                            <td>
+                                @switch (item.Status)
+                                {
+                                    case PolarisSentinel.Core.Enums.RuleStatus.Active:
+                                        <span class="badge bg-success">Active</span>
+                                        break;
+                                    case PolarisSentinel.Core.Enums.RuleStatus.Inactive:
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        break;
+                                    default:
+                                        <span class="badge bg-warning text-dark">Expired</span>
+                                        break;
+                                }
+                            </td>
+                            <td class="small text-muted">@(item.PolicyId?.ToString() ?? "-")</td>
+                            <td class="small text-muted">@(item.AlertId?.ToString() ?? "-")</td>
+                            <td>@item.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@(item.ExpiresAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                            <td class="text-end">
+                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
+                                <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
+                                <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

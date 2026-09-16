@@ -3,17 +3,16 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace PolarisSentinel.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AddUsersPoliciesAlertsRules : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "DetectionEvents");
-
             migrationBuilder.CreateTable(
                 name: "Alerts",
                 columns: table => new
@@ -26,6 +25,7 @@ namespace PolarisSentinel.Data.Migrations
                     Protocol = table.Column<byte>(type: "tinyint", nullable: false),
                     AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     Confidence = table.Column<float>(type: "real", nullable: false),
+                    Severity = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: true),
                     Source = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     DetectedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
@@ -35,28 +35,13 @@ namespace PolarisSentinel.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Users",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    Phone = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: true),
-                    PasswordHash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Users", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Policies",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     RfConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
                     AutoBlockConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
                     BlockDurationMinutes = table.Column<int>(type: "int", nullable: false),
@@ -67,12 +52,6 @@ namespace PolarisSentinel.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Policies", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Policies_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -80,10 +59,11 @@ namespace PolarisSentinel.Data.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PolicyId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    AlertId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    PolicyId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    AlertId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     RemoteAddress = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
+                    Status = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
@@ -95,13 +75,22 @@ namespace PolarisSentinel.Data.Migrations
                         column: x => x.AlertId,
                         principalTable: "Alerts",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_Rules_Policies_PolicyId",
                         column: x => x.PolicyId,
                         principalTable: "Policies",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.InsertData(
+                table: "Policies",
+                columns: new[] { "Id", "Action", "AutoBlockConfidenceThreshold", "BlockDurationMinutes", "CreatedAt", "DecisionCooldownSeconds", "IsActive", "Name", "RfConfidenceThreshold", "UserId" },
+                values: new object[,]
+                {
+                    { new Guid("11111111-1111-1111-1111-111111111111"), "Monitor", 0.8f, 60, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), 60, true, "Default Monitor", 0.6f, "" },
+                    { new Guid("22222222-2222-2222-2222-222222222222"), "Block", 0.9f, 120, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), 30, true, "Default Block", 0.7f, "" }
                 });
 
             migrationBuilder.CreateIndex(
@@ -115,11 +104,6 @@ namespace PolarisSentinel.Data.Migrations
                 column: "SourceIp");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Policies_UserId",
-                table: "Policies",
-                column: "UserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Rules_AlertId",
                 table: "Rules",
                 column: "AlertId");
@@ -128,12 +112,6 @@ namespace PolarisSentinel.Data.Migrations
                 name: "IX_Rules_PolicyId",
                 table: "Rules",
                 column: "PolicyId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_Email",
-                table: "Users",
-                column: "Email",
-                unique: true);
         }
 
         /// <inheritdoc />
@@ -147,40 +125,6 @@ namespace PolarisSentinel.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "Policies");
-
-            migrationBuilder.DropTable(
-                name: "Users");
-
-            migrationBuilder.CreateTable(
-                name: "DetectionEvents",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    Confidence = table.Column<float>(type: "real", nullable: false),
-                    DecidedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    DestinationIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
-                    DestinationPort = table.Column<int>(type: "int", nullable: false),
-                    Reason = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    RuleName = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    Source = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    SourceIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DetectionEvents", x => x.Id);
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DetectionEvents_DecidedAt",
-                table: "DetectionEvents",
-                column: "DecidedAt");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DetectionEvents_SourceIp",
-                table: "DetectionEvents",
-                column: "SourceIp");
         }
     }
 }

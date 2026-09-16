@@ -23,6 +23,8 @@ public class Alert
 
     public float Confidence { get; set; }
 
+    public Severity? Severity { get; set; }
+
     public DetectionSource Source { get; set; }
 
     public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
