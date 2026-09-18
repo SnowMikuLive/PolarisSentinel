@@ -5,17 +5,16 @@ using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using PolarisSentinel.Web.Data;
-using Microsoft.Extensions.DependencyInjection; 
+using PolarisSentinel.DataAccess.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
 using PolarisSentinel.Web.Service;
 using PolarisSentinel.PolicyDecision;
 using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.Application;
-using PolarisSentinel.Data;
 using Microsoft.Extensions.Hosting.WindowsServices;
-
+using PolarisSentinel.DataAccess.Repository;
 namespace PolarisSentinel
 {
     public class Program
@@ -78,7 +77,7 @@ namespace PolarisSentinel
                 builder.Services.AddHostedService<TrayIconService>();
             }
 
-            builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
             // 检测审计数据库上下文
@@ -92,7 +91,7 @@ namespace PolarisSentinel
                 options.SignIn.RequireConfirmedAccount = false;
                 options.Password.RequiredLength = 6;
             })
-            .AddEntityFrameworkStores<ApplicationDbContext>();
+            .AddEntityFrameworkStores<SentinelDbContext>();
 
             //Configure Login path and Access Denied path for the application cookie
             builder.Services.ConfigureApplicationCookie(options =>
@@ -209,7 +208,7 @@ namespace PolarisSentinel
             {
                 try
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var db = scope.ServiceProvider.GetRequiredService<SentinelDbContext>();
                     await db.Database.MigrateAsync();
 
                     // 建立检测记录表

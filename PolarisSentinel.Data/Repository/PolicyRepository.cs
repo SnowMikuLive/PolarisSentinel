@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.DataAccess.Data;
 
-namespace PolarisSentinel.Data;
+namespace PolarisSentinel.DataAccess.Repository;
 
 public class PolicyRepository : IPolicyRepository
 {

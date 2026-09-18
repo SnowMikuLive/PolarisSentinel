@@ -21,7 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PolarisSentinel.Application\PolarisSentinel.Application.csproj" />
     <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.Data.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.DataAccess.csproj" />
     <ProjectReference Include="..\PolarisSentinel.FirewallEnforement\PolarisSentinel.Firewall.csproj" />
     <ProjectReference Include="..\PolarisSentinel.Inference\PolarisSentinel.Inference.csproj" />
     <ProjectReference Include="..\PolarisSentinel.PolicyDecision\PolarisSentinel.PolicyDecision.csproj" />

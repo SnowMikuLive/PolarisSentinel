@@ -1,10 +1,11 @@
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
 
-namespace PolarisSentinel.Data;
+namespace PolarisSentinel.DataAccess.Data;
 
-public class SentinelDbContext : DbContext
+public class SentinelDbContext : IdentityDbContext
 {
     public SentinelDbContext(DbContextOptions<SentinelDbContext> options)
         : base(options)

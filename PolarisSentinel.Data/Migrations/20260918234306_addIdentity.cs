@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace PolarisSentinel.Web.Migrations
+namespace PolarisSentinel.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialIdentityCreate : Migration
+    public partial class addIdentity : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

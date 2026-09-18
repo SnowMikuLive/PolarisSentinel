@@ -1,6 +1,7 @@
 using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.DataAccess.Data;
 
-namespace PolarisSentinel.Data;
+namespace PolarisSentinel.DataAccess.Repository;
 
 // Single transaction boundary over SentinelDbContext. All repositories share
 // the same context instance, so SaveChangesAsync commits every staged change
