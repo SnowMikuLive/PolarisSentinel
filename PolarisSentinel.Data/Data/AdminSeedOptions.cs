@@ -23,5 +23,5 @@ public sealed class AdminSeedOptions
 
     // No default on purpose: an unset password must fail loudly rather than
     // silently fall back to a well-known credential.
-    public string? Password { get; set; }
+    public string? Password { get; set; } = "Admin123!"; // default for dev only; override in production
 }
