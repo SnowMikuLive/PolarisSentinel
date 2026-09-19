@@ -1,4 +1,5 @@
 using PolarisSentinel.Core.Enums;
+using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.Core.Models;
 

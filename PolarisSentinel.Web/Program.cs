@@ -86,12 +86,23 @@ namespace PolarisSentinel
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
             //Add DbContext service
+            //AddRoles is required so the seeded admin can be granted a role.
             builder.Services.AddDefaultIdentity<IdentityUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
                 options.Password.RequiredLength = 6;
             })
+            .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
+
+            // 初始管理员账号配置（密码来自 user-secrets / 环境变量，不硬编码）
+            // Initial admin account configuration (password from user-secrets / env var)
+            builder.Services.Configure<AdminSeedOptions>(
+                builder.Configuration.GetSection(AdminSeedOptions.SectionName));
+
+            // 数据库迁移 + 初始管理员创建
+            // Migrations + initial admin provisioning
+            builder.Services.AddScoped<SentinelDbInitializer>();
 
             //Configure Login path and Access Denied path for the application cookie
             builder.Services.ConfigureApplicationCookie(options =>
@@ -106,10 +117,6 @@ namespace PolarisSentinel
 
             //Capture device control (list + switch)
             builder.Services.AddSingleton<CaptureControlService>();
-
-
-
-
 
             // RF+IF 双模型
             // Dual-model inference
@@ -202,43 +209,14 @@ namespace PolarisSentinel
                 anomalyThreshold = engine.AnomalyThreshold,
             }));
 
-            //Default Admin User Create
-            //Apply pending migrations, then create the default admin user.
+            // 应用迁移并创建初始管理员（逻辑在 SentinelDbInitializer 中）
+            // Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
             using (var scope = app.Services.CreateScope())
             {
                 try
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<SentinelDbContext>();
-                    await db.Database.MigrateAsync();
-
-                    // 建立检测记录表
-                    // Create the detection records table
-                    var sentinelDb = scope.ServiceProvider.GetRequiredService<SentinelDbContext>();
-                    await sentinelDb.Database.MigrateAsync();
-
-                    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
-                    var admin = await userManager.FindByNameAsync("admin");
-
-                    //The default admin would not created again when admin not null.
-                    if (admin == null)
-                    {
-                        admin = new IdentityUser
-                        {
-                            UserName = "admin",
-                            Email = "admin@polaris.local",
-                            EmailConfirmed = true
-                        };
-
-                        // Create the admin user with a default password
-                        var result = await userManager.CreateAsync(admin, "Polaris@2026");
-                        if (!result.Succeeded)
-                        {
-                            foreach (var error in result.Errors)
-                            {
-                                app.Logger.LogError("Failed to create admin user: {Error}", error.Description);
-                            }
-                        }
-                    }
+                    var initializer = scope.ServiceProvider.GetRequiredService<SentinelDbInitializer>();
+                    await initializer.InitializeAsync();
                 }
                 catch (Exception ex)
                 {

@@ -26,7 +26,6 @@
     <ProjectReference Include="..\PolarisSentinel.Inference\PolarisSentinel.Inference.csproj" />
     <ProjectReference Include="..\PolarisSentinel.PolicyDecision\PolarisSentinel.PolicyDecision.csproj" />
     <ProjectReference Include="..\PolarisSentinel.TrafficCapture\PolarisSentinel.TrafficCapture.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.Utility\PolarisSentinel.Utility.csproj" />
   </ItemGroup>
 
   <ItemGroup>
