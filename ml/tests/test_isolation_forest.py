@@ -1,4 +1,4 @@
-# IF 留出集与 ONNX 测试
+# IF留出集与 ONNX 测试
 # IF novelty holdout and ONNX tests.
 import json
 from pathlib import Path

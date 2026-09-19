@@ -9,8 +9,8 @@ namespace PolarisSentinel.Inference
             if (legacy.Length != 20 && legacy.Length != 24)
                 throw new ArgumentException("Capture features must contain 20 or 24 values.", nameof(legacy));
 
-            // 两版抓包的前 17 项相同
-            // Both capture versions share the first 17 values
+            // 前17项相同
+            // The first 17 values are the same
             var features = new float[20];
             Array.Copy(legacy, features, 17);
 
