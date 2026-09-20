@@ -1,25 +1,57 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.Rule>
 @using PolarisSentinel.Web.Service
 @{
-    ViewData["Title"] = "Rules";
+    ViewData["Title"] = "Firewall Rules";
+    //Read policy list and enums from ViewBag
+    var policyListJson = Html.Raw(Json.Serialize(ViewBag.Policies ?? new List<object>()));
 }
 
 <div class="container-fluid">
+    <h2 class="text-primary">Firewall Rules</h2>
+    <p>View and manage all firewall rules</p>
+
+    @* Top action bar *@
     <div class="d-flex justify-content-between align-items-center mb-3">
+<<<<<<< HEAD
         <h2 class="text-primary">Rules</h2>
         <div class="d-flex gap-2">
             <a asp-action="Create" class="btn btn-primary">Create New</a>
             <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
                 <button type="submit" class="btn btn-outline-danger">Remove All</button>
             </form>
+=======
+        <div>
+            <button class="btn btn-primary" id="btnNewRule">
+                + New Rule
+            </button>
+            @* Add:Sync Firewall button *@
+            <button class="btn btn-outline-primary ms-2" id="btnSyncFirewall">
+                Sync Firewall
+            </button>
+        </div>
+        <div class="d-flex gap-2">
+            @* Filter by rule status *@
+            <select class="form-select form-select-sm" id="filterStatus" style="width:auto;">
+                <option value="">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Expired">Expired</option>
+            </select>
+            @* Filter by regular actions *@
+            <select class="form-select form-select-sm" id="filterAction" style="width:auto">
+                <option value="">All Actions</option>
+                <option value="Block">Block</option>
+                <option value="Monitor">Monitor</option>
+                <option value="Ignore">Ignore</option>
+            </select>
+>>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
         </div>
     </div>
 
+    @* Rules table *@
     <div class="card shadow-sm border-primary">
-        <div class="card-header bg-primary text-white">
-            Rule List
-        </div>
         <div class="card-body p-0">
+<<<<<<< HEAD
             <table class="table table-striped table-hover mb-0 align-middle">
                 <thead>
                     <tr>
@@ -36,13 +68,30 @@
                 <tbody>
                     @if (Model.Count == 0)
                     {
+=======
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead>
+                        @* the data from the  *@
+>>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">No rules yet.</td>
+                            @* No automatic line breaks *@
+                            <th class="text-nowrap">Rule ID</th>
+                            <th class="text-nowrap">Target</th>
+                            @* display the action of rule:Block/Monitor/Ignore *@
+                            <th class="text-nowrap">Rule Action</th>
+                            <th class="text-nowrap">Source</th>
+                            <th class="text-nowrap">Policy</th>
+                            <th class="text-nowrap">Status</th>
+                            <th class="text-nowrap">Created</th>
+                            <th class="text-nowrap">Expires</th>
+                            @* the action to the rule:edit/delete *@
+                            <th class="text-nowrap">Manage</th>
                         </tr>
-                    }
-                    @foreach (var item in Model)
-                    {
+                    </thead>
+                    <tbody id="rulesTableBody">
                         <tr>
+<<<<<<< HEAD
                             <td class="fw-bold">@item.RemoteAddress</td>
                             <td><span class="badge bg-secondary">@item.Action</span></td>
                             <td>
@@ -81,10 +130,333 @@
                                 <a asp-action="Edit" asp-route-name="@item.Name" class="btn btn-sm btn-outline-primary">Edit</a>
                                 <a asp-action="Delete" asp-route-name="@item.Name" class="btn btn-sm btn-outline-danger">Delete</a>
                             </td>
+=======
+                            <td colspan="9" class="text-center text-muted py-3">Loading...</td>
+>>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        @* Show how many rules in the table *@
+        <div class="card-footer d-flex justify-content-between align-items-center small text-muted">
+            <span id="ruleSummary">Loading...</span>
         </div>
     </div>
 </div>
+
+@* Edit Rule modal *@
+<div class="modal fade" id="ruleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:520px;">
+        <div class="modal-content" style="border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.12);">
+            <div class="modal-header border-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-primary" id="ruleModalTitle">New Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="px-4"><hr class="my-0" style="border-color:#E6EAF0;"></div>
+            <div class="modal-body px-4 pb-3">
+                <input type="hidden" id="ruleId"/>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">Target IP / CIDR</label>
+                    <input type="text" class="form-control" id="remoteAddress" placeholder="e.g. 192.168.1.45 or 10.0.0.0/24"/>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">Action</label>
+                    <select class="form-select" id="action"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">Status</label>
+                    <select class="form-select" id="status"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">policy (optional)</label>
+                    <select class="form-select" id="policyId">
+                        <option value="">- None (Manual rule) -</option>
+                    </select>   
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">Expires At (optional)</label>
+                    <input type="datetime-local" class="form-control" id="expiresAt" />
+                </div>
+            </div>
+            <div class="modal-footer border-0 px-4 pb-4">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btnSaveRule">Create Rule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Delete confirmation modal *@
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header border-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-danger">Delete Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body px-4">
+                <p>Are you sure you want to delete this rule?</p>
+                <p class="text-muted small" id="deleteTargetLabel"></p>
+            </div>
+            <div class="modal-footer border-0 px-4 pb-4">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts{
+    <script>
+        //List injected from backend
+        const policies=@policyListJson;
+        const actionOptions=["Ignore","Monitor","Block"];
+        const statusOptions=["Active","Inactive","Expired"];
+
+        let allRules=[];
+        let editingId=null;
+        let deletingId=null;
+
+        //Pop-up window instances
+        const ruleModal=new bootstrap.Modal(document.getElementById('ruleModal'));
+        const deleteModal=new bootstrap.Modal(document.getElementById('deleteModal'));
+
+        //When page loads, the dropdown list is initialized first and then rule data is retrieved
+        document.addEventListener('DOMContentLoaded',()=>
+        {
+            //Fill in the Action dropdown box
+            const actionSelect=document.getElementById('action');
+            actionOptions.forEach(a=>{
+                const opt=document.createElement('option');
+                opt.value=a;
+                opt.textContent=a;
+                actionSelect.appendChild(opt);
+            });
+
+            //Fill in the Status dropdown box
+            const statusSelect=document.getElementById('status');
+            statusOptions.forEach(s=>{
+                const opt=document.createElement('option');
+                opt.value=s;
+                opt.textContent=s;
+                statusSelect.appendChild(opt);
+            });
+
+            //Fill in the policy dropdown
+            const policySelect=document.getElementById('policyId');
+            policies.forEach(p=>{
+                const opt=document.createElement('option');
+                opt.value=p.id;
+                opt.textContent=p.name;
+                policySelect.appendChild(opt);
+            });
+
+            loadRules();
+        });
+
+        //Fetch all rules
+        function loadRules(){
+            fetch('/api/rules')
+                .then(r=>r.json())
+                .then(data=>{
+                    allRules=data;
+                    renderTable();
+                })
+                .catch(err=>console.error('Failed to load rules',err));
+        }
+
+        //Added:Based on the ExpiresAt field to determine if it has expired
+        function getEffectiveStatus(rule){
+            if (rule.expiresAt && new Date(rule.expiresAt)<new Date()){
+                return 'Expired';
+            }
+            return rule.status;
+        }
+
+        //Render table: Based on the current dropdown filter conditions, the rule is dynamically converted into table rows and displayed on the page.
+        function renderTable(){
+            //Clear the table
+            const body=document.getElementById('rulesTableBody');
+            body.innerHTML='';
+            const statusFilter=document.getElementById('filterStatus').value;
+            const actionFilter=document.getElementById('filterAction').value;
+
+            //change: Filter with getEffectiveStatus instead of raw r.status
+            const filtered=allRules.filter(r=>
+                (!statusFilter||getEffectiveStatus(r)===statusFilter)&&(!actionFilter||r.action===actionFilter)
+            );
+            if (filtered.length===0){
+                //colspan: in here means conbine 9 cells
+                body.innerHTML=`<tr><td colspan="9" class="text-center text-muted py-3">No rules found.</td></tr>`;
+            }else{
+                filtered.forEach(r=>{
+                    const tr=document.createElement('tr');
+
+                    //Short ID,only capture the first 8 characters
+                    const shortId=r.id.substring(0,8);
+
+                    //Action badge
+                    // if r.action==='Block',actionBadge=Block / if r.action==='Monitor',actionBadge=Monitor / else actionBadge=Ignore.
+                    const actionBadge=r.action==='Block'
+                        ?'<span class="text-danger fw-semibold">Block</span>'
+                        :r.action==='Monitor'
+                            ?'<span class="text-warning fw-semibold">Monitor</span>'
+                            :'<span class="text-muted">Ignore</span>';
+
+                    //Source tag(AI generate vs. manual)
+                    //alertId from RuleController: /api/rules
+                    //if r.alertId not null, the rule from AI
+                    const sourceTag=r.alertId
+                        ?'<span class="badge" style="background:#E3F0F7;color:#1E2B3C;">AI Engine</span>'
+                        :'<span class="badge" style="background:#EEF2F7;color:#3D4E62;">Manual</span>';
+
+                    //change:Render Status with getEffectiveStatus
+                    const effectiveStatus=getEffectiveStatus(r);
+
+                    //Status badge
+                    const statusMap={
+                        'Active':{bg:'#E3F0EA',color:'#2C7A5A'},
+                        'Inactive':{bg:'#EEF2F7',color:'#6B7A8D'},
+                        'Expired':{bg:'#F5E6E9',color:'#B13A4B'}
+                    };
+                    const st=statusMap[effectiveStatus]||statusMap['Inactive'];
+                    const statusBadge=`<span class="badge" style="background:${st.bg};color:${st.color};">${effectiveStatus}</span>`;
+                    // put the data in
+                    tr.innerHTML=`
+                        <td class="fw-bold text-nowrap">${shortId}</td>
+                        <td class="text-nowrap">${r.remoteAddress}</td>
+                        <td class="text-nowrap">${actionBadge}</td>
+                        <td class="text-nowrap">${sourceTag}</td>
+                        <td class="text-nowrap">${r.policyName||'-'}</td>
+                        <td class="text-nowrap">${statusBadge}</td>
+                        <td class="text-nowrap small text-muted">${formatDate(r.createdAt)}</td>
+                        <td class="text-nowrap small text-muted">${r.expiresAt?formatDate(r.expiresAt):'Never'}</td>
+                        <td class="text-nowrap">
+                            <a href="#" class="text-secondary" onclick="editRule('${r.id}');return false;">🖊</a>
+                            <a href="#" class="text-secondary" onclick="confirmDelete('${r.id}');return false;">🗑️</a>
+                        </td>
+                   `;
+                    
+                    body.appendChild(tr);
+                });
+            }
+
+            //Summary also use getEffectiveStatus
+            const activeCount=allRules.filter(r=>getEffectiveStatus(r)==='Active').length;
+            const inactiveCount=allRules.filter(r=>getEffectiveStatus(r)==='Inactive').length;
+            const expiredCount=allRules.filter(r=>getEffectiveStatus(r)==='Expired').length;
+            document.getElementById('ruleSummary').textContent=`Total:${allRules.length} rules(${activeCount}active,${inactiveCount}inactive,${expiredCount}expired)`;
+            }
+
+        // Format data
+        function formatDate(iso){
+            if(!iso)return'-';
+            const d=new Date(iso);
+            return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+        }
+
+            // New button
+            document.getElementById('btnNewRule').addEventListener('click',()=>{
+                editingId=null;
+                document.getElementById('ruleModalTitle').textContent='New Rule';
+                document.getElementById('btnSaveRule').textContent='Create Rule';
+                document.getElementById('ruleId').value='';
+                document.getElementById('remoteAddress').value='';
+                document.getElementById('action').value='Monitor';
+                document.getElementById('status').value='Active';
+                document.getElementById('policyId').value='';
+                document.getElementById('expiresAt').value='';
+                ruleModal.show();
+            });
+
+            // Edit
+            function editRule(id){
+                const r=allRules.find(x=>x.id===id);
+                if (!r) return;
+
+                editingId=id;
+                document.getElementById('ruleModalTitle').textContent='Edit Rule';
+                document.getElementById('btnSaveRule').textContent='Save Changes';
+                document.getElementById('ruleId').value=r.id;
+                document.getElementById('remoteAddress').value=r.remoteAddress;
+                document.getElementById('action').value=r.action;
+                document.getElementById('status').value=r.status;
+                document.getElementById('policyId').value=r.policyId||'';
+                document.getElementById('expiresAt').value=r.expiresAt? r.expiresAt.substring(0,16):'';
+                ruleModal.show();
+            }
+
+            //Save
+            document.getElementById('btnSaveRule').addEventListener('click',()=>{
+                const dto={
+                    remoteAddress:document.getElementById('remoteAddress').value.trim(),
+                    action:document.getElementById('action').value,
+                    status:document.getElementById('status').value,
+                    policyId:document.getElementById('policyId').value||null,
+                    expiresAt:document.getElementById('expiresAt').value||null
+                };
+
+                if(!dto.remoteAddress){
+                    alert('Target IP / CIDR is required.');
+                    return;
+                }
+
+                const url=editingId?`/api/rules/${editingId}`:'/api/rules';
+                const method=editingId?'PUT':'POST';
+
+                fetch(url,{
+                    method:method,
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(dto)
+                })
+                    .then(r=>{
+                        if (!r.ok) throw new Error('Save failed');
+                        return r.json();
+                    })
+                    .then(()=>{
+                        ruleModal.hide();
+                        loadRules();
+                    })
+                    .catch(err=>{
+                        console.error(err);
+                        alert('Failed to save rule.');
+                    });
+            });
+
+            //Delete confirmation
+            function confirmDelete(id){
+                const r=allRules.find(x=>x.id===id);
+                if (!r) return;
+                deletingId=id;
+                document.getElementById('deleteTargetLabel').textContent=`Target:${r.remoteAddress}`;
+                deleteModal.show();
+            }
+
+            document.getElementById('btnConfirmDelete').addEventListener('click',()=>{
+                if (!deletingId) return;
+                fetch(`/api/rules/${deletingId}`,{method:'DELETE'})
+                    .then(r=>{
+                        if (!r.ok) throw new Error('Delete failed');
+                        return r.json();
+                    })
+                    .then(()=>{
+                        deleteModal.hide();
+                        loadRules();
+                    })
+                    .catch(err=>{
+                        console.error(err);
+                        alert('Failed to delete rule.');
+                    });
+            });
+
+            //Filter change
+            document.getElementById('filterStatus').addEventListener('change',renderTable);
+            document.getElementById('filterAction').addEventListener('change',renderTable);
+
+            //Synchronous firewall button (placeholder): Apply the rule that are generated/managed within the system to the Windows firewall, so that they can be effective.
+            document.getElementById('btnSyncFirewall').addEventListener('click',()=>{
+                alert('Sync Firewall is not yet implemented.');
+            });
+    </script>
+}
