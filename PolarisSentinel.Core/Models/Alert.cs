@@ -25,8 +25,6 @@ public class Alert
 
     public float Confidence { get; set; }
 
-    public Severity? Severity { get; set; }
-
     public DetectionSource Source { get; set; }
 
     public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
@@ -38,4 +36,7 @@ public class Alert
     public string? RuleName { get; set; }
 
     public required string Reason { get; set; }
+
+    // When the policy engine made the decision (may differ from DetectedAt).
+    public DateTime DecidedAt { get; set; } = DateTime.UtcNow;
 }

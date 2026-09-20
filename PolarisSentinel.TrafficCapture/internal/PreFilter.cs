@@ -1,5 +1,9 @@
+using PolarisSentinel.Core.Constants;
+using PolarisSentinel.Core.Models;
+
 namespace PolarisSentinel.TrafficCapture.Internal;
 
+// Rule-based pre-filter: detects known attack signatures, drops obvious noise, and forwards the rest to the AI engine.
 internal sealed class PreFilter
 {
     private readonly int _minPacketsForAnalysis;
@@ -9,42 +13,28 @@ internal sealed class PreFilter
         _minPacketsForAnalysis = minPacketsForAnalysis;
     }
 
-    public bool IsWorthDeepAnalysis(FlowRecord flow)
+    // Classifies a finished flow: verdict = attack, null + suspicious = send to AI, null + !suspicious = benign.
+    public PreFilterResult? Classify(FlowRecord flow, out bool suspicious)
     {
-        // Rule 1: Too few packets to compute meaningful statistics
+        suspicious = false;
+
+        // Too few packets to compute meaningful statistics.
         if (flow.TotalPackets < _minPacketsForAnalysis)
-            return false;
+            return null;
 
-        // Rule 2: Duration too short (< 0.1s) - likely handshake or connection fragment
+        // Short-lived flow, likely a handshake fragment.
         if (flow.DurationSeconds < 0.1)
-            return false;
+            return null;
 
-        // Rule 3: Unidirectional traffic (broadcast/multicast)
+        // Attack signatures run before the benign filters because floods are one-directional.
+        var attack = DetectFlood(flow) ?? DetectScan(flow) ?? DetectBruteForce(flow);
+        if (attack is not null)
+            return attack;
+
+        // Unidirectional traffic, typical of broadcast/multicast.
         if (flow.FwdPackets == 0 || flow.BwdPackets == 0)
-            return false;
-        
-        // Rule 4: Suspicious patterns - SYN flood detection
-        bool isSynFlood =
-            flow.SynCount > 10 &&
-            flow.AckCount == 0 &&
-            flow.RstCount == 0 &&
-            flow.FwdPackets > flow.BwdPackets * 2;
+            return null;
 
-        if (isSynFlood)
-            return true;  // Definitely suspicious
-        
-        // Rule 5: Port scanning pattern
-        bool isPortScan =
-            flow.SynCount > 0 &&
-            flow.RstCount > flow.SynCount * 0.5 &&
-            flow.DurationSeconds < 2.0 &&
-            flow.FwdPackets > 5 &&
-            flow.BwdPackets <= flow.FwdPackets * 0.3;
-
-        if (isPortScan)
-            return true;  // Definitely suspicious
-
-        // Rule 6: Normal HTTPS/HTTP traffic with balanced flows
         bool isNormalWebTraffic =
             (flow.DestinationPort == 443 || flow.DestinationPort == 80) &&
             flow.FwdPackets > 5 &&
@@ -56,29 +46,156 @@ internal sealed class PreFilter
             flow.DownUpRatio < 10;
 
         if (isNormalWebTraffic)
-            return false;
+            return null;
 
-        // Rule 7: Normal two-way conversation with clean handshake
         bool isOrdinaryTwoWayTraffic =
-            flow.FwdPackets > 0 &&
-            flow.BwdPackets > 0 &&
             flow.DurationSeconds > 1.0 &&
             flow.SynCount <= 1;
 
         if (isOrdinaryTwoWayTraffic)
-            return false;
+            return null;
 
-        // Rule 8: Suspicious flag combinations
-        bool hasSuspiciousFlags =
-            flow.RstCount > 5 ||  // Too many resets
-            flow.SynCount > 5 ||  // Too many SYN without proper handshake
-            (flow.SynCount == 0 && flow.FwdPackets > 10) ||  // No SYN in TCP traffic
-            (flow.FinCount > 10);  // Too many FINs
-
-        if (hasSuspiciousFlags)
-            return true;
-
-        // Anything else - susipicious enough to sending to AI engine
-        return true;
+        // Nothing matched: hand it to the AI engine.
+        suspicious = true;
+        return null;
     }
+
+    // DoS family: SYN / UDP / ACK / ICMP floods, driven by flag counts and one-way packet volume.
+    private PreFilterResult? DetectFlood(FlowRecord flow)
+    {
+        bool oneWay = flow.BwdPackets <= flow.FwdPackets * 0.1;
+
+        // SYN flood: many SYNs, no handshake completion, no resets.
+        bool isSynFlood =
+            flow.SynCount > 10 &&
+            flow.AckCount == 0 &&
+            flow.RstCount == 0 &&
+            flow.FwdPackets > flow.BwdPackets * 2;
+
+        if (isSynFlood)
+            return Verdict(AttackTypes.SynFlood, "prefilter_syn_flood");
+
+        // UDP flood: high one-way UDP packet rate, no reply traffic.
+        bool isUdpFlood =
+            flow.Protocol == ProtocolNumbers.Udp &&
+            oneWay &&
+            flow.FwdPackets > 50 &&
+            flow.FwdPacketsPerSecond > 100;
+
+        if (isUdpFlood)
+            return Verdict(AttackTypes.UdpFlood, "prefilter_udp_flood");
+
+        // ACK flood: many ACKs with no SYN and no payload-carrying handshake.
+        bool isAckFlood =
+            flow.AckCount > 20 &&
+            flow.SynCount == 0 &&
+            flow.FwdPackets > flow.BwdPackets * 2;
+
+        if (isAckFlood)
+            return Verdict(AttackTypes.AckFlood, "prefilter_ack_flood");
+
+        // ICMP flood: high one-way ICMP packet rate.
+        bool isIcmpFlood =
+            flow.Protocol == ProtocolNumbers.Icmp &&
+            oneWay &&
+            flow.FwdPackets > 50 &&
+            flow.FwdPacketsPerSecond > 100;
+
+        if (isIcmpFlood)
+            return Verdict(AttackTypes.IcmpFlood, "prefilter_icmp_flood");
+
+        return null;
+    }
+
+    // Port scanning family: SYN / connect / FIN-NULL-Xmas / UDP scans and ICMP sweeps.
+    private PreFilterResult? DetectScan(FlowRecord flow)
+    {
+        bool shortLived = flow.DurationSeconds < 2.0;
+        bool mostlyOutbound = flow.BwdPackets <= flow.FwdPackets * 0.3;
+
+        // SYN scan: SYNs answered with RSTs, little or no reply traffic.
+        bool isSynScan =
+            flow.SynCount > 3 &&
+            flow.RstCount > flow.SynCount * 0.5 &&
+            shortLived &&
+            mostlyOutbound;
+
+        if (isSynScan)
+            return Verdict(AttackTypes.SynScan, "prefilter_syn_scan");
+
+        // Connect scan: full handshakes (SYN+ACK) that are reset immediately.
+        bool isConnectScan =
+            flow.SynCount > 3 &&
+            flow.AckCount > flow.SynCount &&
+            flow.RstCount > 0 &&
+            shortLived &&
+            mostlyOutbound;
+
+        if (isConnectScan)
+            return Verdict(AttackTypes.ConnectScan, "prefilter_connect_scan");
+
+        // FIN/NULL/Xmas scan: no SYN at all, only FIN or RST probes.
+        bool isFinNullXmasScan =
+            flow.SynCount == 0 &&
+            flow.AckCount == 0 &&
+            (flow.FinCount > 3 || flow.RstCount > 3) &&
+            shortLived &&
+            mostlyOutbound;
+
+        if (isFinNullXmasScan)
+            return Verdict(AttackTypes.FinNullXmasScan, "prefilter_fin_null_xmas_scan");
+
+        // UDP scan: many small one-way UDP packets to a single port, no replies.
+        bool isUdpScan =
+            flow.Protocol == ProtocolNumbers.Udp &&
+            flow.FwdPackets > 5 &&
+            flow.FwdPackets <= 50 &&
+            flow.BwdPackets == 0 &&
+            shortLived;
+
+        if (isUdpScan)
+            return Verdict(AttackTypes.UdpScan, "prefilter_udp_scan");
+
+        // ICMP sweep: several one-way echo requests probing hosts.
+        bool isIcmpSweep =
+            flow.Protocol == ProtocolNumbers.Icmp &&
+            flow.FwdPackets > 3 &&
+            flow.FwdPackets <= 50 &&
+            flow.BwdPackets == 0 &&
+            shortLived;
+
+        if (isIcmpSweep)
+            return Verdict(AttackTypes.IcmpSweep, "prefilter_icmp_sweep");
+
+        return null;
+    }
+
+    // Brute force family: many short connections to SSH/FTP with flat, repeating packet sizes.
+    private PreFilterResult? DetectBruteForce(FlowRecord flow)
+    {
+        bool isAuthPort = flow.DestinationPort == 22 || flow.DestinationPort == 21;
+        if (!isAuthPort)
+            return null;
+
+        // Flat traffic: near-constant packet size and a steady connection cadence.
+        bool flatTraffic =
+            flow.PacketSizeStats.StdDev < 10 &&
+            flow.PacketSizeStats.Mean > 0;
+
+        bool repeatedAttempts =
+            flow.SynCount > 3 &&
+            flow.FwdPackets > 5 &&
+            flow.PacketSizeStats.Mean < 200;
+
+        if (!flatTraffic || !repeatedAttempts)
+            return null;
+
+        return flow.DestinationPort == 22
+            ? Verdict(AttackTypes.SshBruteForce, "prefilter_ssh_brute_force")
+            : Verdict(AttackTypes.FtpBruteForce, "prefilter_ftp_brute_force");
+    }
+
+    private static PreFilterResult Verdict(string attackType, string reason) =>
+        new() { AttackType = attackType, Confidence = 1f, Reason = reason };
 }
+

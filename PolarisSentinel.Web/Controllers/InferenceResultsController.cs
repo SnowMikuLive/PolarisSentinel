@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {

@@ -1,5 +1,5 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.Rule>
-@inject PolarisSentinel.Web.Service.SettingsService Settings
+@using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Rules";
 }
@@ -7,9 +7,12 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="text-primary">Rules</h2>
-        <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
-            <button type="submit" class="btn btn-outline-danger">Remove All</button>
-        </form>
+        <div class="d-flex gap-2">
+            <a asp-action="Create" class="btn btn-primary">Create New</a>
+            <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
+                <button type="submit" class="btn btn-outline-danger">Remove All</button>
+            </form>
+        </div>
     </div>
 
     <div class="card shadow-sm border-primary">
@@ -22,7 +25,7 @@
                     <tr>
                         <th>Remote Address</th>
                         <th>Action</th>
-                        <th>Status</th>
+                        <th>Enabled</th>
                         <th>Policy</th>
                         <th>Alert</th>
                         <th>Created</th>
@@ -43,17 +46,13 @@
                             <td class="fw-bold">@item.RemoteAddress</td>
                             <td><span class="badge bg-secondary">@item.Action</span></td>
                             <td>
-                                @switch (item.Status)
+                                @if (item.Enabled)
                                 {
-                                    case PolarisSentinel.Core.Enums.RuleStatus.Active:
-                                        <span class="badge bg-success">Active</span>
-                                        break;
-                                    case PolarisSentinel.Core.Enums.RuleStatus.Inactive:
-                                        <span class="badge bg-secondary">Inactive</span>
-                                        break;
-                                    default:
-                                        <span class="badge bg-warning text-dark">Expired</span>
-                                        break;
+                                    <span class="badge bg-success">Enabled</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Disabled</span>
                                 }
                             </td>
                             <td>
@@ -76,9 +75,10 @@
                                     <span class="text-muted">-</span>
                                 }
                             </td>
-                            <td>@(item.CreatedAt == default ? "-" : Settings.Format(item.CreatedAt))</td>
-                            <td>@(item.ExpiresAt != null ? Settings.Format(item.ExpiresAt.Value) : "-")</td>
+                            <td>@(item.CreatedAt == default ? "-" : SettingsService.Format(item.CreatedAt))</td>
+                            <td>@(item.ExpiresAt != null ? SettingsService.Format(item.ExpiresAt.Value) : "-")</td>
                             <td class="text-end">
+                                <a asp-action="Edit" asp-route-name="@item.Name" class="btn btn-sm btn-outline-primary">Edit</a>
                                 <a asp-action="Delete" asp-route-name="@item.Name" class="btn btn-sm btn-outline-danger">Delete</a>
                             </td>
                         </tr>

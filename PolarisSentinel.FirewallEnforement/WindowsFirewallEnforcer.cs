@@ -65,14 +65,14 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        public void BlockIp(Policy decision, TimeSpan duration)
+        public void BlockIp(Alert decision, TimeSpan duration)
         {
             if (decision == null || decision.Action != PolicyAction.Block)
             {
                 return;
             }
             string? ip = NormalizeIp(decision.SourceIp);
-            if (ip == null || duration <= TimeSpan.Zero || string.IsNullOrEmpty(decision.AlertId) ||
+            if (ip == null || duration <= TimeSpan.Zero || string.IsNullOrEmpty(decision.Id) ||
                 !float.IsFinite(decision.Confidence) || decision.Confidence < 0 || decision.Confidence > 1)
             {
                 _logger.LogWarning("Invalid block request for {Ip}", decision.SourceIp);
@@ -90,13 +90,14 @@ namespace PolarisSentinel.FirewallEnforement
                     string reason = "created";
                     var metadata = new FirewallRuleMetadata
                     {
-                        AlertId = decision.AlertId,
+                        AlertId = decision.Id,
                         Ip = ip,
                         AttackType = decision.AttackType,
+                        Action = decision.Action,
                         Confidence = decision.Confidence,
                         CreatedAt = now
                     };
-                    var rule = new FirewallStoredRule { Name = EntityIds.FirewallRule(decision.AlertId) };
+                    var rule = new FirewallStoredRule { Name = EntityIds.FirewallRule(decision.Id) };
 
                     // 同一 IP 复用原规则，只延长有效期
                     // Reuse the existing rule for the same IP; extend expiry only
@@ -159,7 +160,7 @@ namespace PolarisSentinel.FirewallEnforement
                             // Strip host mask from Windows RemoteAddresses for metadata parity and API display
                             RemoteAddress = NormalizeIp(rule.RemoteAddress, true) ?? rule.RemoteAddress,
                             Enabled = rule.Enabled,
-                            IsBlockRule = rule.IsBlockRule,
+                            Action = metadata?.Action ?? PolicyAction.Block,
                             AlertId = metadata?.AlertId,
                             CreatedAt = metadata?.CreatedAt.UtcDateTime ?? default,
                             ExpiresAt = metadata?.ExpiresAt.UtcDateTime,
@@ -313,6 +314,7 @@ namespace PolarisSentinel.FirewallEnforement
         public string AlertId { get; set; } = string.Empty;
         public string Ip { get; set; } = string.Empty;
         public string AttackType { get; set; } = string.Empty;
+        public PolicyAction Action { get; set; } = PolicyAction.Block;
         public float Confidence { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset ExpiresAt { get; set; }

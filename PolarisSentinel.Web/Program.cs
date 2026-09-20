@@ -33,9 +33,9 @@ namespace PolarisSentinel
                     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
                 });
 
-            // 策略配置热重载
-            // Policy settings hot-reload
-            builder.Services.Configure<Policy>(
+            // 策略配置热重载（默认值来自 appsettings）
+            // Policy settings (defaults from appsettings)
+            builder.Services.Configure<UserSettings>(
                 builder.Configuration.GetSection("PolicySettings"));
             // 防火墙配置（DryRun、封禁时长等）
             // Firewall settings (DryRun, block duration, etc.)
@@ -49,7 +49,7 @@ namespace PolarisSentinel
 
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
-                var settings = sp.GetRequiredService<IOptionsMonitor<Policy>>().CurrentValue;
+                var settings = sp.GetRequiredService<IOptionsMonitor<UserSettings>>().CurrentValue;
                 // 毫秒→秒
                 // ms to seconds
                 int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
@@ -84,9 +84,6 @@ namespace PolarisSentinel
             // Detection/audit persistence context
             builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-            //Add DbContext service
-            //AddRoles is required so the seeded admin can be granted a role.
             builder.Services.AddDefaultIdentity<IdentityUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
@@ -94,14 +91,12 @@ namespace PolarisSentinel
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
-
+            //   dotnet user-secrets set "AdminSeed:Password" "..." --project PolarisSentinel.Web
             // 初始管理员账号配置（密码来自 user-secrets / 环境变量，不硬编码）
             // Initial admin account configuration (password from user-secrets / env var)
             builder.Services.Configure<AdminSeedOptions>(
                 builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 
-            // 数据库迁移 + 初始管理员创建
-            // Migrations + initial admin provisioning
             builder.Services.AddScoped<SentinelDbInitializer>();
 
             //Configure Login path and Access Denied path for the application cookie
@@ -111,14 +106,15 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             });
 
-            // 检测状态服务（累计计数 + 最近决策）
-            // Detection state service (counters and recent decisions)
+
             builder.Services.AddSingleton<DetectionStateService>();
 
-            //Capture device control (list + switch)
+
             builder.Services.AddSingleton<CaptureControlService>();
 
-            //Runtime settings (timezone + NIC) persisted to appsettings.json
+            // 每用户设置（时区 + 阈值 + 防火墙），默认值来自 appsettings
+            // Per-user settings (thresholds + firewall); defaults from appsettings
+            builder.Services.AddHttpContextAccessor();
             builder.Services.AddSingleton<SettingsService>();
 
             // RF+IF 双模型
@@ -141,7 +137,7 @@ namespace PolarisSentinel
             // Policy engine reads latest settings via Func for hot-reload
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
             {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
+                var monitor = sp.GetRequiredService<IOptionsMonitor<UserSettings>>();
                 return new PolicyEngine(
                     () => monitor.CurrentValue,
                     sp.GetRequiredService<TimeProvider>(),
@@ -152,11 +148,10 @@ namespace PolarisSentinel
             // Firewall enforcer
             builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
 
-            // 检测管线（推理 → 策略 → 封禁）
-            // Detection pipeline (inference → policy → enforcement)
+            // Detection pipeline (inference -> policy -> enforcement), Application layer.
             builder.Services.AddSingleton<IDetectionPipeline>(sp =>
             {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
+                var monitor = sp.GetRequiredService<IOptionsMonitor<UserSettings>>();
                 int blockMinutes = monitor.CurrentValue.BlockDurationMinutes;
                 return new DetectionPipeline(
                     sp.GetRequiredService<IInferenceEngine>(),
@@ -193,7 +188,7 @@ namespace PolarisSentinel
             app.MapControllers();
             app.MapControllerRoute(
                 name: "default",
-                pattern: "{controller=Home}/{action=Index}/{id?}")
+                pattern: "{controller=Dashboard}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
 
@@ -214,12 +209,27 @@ namespace PolarisSentinel
 
             // 应用迁移并创建初始管理员（逻辑在 SentinelDbInitializer 中）
             // Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
-            using (var scope = app.Services.CreateScope())
+            await using (var scope = app.Services.CreateAsyncScope())
             {
                 try
                 {
                     var initializer = scope.ServiceProvider.GetRequiredService<SentinelDbInitializer>();
                     await initializer.InitializeAsync();
+
+                    // 用已有告警初始化 ID 计数器，避免重启后主键冲突
+                    // Seed the alert id counter from existing alerts to avoid PK collisions after restart
+                    var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    var alerts = await uow.Alerts.GetAllAsync();
+                    int maxAlert = 0;
+                    foreach (var alert in alerts)
+                    {
+                        int dash = alert.Id.LastIndexOf('-');
+                        if (dash >= 0 && int.TryParse(alert.Id.AsSpan(dash + 1), out int n) && n > maxAlert)
+                        {
+                            maxAlert = n;
+                        }
+                    }
+                    scope.ServiceProvider.GetRequiredService<IPolicyEngine>().InitializeAlertCounter(maxAlert);
                 }
                 catch (Exception ex)
                 {

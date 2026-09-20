@@ -24,15 +24,11 @@ public class Rule
 
     public PolicyAction Action { get; set; }
 
+    // Single IP or CIDR range (e.g. "203.0.113.10" or "203.0.113.0/24").
     public required string RemoteAddress { get; set; }
-
-    public RuleStatus Status { get; set; } = RuleStatus.Active;
 
     // Whether the underlying firewall rule is enabled.
     public bool Enabled { get; set; } = true;
-
-    // True for block rules, false for allow rules.
-    public bool IsBlockRule { get; set; } = true;
 
     public string? AttackType { get; set; }
 

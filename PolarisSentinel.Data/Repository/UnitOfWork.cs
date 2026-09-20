@@ -16,6 +16,7 @@ public class UnitOfWork : IUnitOfWork
         Alerts = new AlertRepository(context);
         Rules = new RuleRepository(context);
         Policies = new PolicyRepository(context);
+        UserSettings = new UserSettingsRepository(context);
     }
 
     public IAlertRepository Alerts { get; }
@@ -23,6 +24,8 @@ public class UnitOfWork : IUnitOfWork
     public IRuleRepository Rules { get; }
 
     public IPolicyRepository Policies { get; }
+
+    public IUserSettingsRepository UserSettings { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

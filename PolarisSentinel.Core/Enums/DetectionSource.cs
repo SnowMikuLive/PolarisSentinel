@@ -9,5 +9,8 @@ public enum DetectionSource
     RandomForest,
 
     //Result came from the unsupervised Isolation Forest anomaly detector.
-    IsolationForest
+    IsolationForest,
+
+    //Result came from the rule-based pre-filter in the capture layer.
+    PreFilter
 }

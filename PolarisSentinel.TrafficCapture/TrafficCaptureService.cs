@@ -121,7 +121,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         UpdateFastPathCounters(packetSize, protocol);
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
-        var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord { StartTime = now, LastSeenTime = now });
+        var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
+        {
+            StartTime = now,
+            LastSeenTime = now,
+            Protocol = protocol,
+            DestinationPort = dstPort
+        });
 
         bool isForward = srcIp == key.IpA && srcPort == key.PortA;
 
@@ -187,16 +193,30 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            if (_preFilter.IsWorthDeepAnalysis(flow))
-            {
-                var featureVector = Internal.FeatureExporter.Export(
-                    flow, key,
-                    sourceIp: key.IpA, sourcePort: key.PortA,
-                    destinationIp: key.IpB, destinationPort: key.PortB,
-                    protocol: key.Protocol);
+            // Rule-based pre-filter: null verdict + not suspicious means the flow is dropped as benign.
+            var verdict = _preFilter.Classify(flow, out bool suspicious);
+            if (verdict is null && !suspicious) continue;
 
-                OnFlowCompleted?.Invoke(this, featureVector);
-            }
+            var featureVector = Internal.FeatureExporter.Export(
+                flow, key,
+                sourceIp: key.IpA, sourcePort: key.PortA,
+                destinationIp: key.IpB, destinationPort: key.PortB,
+                protocol: key.Protocol);
+
+            OnFlowCompleted?.Invoke(this, new FlowFeatureVector
+            {
+                Features = featureVector.Features,
+                SourceIp = featureVector.SourceIp,
+                SourcePort = featureVector.SourcePort,
+                DestinationIp = featureVector.DestinationIp,
+                DestinationPort = featureVector.DestinationPort,
+                Protocol = featureVector.Protocol,
+                FlowStartTime = featureVector.FlowStartTime,
+                FlowEndTime = featureVector.FlowEndTime,
+                TotalPackets = featureVector.TotalPackets,
+                TotalBytes = featureVector.TotalBytes,
+                PreFilterVerdict = verdict
+            });
         }
     }
 

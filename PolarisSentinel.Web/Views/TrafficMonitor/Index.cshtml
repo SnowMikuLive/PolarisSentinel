@@ -3,11 +3,9 @@
 }
 
 <div class="container-fluid">
-    @* text-primary is the blue color in the default bootstrap 5 *@
     <h2 class="text-primary">Traffic Monitor</h2>
     <p>Real-time network traffic status</p>
 
-    @* Capture status row *@
     <div class="d-flex align-items-center mb-3">
         <span class="badge bg-success me-2">•</span>
         <span class="text-success me-3">Capturing</span>
@@ -18,7 +16,6 @@
     </div>
 
 <div class="row">
-    @* Protocol Distribution Pie Chart on left*@
     <div class="col-md-6">
         <div class="card shadow-sm border-primary h-100">
            <div class="card-header bg-primary text-white">
@@ -30,7 +27,6 @@
         </div>
     </div>
 
-        @* Traffic summary on right*@
         <div class="col-md-6">
             <div class="row g-3">
                 <div class="col-6">
@@ -71,11 +67,8 @@
 </div>
 
 @section Scripts {
-    @* Chart.js CDN is temporary. It will be replaced with a local version later and run without internet *@
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-     @* Show the data strictly *@
+   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    @* Signalr client library *@
     <script src="~/lib/signalr/signalr.min.js"></script>
 
     <script>
