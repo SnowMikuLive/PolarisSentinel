@@ -2,8 +2,6 @@
     ViewData["Title"] = "Firewall Rules";
     //Read policy list and enums from ViewBag
     var policyListJson = Html.Raw(Json.Serialize(ViewBag.Policies ?? new List<object>()));
-    var actionListJson = Html.Raw(Json.Serialize(ViewBag.Actions ?? new List<string>()));
-    var statusListJson = Html.Raw(Json.Serialize(ViewBag.Statuses ?? new List<string>()));
 }
 
 <div class="container-fluid">
@@ -142,8 +140,8 @@
     <script>
         //List injected from backend
         const policies=@policyListJson;
-        const actionOptions=@actionListJson;
-        const statusOptions=@statusListJson;
+        const actionOptions=["Ignore","Monitor","Block"];
+        const statusOptions=["Active","Inactive","Expired"];
 
         let allRules=[];
         let editingId=null;

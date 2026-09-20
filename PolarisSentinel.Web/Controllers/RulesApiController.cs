@@ -44,7 +44,7 @@ namespace PolarisSentinel.Web.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] RuleApiDto dto, CancellationToken cancellationToken)
         {
-            //add: Null check for dto, avoid NullReferenceExpection
+            //add: Null check for dto, avoid NullReferenceException
             //Check whether the data sent from the front end is empty.
             if (dto == null)
                 return BadRequest(new { error = "Request body is missing or invalid JSON." });
@@ -53,7 +53,7 @@ namespace PolarisSentinel.Web.Controllers
             if (string.IsNullOrWhiteSpace(dto.RemoteAddress))
                 return BadRequest(new { error = "RemoteAddress is required." });
 
-            //add: Manually parse enum atrings, avios deserialization errors
+            //add: Manually parse enum strings, avoids deserialization errors
             //Convert the string “Block” into the enumeration value PolicyAction.block
             if (!Enum.TryParse<PolicyAction>(dto.Action, ignoreCase: true, out var action))
                 return BadRequest(new { error = $"Invalid action:{dto.Action}" });
@@ -65,11 +65,20 @@ namespace PolarisSentinel.Web.Controllers
             //Create a new Rule object using the data sent from the frontend.
             var rule = new Rule
             {
+                //Generate unique rule ID
+                Id = $"R-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N").Substring(0,4)}",
+                //Rule name for Windows Firewall identification
+                Name=$"PolarisSentinel_{action}_{dto.RemoteAddress}",
+
                 RemoteAddress = dto.RemoteAddress,
                 Action = action,
                 Status = status,
                 PolicyId = dto.PolicyId,
                 ExpiresAt = dto.ExpiresAt,
+
+                //IsBlockRule = true for Block action, false otherwise
+                IsBlockRule=action==PolicyAction.Block,
+                Enabled=true,
             };
 
             //Add the new rules to the database
@@ -84,7 +93,7 @@ namespace PolarisSentinel.Web.Controllers
 
         //Put /api/rules/{id}-Edit rule
         [HttpPut("{id}")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] RuleApiDto dto, CancellationToken cancellationToken)
+        public async Task<IActionResult> Update(string id, [FromBody] RuleApiDto dto, CancellationToken cancellationToken)
         {
             if (dto == null)
                 return BadRequest(new { error = "Request body is missing or invalid JSON." });
@@ -112,7 +121,7 @@ namespace PolarisSentinel.Web.Controllers
 
         //Delete/api/rule/{id}
         [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
         {
             var rule = await _uow.Rules.GetByIdAsync(id, cancellationToken);
             if (rule == null) return NotFound();
@@ -128,7 +137,7 @@ namespace PolarisSentinel.Web.Controllers
         public string RemoteAddress { get; set; } = string.Empty;
         public string Action { get; set; } = "Monitor";
         public string Status { get; set; } = "Active";
-        public Guid? PolicyId { get; set; }
+        public string? PolicyId { get; set; }
         public DateTime? ExpiresAt { get; set; }
     }
  
