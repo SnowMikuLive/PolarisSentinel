@@ -36,7 +36,7 @@ public class AlertRepository : IAlertRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Alert?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Alert?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
         return await _context.Alerts
             .AsNoTracking()

@@ -11,5 +11,5 @@ public interface IAlertRepository
 
     Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    Task<Alert?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Alert?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
 }

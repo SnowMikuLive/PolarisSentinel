@@ -29,7 +29,7 @@ public class DetectionPipeline : IDetectionPipeline
         _logger = logger;
     }
 
-    public PolicyDecision ProcessFlow(FlowFeatureVector flow)
+    public Policy ProcessFlow(FlowFeatureVector flow)
     {
         var detection = _inference.Detect(flow);
         var decision = _policy.Evaluate(detection);

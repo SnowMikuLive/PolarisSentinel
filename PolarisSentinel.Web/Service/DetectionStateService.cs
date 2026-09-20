@@ -5,7 +5,7 @@ namespace PolarisSentinel.Web.Service
     // 推送给 SignalR 和状态 API 的统一记录
     // Unified record for SignalR push and state API
     public record DetectionRecord(
-        Guid AlertId,
+        string AlertId,
         string SourceIp,
         string DestinationIp,
         int DestinationPort,

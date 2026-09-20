@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using PolarisSentinel.Models;
+using PolarisSentinel.Web.Models;
 using System.Diagnostics;
 
 namespace PolarisSentinel.Controllers
@@ -9,11 +9,6 @@ namespace PolarisSentinel.Controllers
         public IActionResult Index()
         {
             return RedirectToAction("Index", "Dashboard");
-        }
-
-        public IActionResult Privacy()
-        {
-            return View();
         }
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]

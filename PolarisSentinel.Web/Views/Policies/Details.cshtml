@@ -1,4 +1,5 @@
 @model PolarisSentinel.Core.Models.Policy
+@inject PolarisSentinel.Web.Service.SettingsService Settings
 @{
     ViewData["Title"] = "Policy Details";
 }
@@ -12,11 +13,20 @@
         </div>
         <div class="card-body">
             <dl class="row mb-0">
+                <dt class="col-sm-3">ID</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
                 <dt class="col-sm-3">Name</dt>
                 <dd class="col-sm-9">@Model.Name</dd>
 
+                <dt class="col-sm-3">Description</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.Description) ? "-" : Model.Description)</dd>
+
                 <dt class="col-sm-3">Owner (UserId)</dt>
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.UserId) ? "-" : Model.UserId)</dd>
+
+                <dt class="col-sm-3">Detection Source</dt>
+                <dd class="col-sm-9"><span class="badge bg-info text-dark">@Model.DetectionSource</span></dd>
 
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
@@ -37,7 +47,7 @@
                 <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
 
                 <dt class="col-sm-3">Created At</dt>
-                <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</dd>
+                <dd class="col-sm-9">@Settings.Format(Model.CreatedAt)</dd>
             </dl>
         </div>
     </div>

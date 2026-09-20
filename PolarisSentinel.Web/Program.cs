@@ -35,7 +35,7 @@ namespace PolarisSentinel
 
             // 策略配置热重载
             // Policy settings hot-reload
-            builder.Services.Configure<PolicySettings>(
+            builder.Services.Configure<Policy>(
                 builder.Configuration.GetSection("PolicySettings"));
             // 防火墙配置（DryRun、封禁时长等）
             // Firewall settings (DryRun, block duration, etc.)
@@ -49,7 +49,7 @@ namespace PolarisSentinel
 
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
-                var settings = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>().CurrentValue;
+                var settings = sp.GetRequiredService<IOptionsMonitor<Policy>>().CurrentValue;
                 // 毫秒→秒
                 // ms to seconds
                 int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
@@ -118,6 +118,9 @@ namespace PolarisSentinel
             //Capture device control (list + switch)
             builder.Services.AddSingleton<CaptureControlService>();
 
+            //Runtime settings (timezone + NIC) persisted to appsettings.json
+            builder.Services.AddSingleton<SettingsService>();
+
             // RF+IF 双模型
             // Dual-model inference
             string modelPath = Path.GetFullPath(Path.Combine(
@@ -138,7 +141,7 @@ namespace PolarisSentinel
             // Policy engine reads latest settings via Func for hot-reload
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
             {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
+                var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
                 return new PolicyEngine(
                     () => monitor.CurrentValue,
                     sp.GetRequiredService<TimeProvider>(),
@@ -153,7 +156,7 @@ namespace PolarisSentinel
             // Detection pipeline (inference → policy → enforcement)
             builder.Services.AddSingleton<IDetectionPipeline>(sp =>
             {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<PolicySettings>>();
+                var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
                 int blockMinutes = monitor.CurrentValue.BlockDurationMinutes;
                 return new DetectionPipeline(
                     sp.GetRequiredService<IInferenceEngine>(),

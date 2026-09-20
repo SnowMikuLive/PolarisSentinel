@@ -14,7 +14,7 @@ public class PolicyRepository : IPolicyRepository
         _context = context;
     }
 
-    public async Task<Policy?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Policy?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
         return await _context.Policies
             .AsNoTracking()

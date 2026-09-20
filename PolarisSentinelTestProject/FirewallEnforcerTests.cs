@@ -44,14 +44,14 @@ namespace PolarisSentienlUnitTestProject
             var rule = engine.GetAllRules().Single();
 
             // Assert
-            Assert.AreEqual(FirewallRuleNaming.BuildRuleName(decision.AlertId), rule.Name);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rule.Name);
             Assert.AreEqual(decision.SourceIp, rule.RemoteAddress);
             Assert.IsTrue(rule.Enabled);
             Assert.IsTrue(rule.IsBlockRule);
             Assert.AreEqual(decision.AlertId, rule.AlertId);
             Assert.AreEqual(decision.AttackType, rule.AttackType);
-            Assert.AreEqual(createdAt, rule.CreatedAt);
-            Assert.AreEqual(createdAt.AddMinutes(60), rule.ExpiresAt);
+            Assert.AreEqual(createdAt.UtcDateTime, rule.CreatedAt);
+            Assert.AreEqual(createdAt.AddMinutes(60).UtcDateTime, rule.ExpiresAt);
         }
 
         // 同 IP 复用规则，只延长过期时间
@@ -73,9 +73,9 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.HasCount(1, rules);
-            Assert.AreEqual(FirewallRuleNaming.BuildRuleName(decision.AlertId), rules[0].Name);
-            Assert.AreEqual(createdAt, rules[0].CreatedAt);
-            Assert.AreEqual(createdAt.AddMinutes(65), rules[0].ExpiresAt);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rules[0].Name);
+            Assert.AreEqual(createdAt.UtcDateTime, rules[0].CreatedAt);
+            Assert.AreEqual(createdAt.AddMinutes(65).UtcDateTime, rules[0].ExpiresAt);
         }
 
         #endregion
@@ -147,7 +147,7 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.HasCount(1, rules);
-            Assert.AreEqual(FirewallRuleNaming.BuildRuleName(decision.AlertId), rules[0].Name);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rules[0].Name);
         }
 
         // 仅删除已过期规则
@@ -208,16 +208,20 @@ namespace PolarisSentienlUnitTestProject
 
         // 默认使用 RFC 5737 文档地址
         // Default uses RFC 5737 documentation addresses
-        private PolicyDecision CreateDecision(string ip = "203.0.113.66", PolicyAction action = PolicyAction.Block)
+        private int _alertCounter;
+
+        private Policy CreateDecision(string ip = "203.0.113.66", PolicyAction action = PolicyAction.Block)
         {
-            return new PolicyDecision
+            return new Policy
             {
-                AlertId = Guid.NewGuid(),
+                Id = string.Empty,
+                Name = string.Empty,
+                AlertId = EntityIds.Alert(DetectionSource.RandomForest, ++_alertCounter),
                 Action = action,
                 SourceIp = ip,
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                Source = DetectionSource.RandomForest,
+                DetectionSource = DetectionSource.RandomForest,
                 DecidedAt = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc)
             };
         }

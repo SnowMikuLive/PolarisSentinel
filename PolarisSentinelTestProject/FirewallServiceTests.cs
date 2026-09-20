@@ -15,38 +15,39 @@ namespace PolarisSentienlUnitTestProject
     [TestClass]
     public class FirewallServiceUnitTest
     {
-        #region Controller Tests
+        #region Rules Page Backing Tests
 
+        // Rules 页面读取实时规则（仅托管规则）
+        // Rules page reads live managed rules
         [TestMethod]
-        public void FirewallController_GetRules_ShouldReturnCreatedRule()
+        public void FirewallRulesPage_GetAllRules_ShouldReturnCreatedRule()
         {
             // Arrange
             var engine = CreateEngine(new FakeTimeProvider());
             engine.BlockIp(CreateDecision(), TimeSpan.FromMinutes(60));
-            var controller = new FirewallController(engine);
 
             // Act
-            var result = (OkObjectResult)controller.GetRules();
-            var rules = (IEnumerable<FirewallRuleInfo>)result.Value!;
+            var rules = engine.GetAllRules().ToList();
 
             // Assert
             Assert.HasCount(1, rules);
             Assert.AreEqual("203.0.113.66", rules.Single().RemoteAddress);
         }
 
+        // Rules 页面的 Remove All 删除全部托管规则
+        // Rules page Remove All clears every managed rule
         [TestMethod]
-        public void FirewallController_Rollback_ShouldRemoveCreatedRules()
+        public void FirewallRulesPage_RemoveAll_ShouldRemoveCreatedRules()
         {
             // Arrange
             var engine = CreateEngine(new FakeTimeProvider());
             engine.BlockIp(CreateDecision(), TimeSpan.FromMinutes(60));
-            var controller = new FirewallController(engine);
 
             // Act
-            var result = controller.Rollback();
+            int removed = engine.RemoveAllManagedRules();
 
             // Assert
-            Assert.IsInstanceOfType<OkObjectResult>(result);
+            Assert.AreEqual(1, removed);
             Assert.IsEmpty(engine.GetAllRules());
         }
 
@@ -95,16 +96,18 @@ namespace PolarisSentienlUnitTestProject
 
         // 默认使用 RFC 5737 文档地址
         // Default uses RFC 5737 documentation addresses
-        private PolicyDecision CreateDecision()
+        private Policy CreateDecision()
         {
-            return new PolicyDecision
+            return new Policy
             {
-                AlertId = Guid.NewGuid(),
+                Id = string.Empty,
+                Name = string.Empty,
+                AlertId = EntityIds.Alert(DetectionSource.RandomForest, 1),
                 Action = PolicyAction.Block,
                 SourceIp = "203.0.113.66",
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                Source = DetectionSource.RandomForest,
+                DetectionSource = DetectionSource.RandomForest,
                 DecidedAt = DateTime.UtcNow
             };
         }

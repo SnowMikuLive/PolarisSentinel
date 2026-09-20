@@ -4,7 +4,7 @@ namespace PolarisSentinel.Core.Interfaces;
 
 public interface IPolicyRepository
 {
-    Task<Policy?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Policy?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Policy>> GetByUserAsync(string userId, CancellationToken cancellationToken = default);
 

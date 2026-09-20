@@ -9,11 +9,7 @@ namespace PolarisSentinel.Web.Controllers
     {
         public IActionResult Index()
         {
-            //Static mock data is shown now as a placeholder, the real data will be pushed later.
-            ViewBag.LiveTraffic = "0 Kpps";
-            ViewBag.AlertsCount = 0;
-            ViewBag.AiAccuracy = "-";
-            ViewBag.ActiveRules = 0;
+            // Real data is pushed via SignalR.
             return View();
         }
     }

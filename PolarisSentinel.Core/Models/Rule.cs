@@ -5,15 +5,20 @@ namespace PolarisSentinel.Core.Models;
 
 // A firewall rule. Can be created manually (no policy/alert) or derived
 // from an alert under a policy (AI automation).
+// Merged with the former FirewallRuleInfo summary type.
 public class Rule
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    // Human-readable id, e.g. "R-1".
+    public string Id { get; set; } = string.Empty;
 
-    public Guid? PolicyId { get; set; }
+    // Firewall rule name (e.g. "PolarisSentinel_Block_...").
+    public string Name { get; set; } = string.Empty;
+
+    public string? PolicyId { get; set; }
 
     public Policy? Policy { get; set; }
 
-    public Guid? AlertId { get; set; }
+    public string? AlertId { get; set; }
 
     public Alert? Alert { get; set; }
 
@@ -22,6 +27,14 @@ public class Rule
     public required string RemoteAddress { get; set; }
 
     public RuleStatus Status { get; set; } = RuleStatus.Active;
+
+    // Whether the underlying firewall rule is enabled.
+    public bool Enabled { get; set; } = true;
+
+    // True for block rules, false for allow rules.
+    public bool IsBlockRule { get; set; } = true;
+
+    public string? AttackType { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

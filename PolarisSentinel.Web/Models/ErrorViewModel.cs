@@ -1,4 +1,4 @@
-namespace PolarisSentinel.Models
+namespace PolarisSentinel.Web.Models
 {
     public class ErrorViewModel
     {

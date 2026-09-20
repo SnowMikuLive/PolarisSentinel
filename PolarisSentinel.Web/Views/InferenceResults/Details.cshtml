@@ -1,4 +1,5 @@
 @model PolarisSentinel.Core.Models.Alert
+@inject PolarisSentinel.Web.Service.SettingsService Settings
 @{
     ViewData["Title"] = "Alert Details";
 }
@@ -13,6 +14,9 @@
         <div class="card-body">
             <h5 class="mb-3">Network 5-Tuple</h5>
             <dl class="row">
+                <dt class="col-sm-3">ID</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
                 <dt class="col-sm-3">Source IP</dt>
                 <dd class="col-sm-9">@Model.SourceIp</dd>
 
@@ -44,7 +48,7 @@
                 <dd class="col-sm-9">@Model.Source</dd>
 
                 <dt class="col-sm-3">Detected At</dt>
-                <dd class="col-sm-9">@Model.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</dd>
+                <dd class="col-sm-9">@Settings.Format(Model.DetectedAt)</dd>
             </dl>
         </div>
     </div>

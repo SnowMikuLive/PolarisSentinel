@@ -80,7 +80,7 @@ namespace PolarisSentinel.FirewallEnforement
             foreach (dynamic rule in _rules)
             {
                 string name = rule.Name;
-                if (name.StartsWith(FirewallRuleNaming.Prefix, StringComparison.Ordinal))
+                if (name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
                 {
                     result.Add(new FirewallStoredRule
                     {
@@ -98,7 +98,7 @@ namespace PolarisSentinel.FirewallEnforement
 
         private static void CheckName(string name)
         {
-            if (string.IsNullOrEmpty(name) || !name.StartsWith(FirewallRuleNaming.Prefix, StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(name) || !name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
             {
                 throw new ArgumentException("Only PolarisSentinel rules can be changed.");
             }

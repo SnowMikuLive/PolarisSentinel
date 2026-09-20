@@ -4,36 +4,34 @@ using PolarisSentinel.Core.Interfaces;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // 告警只读展示
-    // Alert read-only views
+    // 推理结果界面：模型状态、实时结果与已持久化的告警
+    // Inference results page: model status, live results and persisted alerts
     [Authorize]
-    public class AlertsController : Controller
+    public class InferenceResultsController : Controller
     {
         private readonly IUnitOfWork _uow;
 
-        public AlertsController(IUnitOfWork uow)
+        public InferenceResultsController(IUnitOfWork uow)
         {
             _uow = uow;
         }
 
-        // 列表
-        // List
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
             var alerts = await _uow.Alerts.GetAllAsync(cancellationToken);
             return View(alerts);
         }
 
-        // 详情
-        // Details
-        public async Task<IActionResult> Details(Guid? id, CancellationToken cancellationToken)
+        // 告警详情（从规则页跳转查看是哪次检测产生了规则）
+        // Alert details (drill-down from the Rules page)
+        public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
-            if (id == null)
+            if (string.IsNullOrEmpty(id))
             {
                 return NotFound();
             }
 
-            var alert = await _uow.Alerts.GetByIdAsync(id.Value, cancellationToken);
+            var alert = await _uow.Alerts.GetByIdAsync(id, cancellationToken);
             if (alert == null)
             {
                 return NotFound();

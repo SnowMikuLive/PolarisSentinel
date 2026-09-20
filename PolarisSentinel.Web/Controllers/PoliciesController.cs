@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
@@ -13,10 +15,12 @@ namespace PolarisSentinel.Web.Controllers
     public class PoliciesController : Controller
     {
         private readonly IUnitOfWork _uow;
+        private readonly UserManager<IdentityUser> _userManager;
 
-        public PoliciesController(IUnitOfWork uow)
+        public PoliciesController(IUnitOfWork uow, UserManager<IdentityUser> userManager)
         {
             _uow = uow;
+            _userManager = userManager;
         }
 
         // 列表
@@ -29,14 +33,14 @@ namespace PolarisSentinel.Web.Controllers
 
         // 详情
         // Details
-        public async Task<IActionResult> Details(Guid? id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var policy = await _uow.Policies.GetByIdAsync(id.Value, cancellationToken);
+            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
@@ -49,23 +53,27 @@ namespace PolarisSentinel.Web.Controllers
         // Create form
         public IActionResult Create()
         {
-            PopulateActions();
+            PopulateLists();
             return View(new Policy { Name = string.Empty });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("Name,UserId,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
+            [Bind("Name,Description,DetectionSource,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
             Policy policy,
             CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid)
             {
-                PopulateActions();
+                PopulateLists();
                 return View(policy);
             }
 
+            // 所有者固定为当前登录用户
+            // Owner is always the signed-in user
+            policy.UserId = _userManager.GetUserName(User) ?? string.Empty;
+            policy.Id = await NextPolicyIdAsync(cancellationToken);
             _uow.Policies.Add(policy);
             await _uow.SaveChangesAsync(cancellationToken);
             TempData["success"] = "Policy created.";
@@ -74,28 +82,28 @@ namespace PolarisSentinel.Web.Controllers
 
         // 编辑表单
         // Edit form
-        public async Task<IActionResult> Edit(Guid? id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Edit(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var policy = await _uow.Policies.GetByIdAsync(id.Value, cancellationToken);
+            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
             }
 
-            PopulateActions();
+            PopulateLists();
             return View(policy);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
-            Guid id,
-            [Bind("Id,Name,UserId,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
+            string id,
+            [Bind("Id,Name,Description,DetectionSource,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -106,9 +114,14 @@ namespace PolarisSentinel.Web.Controllers
 
             if (!ModelState.IsValid)
             {
-                PopulateActions();
+                PopulateLists();
                 return View(policy);
             }
+
+            // 所有者不可编辑，保留原值
+            // Owner is not editable; keep the stored value
+            var existing = await _uow.Policies.GetByIdAsync(id, cancellationToken);
+            policy.UserId = existing?.UserId ?? string.Empty;
 
             _uow.Policies.Update(policy);
             await _uow.SaveChangesAsync(cancellationToken);
@@ -118,14 +131,14 @@ namespace PolarisSentinel.Web.Controllers
 
         // 删除确认
         // Delete confirmation
-        public async Task<IActionResult> Delete(Guid? id, CancellationToken cancellationToken)
+        public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
             {
                 return NotFound();
             }
 
-            var policy = await _uow.Policies.GetByIdAsync(id.Value, cancellationToken);
+            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
@@ -136,7 +149,7 @@ namespace PolarisSentinel.Web.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(Guid id, CancellationToken cancellationToken)
+        public async Task<IActionResult> DeleteConfirmed(string id, CancellationToken cancellationToken)
         {
             var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
             if (policy != null)
@@ -149,9 +162,27 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        private void PopulateActions()
+        // 生成下一个 P-n 形式的策略 ID
+        // Build the next "P-n" policy id
+        private async Task<string> NextPolicyIdAsync(CancellationToken cancellationToken)
+        {
+            var policies = await _uow.Policies.GetAllAsync(cancellationToken);
+            int max = 0;
+            foreach (var p in policies)
+            {
+                if (p.Id.StartsWith(EntityIds.PolicyPrefix, StringComparison.Ordinal) &&
+                    int.TryParse(p.Id.AsSpan(EntityIds.PolicyPrefix.Length), out int n) && n > max)
+                {
+                    max = n;
+                }
+            }
+            return EntityIds.Policy(max + 1);
+        }
+
+        private void PopulateLists()
         {
             ViewBag.Actions = new SelectList(Enum.GetValues<PolicyAction>());
+            ViewBag.DetectionSources = new SelectList(Enum.GetValues<DetectionSource>());
         }
     }
 }

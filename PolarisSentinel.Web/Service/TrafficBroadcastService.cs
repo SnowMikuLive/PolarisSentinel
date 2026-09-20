@@ -1,11 +1,12 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
+using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Web.Hubs;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using PolarisSentinel.Inference;
 
 namespace PolarisSentinel.Web.Service
 {
@@ -19,6 +20,8 @@ namespace PolarisSentinel.Web.Service
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CaptureControlService _captureControl;
         private readonly ILogger<TrafficBroadcastService> _logger;
+        private readonly SettingsService _settings;
+        private readonly IOptionsMonitor<Policy> _policySettings;
 
         private readonly DetectionStateService _state;
 
@@ -29,6 +32,8 @@ namespace PolarisSentinel.Web.Service
             IServiceScopeFactory scopeFactory,
             CaptureControlService captureControl,
             DetectionStateService state,
+            SettingsService settings,
+            IOptionsMonitor<Policy> policySettings,
             ILogger<TrafficBroadcastService> logger
             )
         {
@@ -38,6 +43,8 @@ namespace PolarisSentinel.Web.Service
             _scopeFactory = scopeFactory;
             _captureControl = captureControl;
             _state = state;
+            _settings = settings;
+            _policySettings = policySettings;
             _logger = logger;
         }
 
@@ -81,11 +88,11 @@ namespace PolarisSentinel.Web.Service
         {
             try
             {
-                // 抓包特征转为模型契约，保留流地址和时间
-                // Convert capture features and keep the flow addresses and times
+                // 抓包特征已对齐模型契约，保留流地址和时间
+                // Capture features already match the model contract; keep the flow addresses and times
                 var modelFlow = new FlowFeatureVector
                 {
-                    Features = LegacyFeatureAdapter.ToContract(flow.Features),
+                    Features = flow.Features,
                     SourceIp = flow.SourceIp,
                     SourcePort = flow.SourcePort,
                     DestinationIp = flow.DestinationIp,
@@ -100,7 +107,7 @@ namespace PolarisSentinel.Web.Service
                 _logger.LogInformation(
                     "Flow {SourceIp}: {InputCount}->20 features, {AttackType}, {Source}, {Action}, {Reason}",
                     decision.SourceIp, flow.Features.Length, decision.AttackType,
-                    decision.Source, decision.Action, decision.Reason);
+                    decision.DetectionSource, decision.Action, decision.Reason);
 
                 var record = new DetectionRecord(
                     decision.AlertId,
@@ -110,9 +117,9 @@ namespace PolarisSentinel.Web.Service
                     decision.AttackType,
                     decision.Confidence,
                     decision.Action.ToString(),
-                    decision.DecidedAt.ToString("HH:mm:ss"),
+                    _settings.Format(decision.DecidedAt),
                     decision.Reason,
-                    decision.Source.ToString(),
+                    decision.DetectionSource.ToString(),
                     decision.RuleName);
 
                 // 先推送结果，写库失败不影响实时页面
@@ -129,6 +136,7 @@ namespace PolarisSentinel.Web.Service
                         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                         unitOfWork.Alerts.Add(new Alert
                         {
+                            Id = decision.AlertId,
                             SourceIp = flow.SourceIp,
                             SourcePort = flow.SourcePort,
                             DestinationIp = flow.DestinationIp,
@@ -136,12 +144,34 @@ namespace PolarisSentinel.Web.Service
                             Protocol = flow.Protocol,
                             AttackType = decision.AttackType,
                             Confidence = decision.Confidence,
-                            Source = decision.Source,
+                            Source = decision.DetectionSource,
                             Action = decision.Action,
                             RuleName = decision.RuleName,
                             Reason = decision.Reason,
                             DetectedAt = decision.DecidedAt
                         });
+
+                        // 审计：Block 决策产生防火墙规则时记录一条 Rule
+                        // Audit: record a Rule row when a Block creates a firewall rule
+                        if (decision.Action == PolicyAction.Block && !string.IsNullOrEmpty(decision.RuleName))
+                        {
+                            unitOfWork.Rules.Add(new Rule
+                            {
+                                Id = EntityIds.Rule(await NextRuleNumberAsync(unitOfWork)),
+                                Name = decision.RuleName,
+                                PolicyId = null,
+                                AlertId = decision.AlertId,
+                                Action = decision.Action,
+                                RemoteAddress = decision.SourceIp,
+                                Status = RuleStatus.Active,
+                                Enabled = true,
+                                IsBlockRule = true,
+                                AttackType = decision.AttackType,
+                                CreatedAt = decision.DecidedAt,
+                                ExpiresAt = decision.DecidedAt.AddMinutes(_policySettings.CurrentValue.BlockDurationMinutes)
+                            });
+                        }
+
                         await unitOfWork.SaveChangesAsync();
                     }
                 }
@@ -155,6 +185,23 @@ namespace PolarisSentinel.Web.Service
             {
                 _logger.LogError(ex, "Pipeline failed for flow from {SourceIp}", flow.SourceIp);
             }
+        }
+
+        // 生成下一个 R-n 审计编号
+        // Build the next "R-n" audit number
+        private static async Task<int> NextRuleNumberAsync(IUnitOfWork unitOfWork)
+        {
+            var rules = await unitOfWork.Rules.GetAllAsync();
+            int max = 0;
+            foreach (var r in rules)
+            {
+                if (r.Id.StartsWith(EntityIds.RulePrefix, StringComparison.Ordinal) &&
+                    int.TryParse(r.Id.AsSpan(EntityIds.RulePrefix.Length), out int n) && n > max)
+                {
+                    max = n;
+                }
+            }
+            return max + 1;
         }
         
         public Task StopAsync(CancellationToken cancellationToken)

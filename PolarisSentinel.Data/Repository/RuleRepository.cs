@@ -35,7 +35,7 @@ public class RuleRepository : IRuleRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Rule?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<Rule?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
         return await _context.Rules
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);

@@ -1,0 +1,167 @@
+@model PolarisSentinel.Core.Models.Policy
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary">Settings</h2>
+    <p class="text-muted">Configure display time zone, monitored network interface, detection policy and firewall behaviour.</p>
+
+    <form asp-action="Save" method="post" class="row g-3">
+        @* Time zone *@
+        <div class="col-12">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">
+                    Time Zone
+                </div>
+                <div class="card-body">
+                    <label for="timeZoneId" class="form-label">Display time zone</label>
+                    <select id="timeZoneId" name="timeZoneId" class="form-select">
+                        <option value="UTC" selected="@(ViewBag.CurrentTimeZone == "UTC")">UTC</option>
+                        <option value="SystemLocal" selected="@(ViewBag.CurrentTimeZone == "SystemLocal")">System local</option>
+                        @foreach (var tz in ViewBag.TimeZones)
+                        {
+                            <option value="@tz" selected="@(ViewBag.CurrentTimeZone == tz)">@tz</option>
+                        }
+                    </select>
+                    <div class="text-muted small mt-2">Affects all displayed times (alerts, rules, policies, live traffic).</div>
+                </div>
+            </div>
+        </div>
+
+        @* Network interface *@
+        <div class="col-12">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">
+                    Network Interface
+                </div>
+                <div class="card-body">
+                    <label for="deviceName" class="form-label">Monitored interface</label>
+                    <select id="deviceName" name="deviceName" class="form-select">
+                        <option value="">Auto-select</option>
+                        @foreach (var d in ViewBag.Devices)
+                        {
+                            var wifi = d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ? " [Wi-Fi]" : "";
+                            <option value="@d.DeviceName" selected="@(ViewBag.CurrentDevice == d.DeviceName)">
+                                @d.DisplayName@wifi@(d.IpAddress != null ? " (" + d.IpAddress + ")" : "")
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        @* Detection policy (basic, editable) *@
+        <div class="col-12">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">
+                    Detection Policy
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label asp-for="RfConfidenceThreshold" class="form-label">RF Confidence Threshold</label>
+                            <input asp-for="RfConfidenceThreshold" class="form-control" type="number" step="0.01" min="0" max="1" />
+                            <div class="text-muted small mt-1">Minimum Random Forest confidence to raise an alert (below this the detection is ignored).</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="AutoBlockConfidenceThreshold" class="form-label">Auto Block Threshold</label>
+                            <input asp-for="AutoBlockConfidenceThreshold" class="form-control" type="number" step="0.01" min="0" max="1" />
+                            <div class="text-muted small mt-1">Confidence at or above which a detection is blocked automatically (between the two thresholds it is only monitored).</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label asp-for="BlockDurationMinutes" class="form-label">Block Duration (minutes)</label>
+                            <input asp-for="BlockDurationMinutes" class="form-control" type="number" min="1" />
+                            <div class="text-muted small mt-1">How long a firewall block stays in effect before it expires.</div>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Allowlist" class="form-label">Allowlist (comma separated CIDR)</label>
+                            <input asp-for="Allowlist" class="form-control" value="@string.Join(", ", Model.Allowlist)" />
+                            <div class="text-muted small mt-1">Addresses/ranges that are never blocked; a Block decision on a match is downgraded to Monitor.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Advanced tuning (collapsed by default) *@
+        <div class="col-12">
+            <div class="card shadow-sm border-secondary">
+                <div class="card-header bg-secondary text-white">
+                    <a class="text-white text-decoration-none d-flex justify-content-between align-items-center"
+                       data-bs-toggle="collapse" href="#advancedSettings" role="button" aria-expanded="false" aria-controls="advancedSettings">
+                        <span>Advanced (tuning)</span>
+                        <span class="small">show / hide</span>
+                    </a>
+                </div>
+                <div class="collapse" id="advancedSettings">
+                    <div class="card-body">
+                        <div class="alert alert-warning small mb-3">
+                            These values are tuned for typical deployments. Changing them can reduce detection quality or throughput — adjust only if you understand the impact.
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="DecisionCooldownSeconds" class="form-label">Decision Cooldown (seconds)</label>
+                                <input asp-for="DecisionCooldownSeconds" class="form-control" type="number" min="0" />
+                                <div class="text-muted small mt-1">Minimum time before the same IP can be blocked again (prevents duplicate blocks).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="IfAnomalyThreshold" class="form-label">IF Anomaly Threshold</label>
+                                <input asp-for="IfAnomalyThreshold" class="form-control" type="number" step="0.000001" />
+                                <div class="text-muted small mt-1">Isolation Forest anomaly score cutoff. Calibrated from the model; changing it invalidates the model's confidence calibration.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="PreFilterMinPackets" class="form-label">Pre-filter Min Packets</label>
+                                <input asp-for="PreFilterMinPackets" class="form-control" type="number" min="1" />
+                                <div class="text-muted small mt-1">Flows with fewer packets are skipped before inference (performance only, not detection quality).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="FlowIdleTimeoutMilliseconds" class="form-label">Flow Idle Timeout (ms)</label>
+                                <input asp-for="FlowIdleTimeoutMilliseconds" class="form-control" type="number" min="1000" />
+                                <div class="text-muted small mt-1">Inactivity after which a flow is considered finished and exported for inference.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Firewall options (editable) *@
+        @{ var firewall = ViewBag.Firewall as PolarisSentinel.FirewallEnforement.FirewallOptions; }
+        <div class="col-12">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">
+                    Firewall
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch">
+                                <input type="hidden" name="firewall.DryRun" value="false" />
+                                <input class="form-check-input" type="checkbox" id="firewallDryRun" name="firewall.DryRun"
+                                       value="true" @(firewall?.DryRun == true ? "checked" : "") />
+                                <label class="form-check-label" for="firewallDryRun">Dry Run</label>
+                            </div>
+                            <div class="text-muted small mt-2">
+                                Dry Run: when on, blocks are only simulated in memory and no real Windows Firewall rule is created.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="firewallSweepSeconds">Sweep Interval (seconds)</label>
+                            <input class="form-control" type="number" min="1" id="firewallSweepSeconds"
+                                   name="firewall.SweepSeconds" value="@(firewall?.SweepSeconds ?? 30)" />
+                            <div class="text-muted small mt-2">
+                                Sweep Seconds: how often expired block rules are automatically removed.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <a asp-controller="Dashboard" asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+    </form>
+</div>

@@ -17,26 +17,6 @@
         <span class="me-3">Bytes/s:<span id="liveBytesPerSecond">0</span></span>
     </div>
 
-    @* Network interface selector *@
-    <div class="card shadow-sm border-primary mb-3">
-        <div class="card-header bg-primary text-white">
-            Network Interface
-        </div>
-        <div class="card-body">
-            <div class="row g-2 align-items-center">
-                <div class="col-md-8">
-                    <select id="deviceSelect" class="form-select" onchange="switchDevice()">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <button type="button" class="btn btn-outline-primary w-100" onclick="refreshDevices()">Refresh</button>
-                </div>
-            </div>
-            <div class="text-muted small mt-2" id="deviceInfo"></div>
-        </div>
-    </div>
-
 <div class="row">
     @* Protocol Distribution Pie Chart on left*@
     <div class="col-md-6">
@@ -192,61 +172,5 @@
         });
             //Start connection
             connection.start().catch(err=>console.error(err.toString()));
-
-        // ---- Network interface selector ----
-        function refreshDevices()
-        {
-            fetch('/api/capture/devices')
-                .then(r=>r.json())
-                .then(data=>{
-                    const select=document.getElementById('deviceSelect');
-                    select.innerHTML='';
-                    data.devices.forEach(d=>{
-                        const opt=document.createElement('option');
-                        opt.value=d.deviceName;
-                        const wifiTag=d.isWifi?' [Wi-Fi]':'';
-                        opt.textContent=d.displayName+wifiTag+(d.ipAddress?' ('+d.ipAddress+')':'');
-                        if(d.isCurrent)opt.selected=true;
-                        select.appendChild(opt);
-                    });
-                    updateDeviceInfo(data.current);
-                })
-                .catch(err=>console.error('Failed to load devices',err));
-        }
-
-        function updateDeviceInfo(current)
-        {
-            const info=document.getElementById('deviceInfo');
-            info.textContent=current?'Capturing on: '+current:'No device selected';
-        }
-
-        function switchDevice()
-        {
-            const select=document.getElementById('deviceSelect');
-            const deviceName=select.value;
-            if(!deviceName)return;
-
-            fetch('/api/capture/select',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({deviceName:deviceName})
-            })
-            .then(r=>{
-                if(!r.ok)throw new Error('switch failed');
-                return r.json();
-            })
-            .then(data=>{
-                updateDeviceInfo(data.current);
-                refreshDevices();
-            })
-            .catch(err=>{
-                console.error(err);
-                alert('Failed to switch device');
-                refreshDevices();
-            });
-        }
-
-        //load devices on page load
-        refreshDevices();
     </script>
 }

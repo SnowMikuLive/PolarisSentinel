@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Edit Policy";
     var actions = ViewBag.Actions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+    var sources = ViewBag.DetectionSources as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
 }
 
 <div class="container-fluid">
@@ -23,10 +24,16 @@
                         <span asp-validation-for="Name" class="text-danger"></span>
                     </div>
 
+                    <div class="col-12 mb-3">
+                        <label asp-for="Description" class="form-label">Description (optional)</label>
+                        <textarea asp-for="Description" class="form-control" rows="2" placeholder="Optional notes about this policy"></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+
                     <div class="col-md-6 mb-3">
-                        <label asp-for="UserId" class="form-label">Owner (UserId)</label>
-                        <input asp-for="UserId" class="form-control" placeholder="Leave empty for system default" />
-                        <span asp-validation-for="UserId" class="text-danger"></span>
+                        <label asp-for="DetectionSource" class="form-label">Detection Source</label>
+                        <select asp-for="DetectionSource" class="form-select" asp-items="sources"></select>
+                        <span asp-validation-for="DetectionSource" class="text-danger"></span>
                     </div>
 
                     <div class="col-md-6 mb-3">

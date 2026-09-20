@@ -65,14 +65,14 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        public void BlockIp(PolicyDecision decision, TimeSpan duration)
+        public void BlockIp(Policy decision, TimeSpan duration)
         {
             if (decision == null || decision.Action != PolicyAction.Block)
             {
                 return;
             }
             string? ip = NormalizeIp(decision.SourceIp);
-            if (ip == null || duration <= TimeSpan.Zero || decision.AlertId == Guid.Empty ||
+            if (ip == null || duration <= TimeSpan.Zero || string.IsNullOrEmpty(decision.AlertId) ||
                 !float.IsFinite(decision.Confidence) || decision.Confidence < 0 || decision.Confidence > 1)
             {
                 _logger.LogWarning("Invalid block request for {Ip}", decision.SourceIp);
@@ -96,7 +96,7 @@ namespace PolarisSentinel.FirewallEnforement
                         Confidence = decision.Confidence,
                         CreatedAt = now
                     };
-                    var rule = new FirewallStoredRule { Name = FirewallRuleNaming.BuildRuleName(decision.AlertId) };
+                    var rule = new FirewallStoredRule { Name = EntityIds.FirewallRule(decision.AlertId) };
 
                     // 同一 IP 复用原规则，只延长有效期
                     // Reuse the existing rule for the same IP; extend expiry only
@@ -141,9 +141,9 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        public IEnumerable<FirewallRuleInfo> GetAllRules()
+        public IEnumerable<Rule> GetAllRules()
         {
-            var result = new List<FirewallRuleInfo>();
+            var result = new List<Rule>();
             lock (_lock)
             {
                 try
@@ -151,8 +151,9 @@ namespace PolarisSentinel.FirewallEnforement
                     foreach (var rule in GetRules())
                     {
                         var metadata = ReadMetadata(rule);
-                        result.Add(new FirewallRuleInfo
+                        result.Add(new Rule
                         {
+                            Id = metadata?.AlertId ?? string.Empty,
                             Name = rule.Name,
                             // 去掉 Windows 返回的主机掩码，便于元数据比对与 API 展示
                             // Strip host mask from Windows RemoteAddresses for metadata parity and API display
@@ -160,8 +161,8 @@ namespace PolarisSentinel.FirewallEnforement
                             Enabled = rule.Enabled,
                             IsBlockRule = rule.IsBlockRule,
                             AlertId = metadata?.AlertId,
-                            CreatedAt = metadata?.CreatedAt,
-                            ExpiresAt = metadata?.ExpiresAt,
+                            CreatedAt = metadata?.CreatedAt.UtcDateTime ?? default,
+                            ExpiresAt = metadata?.ExpiresAt.UtcDateTime,
                             AttackType = metadata?.AttackType
                         });
                     }
@@ -176,7 +177,7 @@ namespace PolarisSentinel.FirewallEnforement
 
         public void RemoveRule(string ruleName)
         {
-            if (!string.IsNullOrEmpty(ruleName) && ruleName.StartsWith(FirewallRuleNaming.Prefix, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(ruleName) && ruleName.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
             {
                 RemoveRules(ruleName, "manual");
             }
@@ -250,8 +251,8 @@ namespace PolarisSentinel.FirewallEnforement
             try
             {
                 var metadata = JsonSerializer.Deserialize<FirewallRuleMetadata>(rule.Description, JsonOptions);
-                if (metadata != null && metadata.AlertId != Guid.Empty &&
-                    rule.Name == FirewallRuleNaming.BuildRuleName(metadata.AlertId) &&
+                if (metadata != null && !string.IsNullOrEmpty(metadata.AlertId) &&
+                    rule.Name == EntityIds.FirewallRule(metadata.AlertId) &&
                     // Description 中的 IP 与 COM 返回地址需同一规范化口径
                     // Compare Description IP against normalized COM RemoteAddresses
                     NormalizeIp(metadata.Ip) != null && NormalizeIp(metadata.Ip) == NormalizeIp(rule.RemoteAddress, true) &&
@@ -309,7 +310,7 @@ namespace PolarisSentinel.FirewallEnforement
     // Audit details serialized into Description
     internal class FirewallRuleMetadata
     {
-        public Guid AlertId { get; set; }
+        public string AlertId { get; set; } = string.Empty;
         public string Ip { get; set; } = string.Empty;
         public string AttackType { get; set; } = string.Empty;
         public float Confidence { get; set; }

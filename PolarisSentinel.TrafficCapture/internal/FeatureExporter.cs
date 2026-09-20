@@ -9,7 +9,7 @@ internal static class FeatureExporter
    
     public static readonly string[] FeatureNames =
     {
-        "flow_duration_seconds",
+        "flow_duration_ms",
         "total_fwd_packets",
         "total_bwd_packets",
         "total_fwd_bytes",
@@ -34,17 +34,25 @@ internal static class FeatureExporter
 
     public static FlowFeatureVector Export(FlowRecord flow, FlowKey key, string sourceIp, ushort sourcePort, string destinationIp, ushort destinationPort, byte protocol)
     {
-        float bytesPerMs = flow.DurationSeconds > 0
-           ? (float)(flow.TotalBytes / (flow.DurationSeconds * 1000))
+        float durationMs = (float)(flow.DurationSeconds * 1000);
+
+        float bytesPerMs = durationMs > 0
+           ? (float)(flow.TotalBytes / durationMs)
            : 0;
 
-        float pktsPerMs = flow.DurationSeconds > 0
-            ? (float)(flow.TotalPackets / (flow.DurationSeconds * 1000))
+        float pktsPerMs = durationMs > 0
+            ? (float)(flow.TotalPackets / durationMs)
+            : 0;
+
+        // 与训练脚本一致：down_up_ratio = 下行包数 / 上行包数
+        // Matches the training script: down_up_ratio = bwd_pkts / fwd_pkts
+        float downUpRatio = flow.FwdPackets > 0
+            ? (float)((double)flow.BwdPackets / flow.FwdPackets)
             : 0;
 
         float[] features =
         {
-            (float)flow.DurationSeconds,
+            durationMs,
             flow.FwdPackets,
             flow.BwdPackets,
             flow.FwdBytes,
@@ -63,7 +71,7 @@ internal static class FeatureExporter
             (float)flow.BwdIatStats.Min,
             bytesPerMs,
             pktsPerMs,
-            (float)flow.DownUpRatio
+            downUpRatio
         };
 
         return new FlowFeatureVector
