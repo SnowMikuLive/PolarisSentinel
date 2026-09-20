@@ -4,7 +4,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using Decision = PolarisSentinel.Core.Models.PolicyDecision;
+using Decision = PolarisSentinel.Core.Models.Policy;
 
 namespace PolarisSentinel.PolicyDecision
 {
@@ -12,7 +12,7 @@ namespace PolarisSentinel.PolicyDecision
     // Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
     public class PolicyEngine : IPolicyEngine
     {
-        private readonly Func<PolicySettings> _settingsProvider;
+        private readonly Func<Policy> _settingsProvider;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<PolicyEngine> _logger;
         private readonly object _lock = new object();
@@ -20,14 +20,18 @@ namespace PolarisSentinel.PolicyDecision
         private string[] _allowlistEntries = Array.Empty<string>();
         private AddressAllowlist? _allowlist;
 
-        public PolicyEngine(Func<PolicySettings> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
+        // 全局告警计数器（RF / IF 共用）
+        // Global alert counter shared by RF and IF
+        private int _alertCounter;
+
+        public PolicyEngine(Func<Policy> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
         {
             _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
             _timeProvider = timeProvider;
             _logger = logger;
         }
 
-        public Decision Evaluate(DetectionResult result)
+        public Decision Evaluate(Alert result)
         {
             if (result == null)
             {
@@ -155,7 +159,7 @@ namespace PolarisSentinel.PolicyDecision
             return Task.CompletedTask;
         }
 
-        private AddressAllowlist GetAllowlist(PolicySettings settings)
+        private AddressAllowlist GetAllowlist(Policy settings)
         {
             var entries = settings.Allowlist ?? Array.Empty<string>();
             if (_allowlist == null || !entries.SequenceEqual(_allowlistEntries))
@@ -166,16 +170,18 @@ namespace PolarisSentinel.PolicyDecision
             return _allowlist;
         }
 
-        private Decision CreateDecision(DetectionResult result, PolicyAction action, string reason)
+        private Decision CreateDecision(Alert result, PolicyAction action, string reason)
         {
             var decision = new Decision
             {
-                AlertId = Guid.NewGuid(),
+                Id = string.Empty,
+                Name = string.Empty,
+                AlertId = EntityIds.Alert(result.Source, ++_alertCounter),
                 Action = action,
                 SourceIp = result.SourceIp,
                 AttackType = result.AttackType,
                 Confidence = result.Confidence,
-                Source = result.Source,
+                DetectionSource = result.Source,
                 DecidedAt = _timeProvider.GetUtcNow().UtcDateTime,
                 Reason = reason
             };

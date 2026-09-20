@@ -3,9 +3,11 @@ using PolarisSentinel.Core.Enums;
 namespace PolarisSentinel.Core.Models;
 
 // Stores an AI inference result with the 5-tuple that produced it.
+// Also serves as the inference engine output (merged from DetectionResult).
 public class Alert
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    // Human-readable id, e.g. "A-RF-1" / "A-IF-2".
+    public string Id { get; set; } = string.Empty;
 
     // 5-tuple
     public required string SourceIp { get; set; }

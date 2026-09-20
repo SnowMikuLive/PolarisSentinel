@@ -13,15 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PolarisSentienlTrafficCaptureTest\PolarisSentienlTrafficCaptureTest.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.Data.csproj" />
+<ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Data\PolarisSentinel.DataAccess.csproj" />
     <ProjectReference Include="..\PolarisSentinel.FirewallEnforement\PolarisSentinel.Firewall.csproj" />
     <ProjectReference Include="..\PolarisSentinel.Inference\PolarisSentinel.Inference.csproj" />
     <ProjectReference Include="..\PolarisSentinel.PolicyDecision\PolarisSentinel.PolicyDecision.csproj" />
     <ProjectReference Include="..\PolarisSentinel.TrafficCapture\PolarisSentinel.TrafficCapture.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.Utility\PolarisSentinel.Utility.csproj" />
-    <ProjectReference Include="..\PolarisSentinel\PolarisSentinel.Web.csproj" />
+    <ProjectReference Include="..\PolarisSentinel.Web\PolarisSentinel.Web.csproj" />
   </ItemGroup>
 
 </Project>

@@ -4,7 +4,7 @@ namespace PolarisSentinel.Core.Interfaces;
 
 public interface IPolicyEngine
 {
-    PolicyDecision Evaluate(DetectionResult result);
+    Policy Evaluate(Alert result);
 
     //Reloads the current policy configuration
     Task RefreshSettingsAsync();

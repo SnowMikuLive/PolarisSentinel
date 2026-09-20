@@ -121,7 +121,7 @@ namespace PolarisSentienlUnitTestProject
         [TestMethod]
         public void PolicyEngineEvaluateAllowlistIpShouldMonitor()
         {
-            var settings = new PolicySettings();
+            var settings = new Policy { Name = string.Empty };
             settings.Allowlist = new string[] { "8.8.8.8" };
             var engine = CreateEngine(settings);
             var detection = CreateDetectionResult();
@@ -161,7 +161,7 @@ namespace PolarisSentienlUnitTestProject
         public void PolicyEngineEvaluateAfterCooldownShouldBlockAgain()
         {
             var clock = new FakeTimeProvider();
-            var engine = CreateEngine(new PolicySettings(), clock);
+            var engine = CreateEngine(new Policy { Name = string.Empty }, clock);
             var detection = CreateDetectionResult();
             var first = engine.Evaluate(detection);
             // 冷却期满（60s）后可再次 Block
@@ -189,7 +189,7 @@ namespace PolarisSentienlUnitTestProject
         [TestMethod]
         public void PolicyEngineEvaluateAfterThresholdChangeShouldUseNewValue()
         {
-            var settings = new PolicySettings();
+            var settings = new Policy { Name = string.Empty };
             var engine = CreateEngine(settings);
             var detection = CreateDetectionResult("8.8.8.8", 0.65f, AttackTypes.DoS, DetectionSource.RandomForest);
 
@@ -198,7 +198,7 @@ namespace PolarisSentienlUnitTestProject
 
             // 修改阈值后下一次 Evaluate 立即生效
             // Next Evaluate uses updated threshold immediately
-            settings.RfConfidenceThreshold = 0.9;
+            settings.RfConfidenceThreshold = 0.9f;
             var after = engine.Evaluate(detection);
             Assert.AreEqual(PolicyAction.Ignore, after.Action);
         }
@@ -225,7 +225,7 @@ namespace PolarisSentienlUnitTestProject
             var detection = CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest);
             var first = engine.Evaluate(detection);
             var second = engine.Evaluate(detection);
-            Assert.AreNotEqual(Guid.Empty, first.AlertId);
+            Assert.IsFalse(string.IsNullOrEmpty(first.AlertId));
             Assert.AreNotEqual(first.AlertId, second.AlertId);
         }
 
@@ -235,34 +235,36 @@ namespace PolarisSentienlUnitTestProject
 
         private PolicyEngine CreateEngine()
         {
-            return CreateEngine(new PolicySettings(), TimeProvider.System);
+            return CreateEngine(new Policy { Name = string.Empty }, TimeProvider.System);
         }
 
-        private PolicyEngine CreateEngine(PolicySettings settings)
+        private PolicyEngine CreateEngine(Policy settings)
         {
             return CreateEngine(settings, TimeProvider.System);
         }
 
-        private PolicyEngine CreateEngine(PolicySettings settings, TimeProvider clock)
+        private PolicyEngine CreateEngine(Policy settings, TimeProvider clock)
         {
             return new PolicyEngine(() => settings, clock, NullLogger<PolicyEngine>.Instance);
         }
 
         // 默认公网高置信 DoS
         // Default high-confidence DoS from public IP
-        private DetectionResult CreateDetectionResult()
+        private Alert CreateDetectionResult()
         {
             return CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
         }
 
-        private DetectionResult CreateDetectionResult(string sourceIp, float confidence, string attackType, DetectionSource source)
+        private Alert CreateDetectionResult(string sourceIp, float confidence, string attackType, DetectionSource source)
         {
-            return new DetectionResult
+            return new Alert
             {
                 SourceIp = sourceIp,
+                DestinationIp = "192.168.1.10",
                 Confidence = confidence,
                 AttackType = attackType,
-                Source = source
+                Source = source,
+                Reason = string.Empty
             };
         }
 

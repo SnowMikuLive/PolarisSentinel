@@ -34,7 +34,7 @@ namespace PolarisSentienlUnitTestProject
             var featureNames = TrafficCaptureService.FeatureNames;
             Assert.HasCount(20, featureNames);
 
-            CollectionAssert.Contains(featureNames, "flow_duration_seconds");
+            CollectionAssert.Contains(featureNames, "flow_duration_ms");
             CollectionAssert.Contains(featureNames, "total_fwd_packets");
             CollectionAssert.Contains(featureNames, "total_bwd_packets");
             CollectionAssert.Contains(featureNames, "total_fwd_bytes");

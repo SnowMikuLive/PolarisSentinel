@@ -1,0 +1,57 @@
+@model PolarisSentinel.Core.Models.Policy
+@inject PolarisSentinel.Web.Service.SettingsService Settings
+@{
+    ViewData["Title"] = "Policy Details";
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary mb-3">Policy Details</h2>
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+            @Model.Name
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">ID</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">Name</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">Description</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.Description) ? "-" : Model.Description)</dd>
+
+                <dt class="col-sm-3">Owner (UserId)</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.UserId) ? "-" : Model.UserId)</dd>
+
+                <dt class="col-sm-3">Detection Source</dt>
+                <dd class="col-sm-9"><span class="badge bg-info text-dark">@Model.DetectionSource</span></dd>
+
+                <dt class="col-sm-3">Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
+
+                <dt class="col-sm-3">RF Confidence Threshold</dt>
+                <dd class="col-sm-9">@Model.RfConfidenceThreshold.ToString("0.00")</dd>
+
+                <dt class="col-sm-3">Auto Block Threshold</dt>
+                <dd class="col-sm-9">@Model.AutoBlockConfidenceThreshold.ToString("0.00")</dd>
+
+                <dt class="col-sm-3">Block Duration</dt>
+                <dd class="col-sm-9">@Model.BlockDurationMinutes minutes</dd>
+
+                <dt class="col-sm-3">Decision Cooldown</dt>
+                <dd class="col-sm-9">@Model.DecisionCooldownSeconds seconds</dd>
+
+                <dt class="col-sm-3">Active</dt>
+                <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+
+                <dt class="col-sm-3">Created At</dt>
+                <dd class="col-sm-9">@Settings.Format(Model.CreatedAt)</dd>
+            </dl>
+        </div>
+    </div>
+
+    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Edit</a>
+    <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
+</div>

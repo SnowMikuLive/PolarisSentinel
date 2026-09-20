@@ -25,12 +25,14 @@ namespace PolarisSentienlUnitTestProject
             // Arrange
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
-            var detection = new DetectionResult
+            var detection = new Alert
             {
                 SourceIp = "203.0.113.66",
+                DestinationIp = "192.168.1.10",
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                Source = DetectionSource.RandomForest
+                Source = DetectionSource.RandomForest,
+                Reason = string.Empty
             };
             var pipeline = CreatePipeline(detection, clock, firewall);
             var flow = CreateFlow(detection.SourceIp);
@@ -45,9 +47,9 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(firewall.IsDryRun);
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Block, second.Action);
-            Assert.AreEqual(DetectionSource.RandomForest, first.Source);
+            Assert.AreEqual(DetectionSource.RandomForest, first.DetectionSource);
             Assert.HasCount(1, rules);
-            Assert.AreEqual(FirewallRuleNaming.BuildRuleName(first.AlertId), rules[0].Name);
+            Assert.AreEqual(EntityIds.FirewallRule(first.AlertId), rules[0].Name);
             Assert.AreEqual(rules[0].Name, first.RuleName);
             Assert.AreEqual(first.RuleName, second.RuleName);
             Assert.AreNotEqual(first.AlertId, second.AlertId);
@@ -59,12 +61,14 @@ namespace PolarisSentienlUnitTestProject
             // Arrange
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
-            var detection = new DetectionResult
+            var detection = new Alert
             {
                 SourceIp = "203.0.113.66",
+                DestinationIp = "192.168.1.10",
                 AttackType = AttackTypes.UnknownAnomaly,
                 Confidence = 0.99f,
-                Source = DetectionSource.IsolationForest
+                Source = DetectionSource.IsolationForest,
+                Reason = string.Empty
             };
             var pipeline = CreatePipeline(detection, clock, firewall);
 
@@ -73,7 +77,7 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual(DetectionSource.IsolationForest, decision.Source);
+            Assert.AreEqual(DetectionSource.IsolationForest, decision.DetectionSource);
             Assert.IsNull(decision.RuleName);
             Assert.IsEmpty(firewall.GetAllRules());
         }
@@ -86,12 +90,14 @@ namespace PolarisSentienlUnitTestProject
             // Arrange
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
-            var detection = new DetectionResult
+            var detection = new Alert
             {
                 SourceIp = "192.168.1.5",
+                DestinationIp = "192.168.1.10",
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                Source = DetectionSource.RandomForest
+                Source = DetectionSource.RandomForest,
+                Reason = string.Empty
             };
             var pipeline = CreatePipeline(detection, clock, firewall);
 
@@ -116,10 +122,10 @@ namespace PolarisSentienlUnitTestProject
                 clock, NullLogger<WindowsFirewallEnforcer>.Instance);
         }
 
-        private DetectionPipeline CreatePipeline(DetectionResult detection, FakeTimeProvider clock,
+        private DetectionPipeline CreatePipeline(Alert detection, FakeTimeProvider clock,
             WindowsFirewallEnforcer firewall)
         {
-            var policy = new PolicyEngine(() => new PolicySettings(), clock,
+            var policy = new PolicyEngine(() => new Policy { Name = string.Empty }, clock,
                 NullLogger<PolicyEngine>.Instance);
             return new DetectionPipeline(new TestInferenceEngine(detection), policy, firewall,
                 60, NullLogger<DetectionPipeline>.Instance);
@@ -144,14 +150,14 @@ namespace PolarisSentienlUnitTestProject
         // Fixed inference result for testing policy and firewall together
         private class TestInferenceEngine : IInferenceEngine
         {
-            private readonly DetectionResult _result;
+            private readonly Alert _result;
 
-            public TestInferenceEngine(DetectionResult result)
+            public TestInferenceEngine(Alert result)
             {
                 _result = result;
             }
 
-            public DetectionResult Detect(FlowFeatureVector flow)
+            public Alert Detect(FlowFeatureVector flow)
             {
                 return _result;
             }

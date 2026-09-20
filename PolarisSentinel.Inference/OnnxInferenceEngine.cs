@@ -83,7 +83,7 @@ namespace PolarisSentinel.Inference
             _scoreAtHighConfidence = ParseDouble(anomalyMetadata["score_at_confidence_095"]);
         }
 
-        public DetectionResult Detect(FlowFeatureVector flow)
+        public Alert Detect(FlowFeatureVector flow)
         {
             if (flow.Features.Length != FeatureNames.Count)
             {
@@ -109,13 +109,7 @@ namespace PolarisSentinel.Inference
             string attackType = ClassNames[best];
             if (attackType != AttackTypes.Benign)
             {
-                return new DetectionResult
-                {
-                    AttackType = attackType,
-                    Confidence = probabilities[0, best],
-                    Source = DetectionSource.RandomForest,
-                    SourceIp = flow.SourceIp,
-                };
+                return CreateAlert(flow, attackType, probabilities[0, best], DetectionSource.RandomForest);
             }
 
             if (_anomalyDetector != null)
@@ -128,22 +122,28 @@ namespace PolarisSentinel.Inference
 
                 if (score < AnomalyThreshold!.Value)
                 {
-                    return new DetectionResult
-                    {
-                        AttackType = AttackTypes.UnknownAnomaly,
-                        Confidence = CalibrateConfidence(score),
-                        Source = DetectionSource.IsolationForest,
-                        SourceIp = flow.SourceIp,
-                    };
+                    return CreateAlert(flow, AttackTypes.UnknownAnomaly, CalibrateConfidence(score), DetectionSource.IsolationForest);
                 }
             }
 
-            return new DetectionResult
+            return CreateAlert(flow, AttackTypes.Benign, probabilities[0, best], DetectionSource.None);
+        }
+
+        // 推理只填充检测字段；Id / 决策字段由调用方补全
+        // Inference fills detection fields only; Id / decision fields are set by the caller
+        private static Alert CreateAlert(FlowFeatureVector flow, string attackType, float confidence, DetectionSource source)
+        {
+            return new Alert
             {
-                AttackType = AttackTypes.Benign,
-                Confidence = probabilities[0, best],
-                Source = DetectionSource.None,
+                AttackType = attackType,
+                Confidence = confidence,
+                Source = source,
                 SourceIp = flow.SourceIp,
+                DestinationIp = flow.DestinationIp,
+                SourcePort = flow.SourcePort,
+                DestinationPort = flow.DestinationPort,
+                Protocol = flow.Protocol,
+                Reason = string.Empty
             };
         }
 
