@@ -1,60 +1,53 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using PolarisSentinel.Core.Models;
-using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Isolated settings page: timezone + monitored NIC + policy settings.
+    // Isolated settings page: monitored NIC + detection thresholds + firewall.
     [Authorize]
     public class SettingsController : Controller
     {
         private readonly SettingsService _settings;
         private readonly CaptureControlService _capture;
-        private readonly IOptionsMonitor<Policy> _policySettings;
-        private readonly IOptionsMonitor<FirewallOptions> _firewallOptions;
 
-        public SettingsController(
-            SettingsService settings,
-            CaptureControlService capture,
-            IOptionsMonitor<Policy> policySettings,
-            IOptionsMonitor<FirewallOptions> firewallOptions)
+        public SettingsController(SettingsService settings, CaptureControlService capture)
         {
             _settings = settings;
             _capture = capture;
-            _policySettings = policySettings;
-            _firewallOptions = firewallOptions;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
-            ViewBag.TimeZones = SettingsService.AvailableTimeZones;
-            ViewBag.CurrentTimeZone = _settings.TimeZoneId;
+            var settings = await _settings.GetForCurrentUserAsync(cancellationToken);
+
             ViewBag.Devices = _capture.GetDevices().ToList();
             ViewBag.CurrentDevice = _capture.CurrentDevice;
-            ViewBag.Firewall = _firewallOptions.CurrentValue;
-            return View(_policySettings.CurrentValue);
+            ViewBag.UserId = _settings.CurrentUserId;
+            return View(settings);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Save(string timeZoneId, string deviceName, Policy policy, FirewallOptions firewall)
+        public async Task<IActionResult> Save(
+            UserSettings settings,
+            string? deviceName,
+            CancellationToken cancellationToken)
         {
-            if (!_settings.SetTimeZone(timeZoneId))
-            {
-                TempData["error"] = "Invalid time zone.";
-                return RedirectToAction(nameof(Index));
-            }
+            // 表单留空时模型绑定会把字符串置为 null，但列不允许为 null
+            // Model binding sets empty text inputs to null, but the column is NOT NULL
+            settings.Allowlist = settings.Allowlist?.Trim() ?? string.Empty;
+
+            // Owner always comes from the signed-in user, never from the posted form.
+            settings.UserId = _settings.CurrentUserId;
 
             if (!string.IsNullOrWhiteSpace(deviceName))
             {
                 _capture.SwitchTo(deviceName);
             }
 
-            _settings.SavePolicySettings(policy);
-            _settings.SaveFirewallOptions(firewall);
+            await _settings.SaveForCurrentUserAsync(settings, cancellationToken);
             TempData["success"] = "Settings saved.";
             return RedirectToAction(nameof(Index));
         }

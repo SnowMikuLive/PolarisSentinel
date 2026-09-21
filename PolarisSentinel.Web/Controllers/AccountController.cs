@@ -55,8 +55,7 @@ namespace PolarisSentinel.Web.Controllers
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
                     else
-                        //There is no Dashboard controller yet; Home/Index is the live dashboard.
-                        return RedirectToAction("Index", "Home");
+                        return RedirectToAction("Index", "Dashboard");
                 }
                 else
                 {
@@ -78,7 +77,7 @@ namespace PolarisSentinel.Web.Controllers
         {
             //Sign out
             await _signInManager.SignOutAsync();
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Index", "Dashboard");
         }
         
     }

@@ -4,7 +4,6 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using Decision = PolarisSentinel.Core.Models.Policy;
 
 namespace PolarisSentinel.PolicyDecision
 {
@@ -12,7 +11,7 @@ namespace PolarisSentinel.PolicyDecision
     //Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
     public class PolicyEngine : IPolicyEngine
     {
-        private readonly Func<Policy> _settingsProvider;
+        private readonly Func<UserSettings> _settingsProvider;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<PolicyEngine> _logger;
         private readonly object _lock = new object();
@@ -24,14 +23,14 @@ namespace PolarisSentinel.PolicyDecision
         //Global alert counter shared by RF and IF
         private int _alertCounter;
 
-        public PolicyEngine(Func<Policy> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
+        public PolicyEngine(Func<UserSettings> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
         {
             _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
             _timeProvider = timeProvider;
             _logger = logger;
         }
 
-        public Decision Evaluate(Alert result)
+        public Alert Evaluate(Alert result)
         {
             if (result == null)
             {
@@ -49,6 +48,22 @@ namespace PolarisSentinel.PolicyDecision
                 if (result.Source == DetectionSource.None || result.AttackType == AttackTypes.Benign)
                 {
                     return CreateDecision(result, PolicyAction.Ignore, "benign_or_no_detection");
+                }
+
+                // Rule-based pre-filter verdicts are trusted: block without a confidence check.
+                if (result.Source == DetectionSource.PreFilter)
+                {
+                    if (GetAllowlist(settings).Contains(result.SourceIp))
+                    {
+                        return CreateDecision(result, PolicyAction.Monitor, "allowlist: Block downgraded to Monitor");
+                    }
+
+                    if (!TryRecordBlock(result.SourceIp, cooldown))
+                    {
+                        return CreateDecision(result, PolicyAction.Ignore, "cooldown");
+                    }
+
+                    return CreateDecision(result, PolicyAction.Block, "prefilter_block");
                 }
 
                 if (!float.IsFinite(result.Confidence) || result.Confidence < 0 || result.Confidence > 1)
@@ -159,9 +174,25 @@ namespace PolarisSentinel.PolicyDecision
             return Task.CompletedTask;
         }
 
-        private AddressAllowlist GetAllowlist(Policy settings)
+        // 用已有告警的最大编号初始化计数器
+        // Seed the alert counter from the highest existing alert number
+        public void InitializeAlertCounter(int maxExistingNumber)
         {
-            var entries = settings.Allowlist ?? Array.Empty<string>();
+            lock (_lock)
+            {
+                if (maxExistingNumber > _alertCounter)
+                {
+                    _alertCounter = maxExistingNumber;
+                }
+            }
+            _logger.LogInformation("Alert counter initialised at {Counter}", _alertCounter);
+        }
+
+        private AddressAllowlist GetAllowlist(UserSettings settings)
+        {
+            var entries = string.IsNullOrWhiteSpace(settings.Allowlist)
+                ? Array.Empty<string>()
+                : settings.Allowlist.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (_allowlist == null || !entries.SequenceEqual(_allowlistEntries))
             {
                 _allowlistEntries = entries.ToArray();
@@ -170,28 +201,21 @@ namespace PolarisSentinel.PolicyDecision
             return _allowlist;
         }
 
-        private Decision CreateDecision(Alert result, PolicyAction action, string reason)
+        // 将决策写回告警并返回
+        // Write the decision onto the alert and return it
+        private Alert CreateDecision(Alert result, PolicyAction action, string reason)
         {
-            var decision = new Decision
-            {
-                Id = string.Empty,
-                Name = string.Empty,
-                AlertId = EntityIds.Alert(result.Source, ++_alertCounter),
-                Action = action,
-                SourceIp = result.SourceIp,
-                AttackType = result.AttackType,
-                Confidence = result.Confidence,
-                DetectionSource = result.Source,
-                DecidedAt = _timeProvider.GetUtcNow().UtcDateTime,
-                Reason = reason
-            };
+            result.Id = EntityIds.Alert(result.Source, ++_alertCounter);
+            result.Action = action;
+            result.DecidedAt = _timeProvider.GetUtcNow().UtcDateTime;
+            result.Reason = reason;
 
             _logger.LogDebug(
                 "Policy decision {AlertId}: {Action} for {SourceIp}, attack {AttackType}, confidence {Confidence}, reason {Reason}",
-                decision.AlertId, decision.Action, decision.SourceIp,
-                decision.AttackType, decision.Confidence, decision.Reason);
+                result.Id, result.Action, result.SourceIp,
+                result.AttackType, result.Confidence, result.Reason);
 
-            return decision;
+            return result;
         }
     }
 }

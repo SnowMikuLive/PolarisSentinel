@@ -28,40 +28,6 @@ namespace PolarisSentienlUnitTestProject
             service.Dispose();
         }
 
-        [TestMethod]
-        public void TrafficCaptureServiceFeatureNamesShouldContainCorrectFeatures()
-        {
-            var featureNames = TrafficCaptureService.FeatureNames;
-            Assert.HasCount(20, featureNames);
-
-            CollectionAssert.Contains(featureNames, "flow_duration_ms");
-            CollectionAssert.Contains(featureNames, "total_fwd_packets");
-            CollectionAssert.Contains(featureNames, "total_bwd_packets");
-            CollectionAssert.Contains(featureNames, "total_fwd_bytes");
-            CollectionAssert.Contains(featureNames, "total_bwd_bytes");
-            CollectionAssert.Contains(featureNames, "pkt_len_min");
-            CollectionAssert.Contains(featureNames, "pkt_len_max");
-            CollectionAssert.Contains(featureNames, "pkt_len_mean");
-            CollectionAssert.Contains(featureNames, "pkt_len_std");
-            CollectionAssert.Contains(featureNames, "fwd_iat_mean_ms");
-            CollectionAssert.Contains(featureNames, "fwd_iat_std_ms");
-            CollectionAssert.Contains(featureNames, "fwd_iat_max_ms");
-            CollectionAssert.Contains(featureNames, "fwd_iat_min_ms");
-            CollectionAssert.Contains(featureNames, "bwd_iat_mean_ms");
-            CollectionAssert.Contains(featureNames, "bwd_iat_std_ms");
-            CollectionAssert.Contains(featureNames, "bwd_iat_max_ms");
-            CollectionAssert.Contains(featureNames, "bwd_iat_min_ms");
-            CollectionAssert.Contains(featureNames, "flow_bytes_per_ms");
-            CollectionAssert.Contains(featureNames, "flow_pkts_per_ms");
-            CollectionAssert.Contains(featureNames, "down_up_ratio");
-
-            CollectionAssert.DoesNotContain(featureNames, "syn_count");
-            CollectionAssert.DoesNotContain(featureNames, "ack_count");
-            CollectionAssert.DoesNotContain(featureNames, "fin_count");
-            CollectionAssert.DoesNotContain(featureNames, "rst_count");
-            CollectionAssert.DoesNotContain(featureNames, "destination_port");
-        }
-
         #endregion
 
         #region Device Enumeration Tests

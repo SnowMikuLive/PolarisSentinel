@@ -6,6 +6,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -60,7 +61,7 @@ namespace PolarisSentinel.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("Name,Description,DetectionSource,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
+            [Bind("Name,Description,Action,IsActive")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -103,7 +104,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             string id,
-            [Bind("Id,Name,Description,DetectionSource,Action,RfConfidenceThreshold,AutoBlockConfidenceThreshold,BlockDurationMinutes,DecisionCooldownSeconds,IsActive")]
+            [Bind("Id,Name,Description,Action,IsActive")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -182,7 +183,6 @@ namespace PolarisSentinel.Web.Controllers
         private void PopulateLists()
         {
             ViewBag.Actions = new SelectList(Enum.GetValues<PolicyAction>());
-            ViewBag.DetectionSources = new SelectList(Enum.GetValues<DetectionSource>());
         }
     }
 }

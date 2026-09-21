@@ -94,21 +94,21 @@ namespace PolarisSentienlUnitTestProject
                 NullLogger<WindowsFirewallEnforcer>.Instance);
         }
 
-        //默认使用RFC 5737文档地址
-        //Default uses RFC 5737 documentation addresses
-        private Policy CreateDecision()
+        // 默认使用 RFC 5737 文档地址
+        // Default uses RFC 5737 documentation addresses
+        private Alert CreateDecision()
         {
-            return new Policy
+            return new Alert
             {
-                Id = string.Empty,
-                Name = string.Empty,
-                AlertId = EntityIds.Alert(DetectionSource.RandomForest, 1),
+                Id = EntityIds.Alert(DetectionSource.RandomForest, 1),
                 Action = PolicyAction.Block,
                 SourceIp = "203.0.113.66",
+                DestinationIp = "192.168.1.10",
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                DetectionSource = DetectionSource.RandomForest,
-                DecidedAt = DateTime.UtcNow
+                Source = DetectionSource.RandomForest,
+                DecidedAt = DateTime.UtcNow,
+                Reason = "test"
             };
         }
 

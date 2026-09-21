@@ -1,4 +1,4 @@
-namespace PolarisSentinel.Core.Enums;
+﻿namespace PolarisSentinel.Core.Enums;
 
 // Whether a firewall rule is currently in effect.
 public enum RuleStatus

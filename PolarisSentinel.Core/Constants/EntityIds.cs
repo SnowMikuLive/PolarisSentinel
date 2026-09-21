@@ -17,10 +17,15 @@ public static class EntityIds
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
 
-    // Source tag: RandomForest -> RF, IsolationForest -> IF, otherwise RF.
+    // Source tag: RandomForest -> RF, IsolationForest -> IF, PreFilter -> PF, otherwise RF.
     public static string Alert(DetectionSource source, int number)
     {
-        string tag = source == DetectionSource.IsolationForest ? "IF" : "RF";
+        string tag = source switch
+        {
+            DetectionSource.IsolationForest => "IF",
+            DetectionSource.PreFilter => "PF",
+            _ => "RF"
+        };
         return $"{AlertPrefix}{tag}-{number}";
     }
 

@@ -1,5 +1,5 @@
 @model PolarisSentinel.Core.Models.Alert
-@inject PolarisSentinel.Web.Service.SettingsService Settings
+@using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Alert Details";
 }
@@ -38,9 +38,6 @@
                 <dt class="col-sm-3">Attack Type</dt>
                 <dd class="col-sm-9">@Model.AttackType</dd>
 
-                <dt class="col-sm-3">Severity</dt>
-                <dd class="col-sm-9">@(Model.Severity?.ToString() ?? "-")</dd>
-
                 <dt class="col-sm-3">Confidence</dt>
                 <dd class="col-sm-9">@Model.Confidence.ToString("0.000")</dd>
 
@@ -48,7 +45,7 @@
                 <dd class="col-sm-9">@Model.Source</dd>
 
                 <dt class="col-sm-3">Detected At</dt>
-                <dd class="col-sm-9">@Settings.Format(Model.DetectedAt)</dd>
+                <dd class="col-sm-9">@SettingsService.Format(Model.DetectedAt)</dd>
             </dl>
         </div>
     </div>

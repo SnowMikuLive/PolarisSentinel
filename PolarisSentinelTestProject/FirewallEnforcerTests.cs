@@ -44,11 +44,11 @@ namespace PolarisSentienlUnitTestProject
             var rule = engine.GetAllRules().Single();
 
             // Assert
-            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rule.Name);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.Id), rule.Name);
             Assert.AreEqual(decision.SourceIp, rule.RemoteAddress);
             Assert.IsTrue(rule.Enabled);
-            Assert.IsTrue(rule.IsBlockRule);
-            Assert.AreEqual(decision.AlertId, rule.AlertId);
+            Assert.AreEqual(PolicyAction.Block, rule.Action);
+            Assert.AreEqual(decision.Id, rule.AlertId);
             Assert.AreEqual(decision.AttackType, rule.AttackType);
             Assert.AreEqual(createdAt.UtcDateTime, rule.CreatedAt);
             Assert.AreEqual(createdAt.AddMinutes(60).UtcDateTime, rule.ExpiresAt);
@@ -73,7 +73,7 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.HasCount(1, rules);
-            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rules[0].Name);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.Id), rules[0].Name);
             Assert.AreEqual(createdAt.UtcDateTime, rules[0].CreatedAt);
             Assert.AreEqual(createdAt.AddMinutes(65).UtcDateTime, rules[0].ExpiresAt);
         }
@@ -147,7 +147,7 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.HasCount(1, rules);
-            Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rules[0].Name);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.Id), rules[0].Name);
         }
 
         //仅删除已过期规则
@@ -210,19 +210,19 @@ namespace PolarisSentienlUnitTestProject
         //Default uses RFC 5737 documentation addresses
         private int _alertCounter;
 
-        private Policy CreateDecision(string ip = "203.0.113.66", PolicyAction action = PolicyAction.Block)
+        private Alert CreateDecision(string ip = "203.0.113.66", PolicyAction action = PolicyAction.Block)
         {
-            return new Policy
+            return new Alert
             {
-                Id = string.Empty,
-                Name = string.Empty,
-                AlertId = EntityIds.Alert(DetectionSource.RandomForest, ++_alertCounter),
+                Id = EntityIds.Alert(DetectionSource.RandomForest, ++_alertCounter),
                 Action = action,
                 SourceIp = ip,
+                DestinationIp = "192.168.1.10",
                 AttackType = AttackTypes.DoS,
                 Confidence = 0.95f,
-                DetectionSource = DetectionSource.RandomForest,
-                DecidedAt = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc)
+                Source = DetectionSource.RandomForest,
+                DecidedAt = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc),
+                Reason = "test"
             };
         }
 
