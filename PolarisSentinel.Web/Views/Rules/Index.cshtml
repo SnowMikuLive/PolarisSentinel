@@ -1,5 +1,4 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.Rule>
-@using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Firewall Rules";
     //Read policy list and enums from ViewBag
@@ -12,14 +11,6 @@
 
     @* Top action bar *@
     <div class="d-flex justify-content-between align-items-center mb-3">
-<<<<<<< HEAD
-        <h2 class="text-primary">Rules</h2>
-        <div class="d-flex gap-2">
-            <a asp-action="Create" class="btn btn-primary">Create New</a>
-            <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
-                <button type="submit" class="btn btn-outline-danger">Remove All</button>
-            </form>
-=======
         <div>
             <button class="btn btn-primary" id="btnNewRule">
                 + New Rule
@@ -44,42 +35,24 @@
                 <option value="Monitor">Monitor</option>
                 <option value="Ignore">Ignore</option>
             </select>
->>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
         </div>
     </div>
 
     @* Rules table *@
     <div class="card shadow-sm border-primary">
         <div class="card-body p-0">
-<<<<<<< HEAD
-            <table class="table table-striped table-hover mb-0 align-middle">
-                <thead>
-                    <tr>
-                        <th>Remote Address</th>
-                        <th>Action</th>
-                        <th>Enabled</th>
-                        <th>Policy</th>
-                        <th>Alert</th>
-                        <th>Created</th>
-                        <th>Expires</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model.Count == 0)
-                    {
-=======
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0 align-middle">
                     <thead>
                         @* the data from the  *@
->>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
                         <tr>
                             @* No automatic line breaks *@
                             <th class="text-nowrap">Rule ID</th>
+                            <th class="text-nowrap">Name</th>
                             <th class="text-nowrap">Target</th>
                             @* display the action of rule:Block/Monitor/Ignore *@
                             <th class="text-nowrap">Rule Action</th>
+                            <th class="text-nowrap">Attack Type</th>
                             <th class="text-nowrap">Source</th>
                             <th class="text-nowrap">Policy</th>
                             <th class="text-nowrap">Status</th>
@@ -91,48 +64,8 @@
                     </thead>
                     <tbody id="rulesTableBody">
                         <tr>
-<<<<<<< HEAD
-                            <td class="fw-bold">@item.RemoteAddress</td>
-                            <td><span class="badge bg-secondary">@item.Action</span></td>
-                            <td>
-                                @if (item.Enabled)
-                                {
-                                    <span class="badge bg-success">Enabled</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">Disabled</span>
-                                }
-                            </td>
-                            <td>
-                                @if (!string.IsNullOrEmpty(item.PolicyId))
-                                {
-                                    <a asp-controller="Policies" asp-action="Details" asp-route-id="@item.PolicyId">@item.PolicyId</a>
-                                }
-                                else
-                                {
-                                    <span class="text-muted">-</span>
-                                }
-                            </td>
-                            <td>
-                                @if (!string.IsNullOrEmpty(item.AlertId))
-                                {
-                                    <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@item.AlertId">@item.AlertId</a>
-                                }
-                                else
-                                {
-                                    <span class="text-muted">-</span>
-                                }
-                            </td>
-                            <td>@(item.CreatedAt == default ? "-" : SettingsService.Format(item.CreatedAt))</td>
-                            <td>@(item.ExpiresAt != null ? SettingsService.Format(item.ExpiresAt.Value) : "-")</td>
-                            <td class="text-end">
-                                <a asp-action="Edit" asp-route-name="@item.Name" class="btn btn-sm btn-outline-primary">Edit</a>
-                                <a asp-action="Delete" asp-route-name="@item.Name" class="btn btn-sm btn-outline-danger">Delete</a>
-                            </td>
-=======
-                            <td colspan="9" class="text-center text-muted py-3">Loading...</td>
->>>>>>> 80510616b2f84665ba747efd424dbb38672dd3d1
+                            <td colspan="11" class="text-center text-muted py-3">Loading...</td>
+                            
                         </tr>
                     </tbody>
                 </table>
@@ -287,8 +220,8 @@
                 (!statusFilter||getEffectiveStatus(r)===statusFilter)&&(!actionFilter||r.action===actionFilter)
             );
             if (filtered.length===0){
-                //colspan: in here means conbine 9 cells
-                body.innerHTML=`<tr><td colspan="9" class="text-center text-muted py-3">No rules found.</td></tr>`;
+                //colspan: in here means conbine 11 cells
+                body.innerHTML=`<tr><td colspan="11" class="text-center text-muted py-3">No rules found.</td></tr>`;
             }else{
                 filtered.forEach(r=>{
                     const tr=document.createElement('tr');
@@ -322,11 +255,20 @@
                     };
                     const st=statusMap[effectiveStatus]||statusMap['Inactive'];
                     const statusBadge=`<span class="badge" style="background:${st.bg};color:${st.color};">${effectiveStatus}</span>`;
+
+                    //Name Column cut it if too long
+                    const nameDisplay=r.name?(r.name.length>25?r.name.substring(0,25)+'...':r.name):'-';
+                    //Attack Type column
+                    const attackTypeDisplay=r.attackType||'-';
+
                     // put the data in
+                    //title="${r.name}" :Makes it display the full name when the mouse hovers over it.
                     tr.innerHTML=`
                         <td class="fw-bold text-nowrap">${shortId}</td>
+                        <td class="text-nowrap" title="${r.name||''}">${nameDisplay}</td>
                         <td class="text-nowrap">${r.remoteAddress}</td>
                         <td class="text-nowrap">${actionBadge}</td>
+                        <td class="text-nowrap">${attackTypeDisplay}</td>
                         <td class="text-nowrap">${sourceTag}</td>
                         <td class="text-nowrap">${r.policyName||'-'}</td>
                         <td class="text-nowrap">${statusBadge}</td>
