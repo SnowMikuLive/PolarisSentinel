@@ -47,9 +47,11 @@
                         <tr>
                             @* No automatic line breaks *@
                             <th class="text-nowrap">Rule ID</th>
+                            <th class="text-nowrap">Name</th>
                             <th class="text-nowrap">Target</th>
                             @* display the action of rule:Block/Monitor/Ignore *@
                             <th class="text-nowrap">Rule Action</th>
+                            <th class="text-nowrap">Attack Type</th>
                             <th class="text-nowrap">Source</th>
                             <th class="text-nowrap">Policy</th>
                             <th class="text-nowrap">Status</th>
@@ -61,7 +63,7 @@
                     </thead>
                     <tbody id="rulesTableBody">
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-3">Loading...</td>
+                            <td colspan="11" class="text-center text-muted py-3">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -216,8 +218,8 @@
                 (!statusFilter||getEffectiveStatus(r)===statusFilter)&&(!actionFilter||r.action===actionFilter)
             );
             if (filtered.length===0){
-                //colspan: in here means conbine 9 cells
-                body.innerHTML=`<tr><td colspan="9" class="text-center text-muted py-3">No rules found.</td></tr>`;
+                //colspan: in here means conbine 11 cells
+                body.innerHTML=`<tr><td colspan="11" class="text-center text-muted py-3">No rules found.</td></tr>`;
             }else{
                 filtered.forEach(r=>{
                     const tr=document.createElement('tr');
@@ -251,11 +253,20 @@
                     };
                     const st=statusMap[effectiveStatus]||statusMap['Inactive'];
                     const statusBadge=`<span class="badge" style="background:${st.bg};color:${st.color};">${effectiveStatus}</span>`;
+
+                    //Name Column cut it if too long
+                    const nameDisplay=r.name?(r.name.length>25?r.name.substring(0,25)+'...':r.name):'-';
+                    //Attack Type column
+                    const attackTypeDisplay=r.attackType||'-';
+
                     // put the data in
+                    //title="${r.name}" :Makes it display the full name when the mouse hovers over it.
                     tr.innerHTML=`
                         <td class="fw-bold text-nowrap">${shortId}</td>
+                        <td class="text-nowrap" title="${r.name||''}">${nameDisplay}</td>
                         <td class="text-nowrap">${r.remoteAddress}</td>
                         <td class="text-nowrap">${actionBadge}</td>
+                        <td class="text-nowrap">${attackTypeDisplay}</td>
                         <td class="text-nowrap">${sourceTag}</td>
                         <td class="text-nowrap">${r.policyName||'-'}</td>
                         <td class="text-nowrap">${statusBadge}</td>

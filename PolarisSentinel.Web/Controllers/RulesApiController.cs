@@ -28,12 +28,16 @@ namespace PolarisSentinel.Web.Controllers
             var result = rules.Select(r => new
             {
                 id = r.Id,
+                name=r.Name,
                 remoteAddress = r.RemoteAddress,
                 action = r.Action.ToString(),
                 status = r.Status.ToString(),
                 policyId = r.PolicyId,
                 policyName = r.Policy != null ? r.Policy.Name : null,
                 alertId = r.AlertId,
+                attackType=r.AttackType,
+                enabled=r.Enabled,
+                isBlockRule=r.IsBlockRule,
                 createdAt = r.CreatedAt,
                 expiresAt = r.ExpiresAt
             });

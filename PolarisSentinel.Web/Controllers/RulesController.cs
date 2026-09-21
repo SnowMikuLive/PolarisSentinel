@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -23,6 +24,10 @@ namespace PolarisSentinel.Web.Controllers
         // List: live rules enriched with audit links
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
+            //Add: Set ViewBag for modal dropsowns of politicies in the + New Rule
+            var policies = await _uow.Policies.GetAllAsync(cancellationToken);
+            ViewBag.Policies = policies.Select(p => new { p.Id, p.Name }).ToList();
+
             var live = _firewall.GetAllRules().ToList();
             var audit = await _uow.Rules.GetAllAsync(cancellationToken);
 
