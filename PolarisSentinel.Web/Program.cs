@@ -122,12 +122,14 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<PolicyEngine>>()));
 
             // Firewall enforcer persists rules through the rule repository.
+            // The alert repository lets it verify the FK parent exists before linking AlertId.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>
                 new WindowsFirewallEnforcer(
                     new RuleRepository(sp.GetRequiredService<SentinelDbContext>()),
                     sp.GetRequiredService<IOptions<FirewallOptions>>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
+                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>(),
+                    new AlertRepository(sp.GetRequiredService<SentinelDbContext>())));
 
             // Detection pipeline (capture verdict -> inference -> policy -> enforcement).
             builder.Services.AddScoped<IDetectionPipeline>(sp =>

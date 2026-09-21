@@ -45,6 +45,45 @@ namespace PolarisSentienlUnitTestProject
             Assert.StartsWith("A-PF-", decision.Id);
         }
 
+        // The PF tag must survive into the firewall rule name.
+        [TestMethod]
+        public void PreFilterVerdict_ShouldUsePfTagInRuleName()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var pipeline = CreatePipeline(clock, firewall);
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), CreatePolicy());
+
+            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.AreEqual($"PolarisSentinel_Block_{decision.Id}", decision.RuleName);
+            Assert.AreEqual(decision.RuleName, firewall.GetAllRules()[0].Name);
+        }
+
+        // Every detection source maps onto its own alert tag.
+        [TestMethod]
+        public void AlertId_ShouldTagEveryDetectionSource()
+        {
+            Assert.AreEqual("A-PF-7", EntityIds.Alert(DetectionSource.PreFilter, 7));
+            Assert.AreEqual("A-RF-7", EntityIds.Alert(DetectionSource.RandomForest, 7));
+            Assert.AreEqual("A-IF-7", EntityIds.Alert(DetectionSource.IsolationForest, 7));
+        }
+
+        // A pre-filter alert keeps the PF tag even when the policy does not act on it.
+        [TestMethod]
+        public void PreFilterVerdict_NoMatch_ShouldStillUsePfAlertId()
+        {
+            var clock = new FakeTimeProvider();
+            var pipeline = CreatePipeline(clock, CreateFirewall(clock));
+            var policy = CreatePolicy();
+            policy.MatchAttackTypes = AttackTypes.BruteForce;
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), policy);
+
+            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.StartsWith("A-PF-", decision.Id);
+        }
+
         // The pre-filter alert carries the flow's 5-tuple.
         [TestMethod]
         public void PreFilterVerdict_ShouldCarryFiveTuple()

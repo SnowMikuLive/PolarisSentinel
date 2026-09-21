@@ -53,7 +53,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("PolarisSentinel_Block_R-1", rule.Name);
         }
 
-        // A detector rule still keeps its alert id in the name.
+        // A detector rule still keeps its alert id in the rule name.
         [TestMethod]
         public void DetectorRule_Block_ShouldKeepAlertIdInName()
         {
@@ -63,7 +63,8 @@ namespace PolarisSentienlUnitTestProject
                 PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.AreEqual("PolarisSentinel_Block_A-RF-1", rule.Name);
-            Assert.AreEqual("A-RF-1", rule.AlertId);
+            // No alert repository is wired here, so the FK link stays null.
+            Assert.IsNull(rule.AlertId);
         }
 
         private static (WindowsFirewallEnforcer Enforcer, FakeRuleRepository Repository) CreateEnforcer()

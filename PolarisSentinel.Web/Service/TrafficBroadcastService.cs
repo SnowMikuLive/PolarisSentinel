@@ -72,9 +72,13 @@ namespace PolarisSentinel.Web.Service
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var pipeline = scope.ServiceProvider.GetRequiredService<IDetectionPipeline>();
 
-                // A background service has no request context, so the owner comes from the seeded policy.
-                var policy = await unitOfWork.Policies.GetAllAsync();
-                var activePolicy = policy.FirstOrDefault() ?? new Policy();
+                var policies = await unitOfWork.Policies.GetAllAsync();
+                var activePolicy = SelectPolicy(policies, flow);
+                if (activePolicy == null)
+                {
+                    _logger.LogDebug("No policy matches flow from {SourceIp}", flow.SourceIp);
+                    return;
+                }
 
                 var decision = pipeline.ProcessFlow(flow, activePolicy);
                 _logger.LogInformation(
@@ -119,6 +123,68 @@ namespace PolarisSentinel.Web.Service
             _trafficCaptureService.OnLiveTrafficSummary -= OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted -= OnFlowCompletedHandler;
             return Task.CompletedTask;
+        }
+
+        private static Policy? SelectPolicy(IReadOnlyList<Policy> policies, FlowFeatureVector flow)
+        {
+            var verdict = flow.PreFilterVerdict;
+
+            Policy? best = null;
+            int bestScore = -1;
+
+            foreach (var policy in policies)
+            {
+                if (!MatchesSource(policy, verdict != null))
+                {
+                    continue;
+                }
+
+                if (verdict != null && !MatchesAttackType(policy, verdict.AttackType))
+                {
+                    continue;
+                }
+
+                if (policy.MatchProtocol != 0 && policy.MatchProtocol != flow.Protocol)
+                {
+                    continue;
+                }
+
+                int score = 0;
+                if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
+                {
+                    score += 2;
+                }
+                if (policy.MatchProtocol != 0)
+                {
+                    score += 1;
+                }
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = policy;
+                }
+            }
+
+            return best;
+        }
+
+        private static bool MatchesSource(Policy policy, bool isPreFilter)
+        {
+            return isPreFilter
+                ? policy.DetectionSource == DetectionSource.PreFilter
+                : policy.DetectionSource != DetectionSource.PreFilter;
+        }
+
+        private static bool MatchesAttackType(Policy policy, string attackType)
+        {
+            if (string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
+            {
+                return true;
+            }
+
+            var entries = policy.MatchAttackTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return entries.Any(e => string.Equals(e, attackType, StringComparison.OrdinalIgnoreCase));
         }
 
         public void Dispose()

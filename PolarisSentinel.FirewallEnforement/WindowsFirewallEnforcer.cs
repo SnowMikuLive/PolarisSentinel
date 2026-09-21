@@ -15,6 +15,7 @@ namespace PolarisSentinel.FirewallEnforement
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
+        private readonly IAlertRepository? _alerts;
         private readonly WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
@@ -26,9 +27,11 @@ namespace PolarisSentinel.FirewallEnforement
             IRuleRepository rules,
             IOptions<FirewallOptions> options,
             TimeProvider timeProvider,
-            ILogger<WindowsFirewallEnforcer> logger)
+            ILogger<WindowsFirewallEnforcer> logger,
+            IAlertRepository? alerts = null)
         {
             _rules = rules;
+            _alerts = alerts;
             _timeProvider = timeProvider;
             _logger = logger;
 
@@ -127,9 +130,9 @@ namespace PolarisSentinel.FirewallEnforement
                     Id = ruleId,
                     Name = ruleName,
                     PolicyId = null,
-                    // Null for manual rules: AlertId is a foreign key, so a synthetic
-                    // value that is not in the Alerts table would violate it.
-                    AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
+                    // AlertId is a foreign key into Alerts, and the caller may not have
+                    // persisted the alert yet, so only link it when the row exists.
+                    AlertId = AlertExists(alertId) ? alertId : null,
                     Action = action,
                     Enabled = true,
                     AttackType = attackType,
@@ -306,6 +309,16 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 _firewall.Remove(ruleName);
             }
+        }
+
+        private bool AlertExists(string? alertId)
+        {
+            if (string.IsNullOrEmpty(alertId) || _alerts == null)
+            {
+                return false;
+            }
+
+            return _alerts.GetByIdAsync(alertId).GetAwaiter().GetResult() != null;
         }
 
         // Next "R-n" id, scanned from the stored rules.
