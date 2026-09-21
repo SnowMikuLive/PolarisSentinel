@@ -4,8 +4,8 @@ using PolarisSentinel.FirewallEnforement;
 
 namespace PolarisSentinel.Web.Service
 {
-    // 启动时及定时删除过期规则
-    // Remove expired rules at startup and at regular intervals
+    //启动时及定时删除过期规则
+    //Remove expired rules at startup and at regular intervals
     public class FirewallRuleSweeper : BackgroundService
     {
         private readonly IFirewallEnforcer _firewall;
@@ -38,8 +38,8 @@ namespace PolarisSentinel.Web.Service
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // 服务停止时结束等待
-                // End the wait when the service stops
+                //服务停止时结束等待
+                //End the wait when the service stops
             }
         }
     }

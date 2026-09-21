@@ -54,8 +54,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(createdAt.AddMinutes(60).UtcDateTime, rule.ExpiresAt);
         }
 
-        // 同 IP 复用规则，只延长过期时间
-        // Reuse rule for same IP; extend expiry only
+        //同IP复用规则，只延长过期时间
+        //Reuse rule for same IP; extend expiry only
         [TestMethod]
         public void FirewallEnforcer_SameIp_ShouldExtendExpiryWithoutAddingRule()
         {
@@ -82,8 +82,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Validation Tests
 
-        // 非 Block 或无效 IP 不创建规则
-        // Non-Block or invalid IP requests do not create rules
+        //非Block或无效IP不创建规则
+        //Non-Block or invalid IP requests do not create rules
 
         [TestMethod]
         public void FirewallEnforcer_Monitor_ShouldNotCreateRule()
@@ -150,8 +150,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(EntityIds.FirewallRule(decision.AlertId), rules[0].Name);
         }
 
-        // 仅删除已过期规则
-        // Remove only expired rules
+        //仅删除已过期规则
+        //Remove only expired rules
         [TestMethod]
         public void FirewallEnforcer_RemoveExpired_ShouldKeepActiveRule()
         {
@@ -192,8 +192,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Helper Methods
 
-        // 默认 DryRun，测试只操作内存规则
-        // Default DryRun keeps test rules in memory
+        //默认DryRun，测试只操作内存规则
+        //Default DryRun keeps test rules in memory
         private WindowsFirewallEnforcer CreateEngine(FakeTimeProvider clock)
         {
             var options = Options.Create(new FirewallOptions());
@@ -206,8 +206,8 @@ namespace PolarisSentienlUnitTestProject
             return new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero));
         }
 
-        // 默认使用 RFC 5737 文档地址
-        // Default uses RFC 5737 documentation addresses
+        //默认使用RFC 5737文档地址
+        //Default uses RFC 5737 documentation addresses
         private int _alertCounter;
 
         private Policy CreateDecision(string ip = "203.0.113.66", PolicyAction action = PolicyAction.Block)

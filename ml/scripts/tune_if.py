@@ -1,5 +1,5 @@
-# 为 RF 未告警的流量调优 IF。输出: if_winner.joblib, metrics_if_system.json
-# Tune IF for flows without an RF alert. Outputs: if_winner.joblib, metrics_if_system.json
+#为RF未告警的流量调优IF。输出:if_winner.joblib,metrics_if_system.json
+#Tune IF for flows without an RF alert. Outputs:if_winner.joblib,metrics_if_system.json
 import json
 import sys
 import time
@@ -22,22 +22,20 @@ WINNER_PATH = ROOT / "data" / "if_winner.joblib"
 SEED = 42
 BENIGN = 0
 FIT_ROWS = 300_000
-# RF 告警的最低置信度
-# Minimum confidence for an RF alert
+#RF告警的最低置信度
+#Minimum confidence for an RF alert
 RF_CONFIDENCE_THRESHOLD = 0.60
 TOTAL_FPR_BUDGET = 0.010
 SELECTED_IF_BUDGET = 0.001
 GRID = [(32768, 100), (32768, 200), (65536, 100), (65536, 200), (131072, 100)]
 
-
-# RF 判为攻击且达到告警阈值的样本
-# RF attack predictions that meet the confidence threshold.
+#RF判为攻击且达到告警阈值的样本
+#RF attack predictions that meet the confidence threshold.
 def rf_alerts(rf, X, class_names):
     proba = rf.predict_proba(X)
     pred = proba.argmax(axis=1)
     conf = proba.max(axis=1)
     return (pred != BENIGN) & (conf >= RF_CONFIDENCE_THRESHOLD)
-
 
 def main():
     data = np.load(DATA_PATH)
@@ -106,13 +104,13 @@ def main():
 
         unseen = ~benign_rf_alert
         quantile_level = if_budget * len(benign_val) / unseen.sum()
-        # IF 只补充 RF 未告警的样本
-        # IF adds alerts only where RF did not alert
+ 
+        #IF只补充RF未告警的样本
+        #IF adds alerts only where RF did not alert
         threshold = float(np.quantile(s_benign[unseen], quantile_level))
 
         if_extra_fpr = float((unseen & (s_benign < threshold)).mean())
         system_fpr = rf_fpr + if_extra_fpr
-
         if_catch = ~novelty_rf_alert & (s_novelty < threshold)
         combined = novelty_rf_alert | if_catch
 
@@ -183,8 +181,8 @@ def main():
     forest.fit(T_fit)
     s_benign = forest.decision_function(T_benign)
 
-    # 对比 IF 先筛选再交给 RF 的结果
-    # Compare using IF to filter flows before RF
+    #对比IF先筛选再交给RF的结果
+    #Compare using IF to filter flows before RF
     gate_threshold = float(np.quantile(s_benign, TOTAL_FPR_BUDGET))
     print(f"\nArchitecture comparison at a {TOTAL_FPR_BUDGET:.0%} benign FPR budget")
     print(f"{'class':<12} {'parallel (RF sees all)':>24} {'gate (IF filters first)':>26}")
@@ -241,7 +239,6 @@ def main():
     for tmp in (ROOT / "data").glob("_probe_if_*.joblib"):
         tmp.unlink()
     print(f"\nSaved {WINNER_PATH} and {METRICS_PATH}")
-
 
 if __name__ == "__main__":
     main()

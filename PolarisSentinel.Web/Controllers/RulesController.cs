@@ -5,8 +5,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // 规则管理：只管理本系统创建的防火墙规则（PolarisSentinel_ 前缀）
-    // Rule management for PolarisSentinel-created firewall rules only
+    //规则管理：只管理本系统创建的防火墙规则（PolarisSentinel_前缀）
+    //Rule management for PolarisSentinel-created firewall rules only
     [Authorize]
     public class RulesController : Controller
     {
@@ -19,15 +19,15 @@ namespace PolarisSentinel.Web.Controllers
             _uow = uow;
         }
 
-        // 列表：实时规则 + 审计信息（Policy/Alert 关联）
-        // List: live rules enriched with audit links
+        //列表：实时规则+审计信息（Policy/Alert关联）
+        //List:live rules enriched with audit links
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
             var live = _firewall.GetAllRules().ToList();
             var audit = await _uow.Rules.GetAllAsync(cancellationToken);
 
-            // 以规则名匹配审计记录，补全 PolicyId / AlertId
-            // Match audit rows by rule name to fill PolicyId / AlertId
+            //以规则名匹配审计记录，补全PolicyId / AlertId
+            //Match audit rows by rule name to fill PolicyId / AlertId
             var byName = audit
                 .Where(r => !string.IsNullOrEmpty(r.Name))
                 .GroupBy(r => r.Name)
@@ -48,8 +48,8 @@ namespace PolarisSentinel.Web.Controllers
             return View(live);
         }
 
-        // 删除确认
-        // Delete confirmation
+        //删除确认
+        //Delete confirmation
         public IActionResult Delete(string? name)
         {
             if (string.IsNullOrEmpty(name))
@@ -72,8 +72,8 @@ namespace PolarisSentinel.Web.Controllers
         {
             _firewall.RemoveRule(name);
 
-            // 同步移除审计记录
-            // Remove the matching audit row
+            //同步移除审计记录
+            //Remove the matching audit row
             var audit = await _uow.Rules.GetAllAsync(cancellationToken);
             var row = audit.FirstOrDefault(r => r.Name == name);
             if (row != null)
@@ -86,8 +86,8 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // 移除全部托管规则（回滚）
-        // Remove all managed rules (rollback)
+        //移除全部托管规则（回滚）
+        //Remove all managed rules (rollback)
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)

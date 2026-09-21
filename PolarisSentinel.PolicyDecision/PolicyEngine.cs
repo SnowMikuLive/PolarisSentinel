@@ -8,8 +8,8 @@ using Decision = PolarisSentinel.Core.Models.Policy;
 
 namespace PolarisSentinel.PolicyDecision
 {
-    // 推理结果 → Ignore / Monitor / Block；Unknown 仅 Monitor
-    // Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
+    //推理结果→ Ignore / Monitor / Block；Unknown仅Monitor
+    //Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
     public class PolicyEngine : IPolicyEngine
     {
         private readonly Func<Policy> _settingsProvider;
@@ -20,8 +20,8 @@ namespace PolarisSentinel.PolicyDecision
         private string[] _allowlistEntries = Array.Empty<string>();
         private AddressAllowlist? _allowlist;
 
-        // 全局告警计数器（RF / IF 共用）
-        // Global alert counter shared by RF and IF
+        //全局告警计数器（RF / IF共用）
+        //Global alert counter shared by RF and IF
         private int _alertCounter;
 
         public PolicyEngine(Func<Policy> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
@@ -38,8 +38,8 @@ namespace PolarisSentinel.PolicyDecision
                 throw new ArgumentNullException(nameof(result));
             }
 
-            // 串行评估，避免同 IP 并发重复 Block
-            // Evaluate serially to avoid concurrent duplicate Blocks per IP
+            //串行评估，避免同IP并发重复Block
+            //Evaluate serially to avoid concurrent duplicate Blocks per IP
             lock (_lock)
             {
                 var settings = _settingsProvider();
@@ -58,13 +58,13 @@ namespace PolarisSentinel.PolicyDecision
                     return CreateDecision(result, PolicyAction.Ignore, "invalid_confidence");
                 }
 
-                // 阈值使用与置信度相同的 float 精度。
-                // Use the same float precision as the confidence value.
+                //阈值使用与置信度相同的float精度。
+                //Use the same float precision as the confidence value.
                 float alertThreshold = (float)settings.RfConfidenceThreshold;
                 float blockThreshold = (float)settings.AutoBlockConfidenceThreshold;
 
-                // 未知异常只告警，不自动封禁。
-                // Unknown anomalies only raise alerts, never automatic blocks.
+                //未知异常只告警，不自动封禁。
+                //Unknown anomalies only raise alerts,never automatic blocks.
                 if (result.AttackType == AttackTypes.UnknownAnomaly)
                 {
                     if (result.Confidence >= alertThreshold)
@@ -127,8 +127,8 @@ namespace PolarisSentinel.PolicyDecision
                 return true;
             }
 
-            // 同一 IP 的不同写法使用同一个冷却记录。
-            // Different forms of the same IP use one cooldown record.
+            //同一IP的不同写法使用同一个冷却记录。
+            //Different forms of the same IP use one cooldown record.
             string key = sourceIp ?? string.Empty;
             if (IPAddress.TryParse(sourceIp, out var address))
             {

@@ -9,8 +9,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // 策略 CRUD 界面
-    // Policy CRUD pages
+    //策略CRUD界面
+    //Policy CRUD pages
     [Authorize]
     public class PoliciesController : Controller
     {
@@ -23,16 +23,16 @@ namespace PolarisSentinel.Web.Controllers
             _userManager = userManager;
         }
 
-        // 列表
-        // List
+        //列表
+        //List
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
             return View(policies);
         }
 
-        // 详情
-        // Details
+        //详情
+        //Details
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
@@ -49,8 +49,8 @@ namespace PolarisSentinel.Web.Controllers
             return View(policy);
         }
 
-        // 新建表单
-        // Create form
+        //新建表单
+        //Create form
         public IActionResult Create()
         {
             PopulateLists();
@@ -70,8 +70,8 @@ namespace PolarisSentinel.Web.Controllers
                 return View(policy);
             }
 
-            // 所有者固定为当前登录用户
-            // Owner is always the signed-in user
+            //所有者固定为当前登录用户
+            //Owner is always the signed-in user
             policy.UserId = _userManager.GetUserName(User) ?? string.Empty;
             policy.Id = await NextPolicyIdAsync(cancellationToken);
             _uow.Policies.Add(policy);
@@ -80,8 +80,8 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // 编辑表单
-        // Edit form
+        //编辑表单
+        //Edit form
         public async Task<IActionResult> Edit(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
@@ -118,8 +118,8 @@ namespace PolarisSentinel.Web.Controllers
                 return View(policy);
             }
 
-            // 所有者不可编辑，保留原值
-            // Owner is not editable; keep the stored value
+            //所有者不可编辑，保留原值
+            //Owner is not editable; keep the stored value
             var existing = await _uow.Policies.GetByIdAsync(id, cancellationToken);
             policy.UserId = existing?.UserId ?? string.Empty;
 
@@ -129,8 +129,8 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // 删除确认
-        // Delete confirmation
+        //删除确认
+        //Delete confirmation
         public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
         {
             if (id == null)
@@ -162,8 +162,8 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // 生成下一个 P-n 形式的策略 ID
-        // Build the next "P-n" policy id
+        //生成下一个P-n形式的策略ID
+        //Build the next "P-n" policy id
         private async Task<string> NextPolicyIdAsync(CancellationToken cancellationToken)
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);

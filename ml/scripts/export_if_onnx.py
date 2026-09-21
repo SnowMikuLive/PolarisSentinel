@@ -1,5 +1,5 @@
-# IF 导出 ONNX 并验收阈值一致性。输出: if_model.onnx, metrics_if_final.json
-# Export IF to ONNX and validate threshold parity. Outputs: if_model.onnx, metrics_if_final.json
+#IF导出ONNX并验收阈值一致性。输出:if_model.onnx,metrics_if_final.json
+#Export IF to ONNX and validate threshold parity. Outputs:if_model.onnx,metrics_if_final.json
 import json
 import sys
 import time
@@ -24,17 +24,16 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_if_final.json"
 BENIGN = 0
 RF_CONFIDENCE_THRESHOLD = 0.60
 
-# float32 分数可能有偏差，检查异常判定是否一致
-# float32 scores may differ; check whether anomaly decisions agree
+#float32分数可能有偏差，检查异常判定是否一致
+#float32 scores may differ; check whether anomaly decisions agree
 THRESHOLD_AGREEMENT_MIN = 0.9999
 SCORE_DIFF_SANITY = 0.02
-# IF 转换需要 ai.onnx.ml v3
-# IF conversion needs ai.onnx.ml v3
+#IF转换需要ai.onnx.ml v3
+#IF conversion needs ai.onnx.ml v3
 TARGET_OPSET = {"": 18, "ai.onnx.ml": 3}
 
-
-# RF 判为攻击且达到告警阈值的样本
-# RF attack predictions that meet the confidence threshold.
+#RF判为攻击且达到告警阈值的样本
+#RF attack predictions that meet the confidence threshold.
 def rf_alerts(rf, X):
     proba = rf.predict_proba(X)
     predicted_class = proba.argmax(axis=1)
@@ -42,7 +41,6 @@ def rf_alerts(rf, X):
     is_attack = predicted_class != BENIGN
     meets_threshold = confidence >= RF_CONFIDENCE_THRESHOLD
     return is_attack & meets_threshold
-
 
 def main():
     model = joblib.load(WINNER_PATH)
@@ -126,8 +124,8 @@ def main():
     novelty_rf = rf_alerts(rf, X_novelty)
 
     rf_fpr = float(benign_rf.mean())
-    # 并联评估：IF 仅看 RF 未达告警阈值的流；C# 对 RF 攻击类直接返回，口径不同
-    # Parallel eval: IF scores flows RF did not alert on; C# returns RF attacks directly
+    #并联评估：IF仅看RF未达告警阈值的流；C#对RF攻击类直接返回，口径不同
+    #Parallel eval:IF scores flows RF did not alert on; C# returns RF attacks directly
     benign_if_alerts = ~benign_rf & (benign_scores < threshold)
     if_extra = float(benign_if_alerts.mean())
     if_catch = ~novelty_rf & (novelty_scores < threshold)
@@ -177,7 +175,6 @@ def main():
     metrics_json = json.dumps(metrics, indent=2)
     METRICS_PATH.write_text(metrics_json, encoding="utf-8")
     print(f"\nSaved {METRICS_PATH}")
-
 
 if __name__ == "__main__":
     main()

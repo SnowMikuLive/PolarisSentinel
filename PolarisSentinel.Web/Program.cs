@@ -33,12 +33,12 @@ namespace PolarisSentinel
                     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
                 });
 
-            // 策略配置热重载
-            // Policy settings hot-reload
+            //策略配置热重载
+            //Policy settings hot-reload
             builder.Services.Configure<Policy>(
                 builder.Configuration.GetSection("PolicySettings"));
-            // 防火墙配置（DryRun、封禁时长等）
-            // Firewall settings (DryRun, block duration, etc.)
+            //防火墙配置（DryRun、封禁时长等）
+            //Firewall settings (DryRun,block duration,etc.)
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
 
@@ -50,8 +50,8 @@ namespace PolarisSentinel
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
                 var settings = sp.GetRequiredService<IOptionsMonitor<Policy>>().CurrentValue;
-                // 毫秒→秒
-                // ms to seconds
+                //毫秒→秒
+                //ms to seconds
                 int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
                 int preFilterMinPackets = settings.PreFilterMinPackets;
 
@@ -62,8 +62,8 @@ namespace PolarisSentinel
                 return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
             });
 
-            // 先清理遗留规则，再启动抓包
-            // Clean up old rules before capture starts
+            //先清理遗留规则，再启动抓包
+            //Clean up old rules before capture starts
             builder.Services.AddHostedService<FirewallRuleSweeper>();
 
             //add the registe background broadcast service
@@ -80,8 +80,8 @@ namespace PolarisSentinel
             builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            // 检测审计数据库上下文
-            // Detection/audit persistence context
+            //检测审计数据库上下文
+            //Detection/audit persistence context
             builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -95,13 +95,13 @@ namespace PolarisSentinel
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
 
-            // 初始管理员账号配置（密码来自 user-secrets / 环境变量，不硬编码）
-            // Initial admin account configuration (password from user-secrets / env var)
+            //初始管理员账号配置（密码来自user-secrets /环境变量，不硬编码）
+            //Initial admin account configuration (password from user-secrets / env var)
             builder.Services.Configure<AdminSeedOptions>(
                 builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 
-            // 数据库迁移 + 初始管理员创建
-            // Migrations + initial admin provisioning
+            //数据库迁移+初始管理员创建
+            //Migrations + initial admin provisioning
             builder.Services.AddScoped<SentinelDbInitializer>();
 
             //Configure Login path and Access Denied path for the application cookie
@@ -111,8 +111,8 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             });
 
-            // 检测状态服务（累计计数 + 最近决策）
-            // Detection state service (counters and recent decisions)
+            //检测状态服务（累计计数+最近决策）
+            //Detection state service (counters and recent decisions)
             builder.Services.AddSingleton<DetectionStateService>();
 
             //Capture device control (list + switch)
@@ -121,8 +121,8 @@ namespace PolarisSentinel
             //Runtime settings (timezone + NIC) persisted to appsettings.json
             builder.Services.AddSingleton<SettingsService>();
 
-            // RF+IF 双模型
-            // Dual-model inference
+            //RF+IF双模型
+            //Dual-model inference
             string modelPath = Path.GetFullPath(Path.Combine(
                 builder.Environment.ContentRootPath,
                 builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
@@ -133,12 +133,12 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
-            // 冷却计时
-            // Cooldown timing
+            //冷却计时
+            //Cooldown timing
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-            // 策略引擎通过 Func 读取最新配置，支持热重载
-            // Policy engine reads latest settings via Func for hot-reload
+            //策略引擎通过Func读取最新配置，支持热重载
+            //Policy engine reads latest settings via Func for hot-reload
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
             {
                 var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
@@ -148,12 +148,12 @@ namespace PolarisSentinel
                     sp.GetRequiredService<ILogger<PolicyEngine>>());
             });
 
-            // 防火墙执行器
-            // Firewall enforcer
+            //防火墙执行器
+            //Firewall enforcer
             builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
 
-            // 检测管线（推理 → 策略 → 封禁）
-            // Detection pipeline (inference → policy → enforcement)
+            //检测管线（推理→策略→封禁）
+            //Detection pipeline (inference → policy → enforcement)
             builder.Services.AddSingleton<IDetectionPipeline>(sp =>
             {
                 var monitor = sp.GetRequiredService<IOptionsMonitor<Policy>>();
@@ -188,8 +188,8 @@ namespace PolarisSentinel
 
             app.MapStaticAssets();
 
-            // Web API 控制器（含防火墙接口）
-            // Web API controllers (includes firewall endpoints)
+            //Web API控制器（含防火墙接口）
+            //Web API controllers (includes firewall endpoints)
             app.MapControllers();
             app.MapControllerRoute(
                 name: "default",
@@ -197,8 +197,8 @@ namespace PolarisSentinel
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
 
-            // 检测状态 API，页面加载时拉取
-            // Detection state API for page load
+            //检测状态API，页面加载时拉取
+            //Detection state API for page load
             app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()))
                 .RequireAuthorization();
 
@@ -212,8 +212,8 @@ namespace PolarisSentinel
                 anomalyThreshold = engine.AnomalyThreshold,
             }));
 
-            // 应用迁移并创建初始管理员（逻辑在 SentinelDbInitializer 中）
-            // Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
+            //应用迁移并创建初始管理员（逻辑在SentinelDbInitializer中）
+            //Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
             using (var scope = app.Services.CreateScope())
             {
                 try

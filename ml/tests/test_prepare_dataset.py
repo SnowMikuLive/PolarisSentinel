@@ -1,5 +1,5 @@
-# prepare_dataset 特征工程测试
-# Feature engineering tests for prepare_dataset.
+#prepare_dataset特征工程测试
+#Feature engineering tests for prepare_dataset.
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -12,10 +12,8 @@ from prepare_dataset import (
     LABEL_MAPPING,
     build_features,
 )
-
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "prepared.npz"
 needs_data = pytest.mark.skipif(not DATA_PATH.exists(), reason="run prepare_dataset.py first")
-
 
 def make_frame(**overrides):
     row = {}
@@ -24,12 +22,10 @@ def make_frame(**overrides):
     row.update(overrides)
     return pd.DataFrame([row])
 
-
 def feature(X, name):
     column_index = FEATURE_NAMES.index(name)
     value = X[0, column_index]
     return float(value)
-
 
 def test_schema_is_fixed():
     # Arrange
@@ -49,7 +45,6 @@ def test_schema_is_fixed():
     assert base_names == expected_base_names
     assert derived_names == DERIVED_FEATURES
     assert CLASS_NAMES == expected_classes
-
 
 def test_label_mapping():
     # Arrange
@@ -72,7 +67,6 @@ def test_label_mapping():
     for label in excluded_labels:
         assert label not in LABEL_MAPPING
 
-
 def test_output_type_and_shape():
     # Arrange
     frame = make_frame()
@@ -83,7 +77,6 @@ def test_output_type_and_shape():
     # Assert
     assert X.dtype == np.float32
     assert X.shape == (1, 20)
-
 
 def test_microsecond_to_millisecond_conversion():
     # Arrange
@@ -97,7 +90,6 @@ def test_microsecond_to_millisecond_conversion():
     # Assert
     assert duration_ms == pytest.approx(2.0)
     assert iat_mean_ms == pytest.approx(0.5)
-
 
 def test_zero_duration_rates_are_zero():
     # Arrange
@@ -115,7 +107,6 @@ def test_zero_duration_rates_are_zero():
     # Assert
     assert bytes_per_ms == 0.0
     assert packets_per_ms == 0.0
-
 
 def test_derived_features():
     # Arrange
@@ -137,9 +128,8 @@ def test_derived_features():
     assert bytes_per_ms == pytest.approx(200.0)
     assert packets_per_ms == pytest.approx(3.0)
     assert down_up_ratio == pytest.approx(2.0)
-
-
 def test_zero_fwd_packets_ratio_is_zero():
+    
     # Arrange
     frame = make_frame(**{" Total Backward Packets": 5.0})
 
@@ -149,7 +139,6 @@ def test_zero_fwd_packets_ratio_is_zero():
 
     # Assert
     assert down_up_ratio == 0.0
-
 
 def test_negative_time_values_clipped():
     # Arrange
@@ -161,7 +150,6 @@ def test_negative_time_values_clipped():
 
     # Assert
     assert iat_min_ms == 0.0
-
 
 @needs_data
 def test_prepared_arrays_are_clean():
@@ -185,7 +173,6 @@ def test_prepared_arrays_are_clean():
         assert y.min() >= 0
         assert y.max() < len(CLASS_NAMES)
 
-
 @needs_data
 def test_no_identical_rows_across_splits():
     # Arrange
@@ -198,7 +185,6 @@ def test_no_identical_rows_across_splits():
         row_hashes = pd.util.hash_pandas_object(frame, index=False)
         hash_values = row_hashes.to_numpy()
         hashes[split] = set(hash_values)
-
     train_val_overlap = hashes["train"].intersection(hashes["val"])
     train_test_overlap = hashes["train"].intersection(hashes["test"])
     val_test_overlap = hashes["val"].intersection(hashes["test"])

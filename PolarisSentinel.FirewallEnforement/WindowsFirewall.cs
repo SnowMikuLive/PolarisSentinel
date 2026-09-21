@@ -4,8 +4,8 @@ using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Windows 防火墙 COM 封装
-    // COM wrapper for Windows Firewall
+    //Windows防火墙COM封装
+    //COM wrapper for Windows Firewall
     [SupportedOSPlatform("windows")]
     internal class WindowsFirewall
     {
@@ -60,8 +60,8 @@ namespace PolarisSentinel.FirewallEnforement
             target.Description = rule.Description;
             target.Enabled = true;
 
-            // 续期时更新已有规则，不重复 Add
-            // Update the existing rule when extending; do not Add again
+            //续期时更新已有规则，不重复Add
+            //Update the existing rule when extending; do not Add again
             if (existing == null)
             {
                 _rules.Add(target);

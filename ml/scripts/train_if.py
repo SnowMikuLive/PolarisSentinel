@@ -1,5 +1,5 @@
-# IF 变体对比。输出: if_*.joblib, metrics_if_variants.json
-# Compare IF variants. Outputs: if_*.joblib, metrics_if_variants.json
+#IF变体对比。输出:if_*.joblib,metrics_if_variants.json
+#Compare IF variants. Outputs:if_*.joblib,metrics_if_variants.json
 import json
 import sys
 import time
@@ -23,11 +23,10 @@ SEED = 42
 BENIGN = 0
 FIT_ROWS = 300_000
 FPR_BUDGETS = [0.002, 0.005, 0.007, 0.01]
-# 排序主预算
-# primary ranking budget
+#排序主预算
+#primary ranking budget
 REPORT_BUDGET = 0.007
 MAX_SAMPLES_GRID = [256, 4096, 32768]
-
 
 def build_transforms():
     return {
@@ -37,7 +36,6 @@ def build_transforms():
             subsample=200_000, random_state=SEED),
         "power": PowerTransformer(method="yeo-johnson"),
     }
-
 
 def main():
     data = np.load(DATA_PATH)
@@ -96,13 +94,12 @@ def main():
             start = time.perf_counter()
             forest.fit(T_fit)
             forest_seconds = time.perf_counter() - start
-
             benign_scores = forest.decision_function(T_benign)
             novelty_scores = forest.decision_function(T_novelty)
-
             auc_labels = np.r_[np.zeros(len(benign_scores)), np.ones(len(novelty_scores))]
-            # 取反使新类为正类
-            # Flip scores for AUC.
+            
+            #取反使新类为正类
+            #Flip scores for AUC.
             auc_scores = np.r_[-benign_scores, -novelty_scores]
             auc = float(roc_auc_score(auc_labels, auc_scores))
 
@@ -167,7 +164,6 @@ def main():
     METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
     METRICS_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"\nSaved {METRICS_PATH}")
-
 
 if __name__ == "__main__":
     main()

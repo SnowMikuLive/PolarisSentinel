@@ -1,5 +1,5 @@
-# RF 最终训练并导出 ONNX。输出: rf_model.onnx, metrics_final.json
-# Retrain RF and export ONNX. Outputs: rf_model.onnx, metrics_final.json
+#RF最终训练并导出ONNX。输出:rf_model.onnx,metrics_final.json
+#Retrain RF and export ONNX. Outputs:rf_model.onnx,metrics_final.json
 import json
 import sys
 import time
@@ -21,15 +21,14 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_final.json"
 SEED = 42
 BENIGN = 0
 
-# 告警和自动封禁的置信度阈值
-# Confidence thresholds for alerts and automatic blocking
+#告警和自动封禁的置信度阈值
+#Confidence thresholds for alerts and automatic blocking
 RF_CONFIDENCE_THRESHOLD = 0.60
 AUTO_BLOCK_THRESHOLD = 0.80
 PROB_TOLERANCE = 1e-5
 
-
-# 良性误报率与各攻击召回
-# Benign FPR and per-attack recall.
+#良性误报率与各攻击召回
+#Benign FPR and per-attack recall.
 def summarize(y_true, y_pred, class_names):
     benign_mask = y_true == BENIGN
     false_alerts = y_pred[benign_mask] != BENIGN
@@ -42,7 +41,6 @@ def summarize(y_true, y_pred, class_names):
         out[f"{name}_recall"] = float(correct_predictions.mean())
     return out
 
-
 def fmt(row):
     recalls = []
     for name, value in row.items():
@@ -51,11 +49,10 @@ def fmt(row):
             recalls.append(f"{attack_name} {value:.2%}")
     return f"FPR {row['benign_fpr']:.4%} | " + ", ".join(recalls)
 
-
 def main():
     data = np.load(DATA_PATH)
-    # train+val 训练
-    # train on train+val
+    #train+val训练
+    #train on train+val
     X_fit = np.concatenate([data["X_train"], data["X_val"]])
     y_fit = np.concatenate([data["y_train"], data["y_val"]])
     X_test = data["X_test"]
@@ -79,8 +76,8 @@ def main():
     print(f"    argmax          {fmt(views['argmax'])}")
     thresholds = [("monitor", RF_CONFIDENCE_THRESHOLD), ("autoblock", AUTO_BLOCK_THRESHOLD)]
     for label, threshold in thresholds:
-        # 低于阈值的攻击预测不计为告警
-        # Attack predictions below the threshold do not count as alerts
+        #低于阈值的攻击预测不计为告警
+        #Attack predictions below the threshold do not count as alerts
         low_confidence_attack = (y_pred != BENIGN) & (confidence < threshold)
         gated = np.where(low_confidence_attack, BENIGN, y_pred)
         views[label] = {"threshold": threshold}
@@ -90,8 +87,8 @@ def main():
     onnx_model = convert_sklearn(
         model,
         initial_types=[("input", FloatTensorType([None, len(feature_names)]))],
-        # C# OnnxRuntime 需要普通张量
-        # plain tensor for C#
+        #C# OnnxRuntime需要普通张量
+        #plain tensor for C#
         options={id(model): {"zipmap": False}},
     )
     metadata = {
@@ -146,7 +143,6 @@ def main():
     print(f"\nSaved {ONNX_PATH} ({ONNX_PATH.stat().st_size / 1e6:.1f} MB)")
     print(f"Saved {MODEL_PATH} ({MODEL_PATH.stat().st_size / 1e6:.1f} MB)")
     print(f"Saved {METRICS_PATH}")
-
 
 if __name__ == "__main__":
     main()

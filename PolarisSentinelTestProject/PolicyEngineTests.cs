@@ -69,8 +69,8 @@ namespace PolarisSentienlUnitTestProject
             var engine = CreateEngine();
             var detection = CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.UnknownAnomaly, DetectionSource.IsolationForest);
             var decision = engine.Evaluate(detection);
-            // 未知异常永不自动 Block
-            // Unknown anomalies are never auto-blocked
+            //未知异常永不自动Block
+            //Unknown anomalies are never auto-blocked
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
             Assert.AreNotEqual(PolicyAction.Block, decision.Action);
         }
@@ -97,8 +97,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Allowlist Tests
 
-        // 内网/白名单命中时 Block 降级为 Monitor
-        // Block downgraded to Monitor for protected addresses
+        //内网/白名单命中时Block降级为Monitor
+        //Block downgraded to Monitor for protected addresses
 
         [TestMethod]
         public void PolicyEngineEvaluatePrivateIpShouldMonitor()
@@ -143,8 +143,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Cooldown Tests
 
-        // 冷却期内同 IP 重复 Block 被抑制
-        // Repeated Block for same IP is suppressed within cooldown
+        //冷却期内同IP重复Block被抑制
+        //Repeated Block for same IP is suppressed within cooldown
 
         [TestMethod]
         public void PolicyEngineEvaluateSameIpTwiceShouldIgnoreSecondBlock()
@@ -164,8 +164,8 @@ namespace PolarisSentienlUnitTestProject
             var engine = CreateEngine(new Policy { Name = string.Empty }, clock);
             var detection = CreateDetectionResult();
             var first = engine.Evaluate(detection);
-            // 冷却期满（60s）后可再次 Block
-            // Block allowed again after cooldown expires
+            //冷却期满（60s）后可再次Block
+            //Block allowed again after cooldown expires
             clock.Advance(TimeSpan.FromSeconds(60));
             var second = engine.Evaluate(detection);
             Assert.AreEqual(PolicyAction.Block, first.Action);
@@ -196,8 +196,8 @@ namespace PolarisSentienlUnitTestProject
             var before = engine.Evaluate(detection);
             Assert.AreEqual(PolicyAction.Monitor, before.Action);
 
-            // 修改阈值后下一次 Evaluate 立即生效
-            // Next Evaluate uses updated threshold immediately
+            //修改阈值后下一次Evaluate立即生效
+            //Next Evaluate uses updated threshold immediately
             settings.RfConfidenceThreshold = 0.9f;
             var after = engine.Evaluate(detection);
             Assert.AreEqual(PolicyAction.Ignore, after.Action);
@@ -248,8 +248,8 @@ namespace PolarisSentienlUnitTestProject
             return new PolicyEngine(() => settings, clock, NullLogger<PolicyEngine>.Instance);
         }
 
-        // 默认公网高置信 DoS
-        // Default high-confidence DoS from public IP
+        //默认公网高置信DoS
+        //Default high-confidence DoS from public IP
         private Alert CreateDetectionResult()
         {
             return CreateDetectionResult("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);

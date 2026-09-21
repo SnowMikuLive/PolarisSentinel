@@ -1,11 +1,11 @@
-# CIC-IDS2017 探索性分析。仅打印，不写文件
-# EDA on raw CIC-IDS2017 CSVs. Prints only, no files written.
+#CIC-IDS2017探索性分析。仅打印，不写文件
+#EDA on raw CIC-IDS2017 CSVs. Prints only,no files written.
 import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
-# GBK 控制台兼容
-# GBK console compat
+#GBK控制台兼容
+#GBK console compat
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 DATASET_DIR = Path(__file__).resolve().parents[2] / "CIC-IDS2017"
@@ -33,8 +33,8 @@ LABEL_MAPPING = {
 }
 CLASSES = ["Benign", "DoS", "PortScan", "BruteForce"]
 
-# 列名含前导空格
-# Leading spaces preserved
+#列名含前导空格
+#Leading spaces preserved
 BASE_COLS = [
     " Flow Duration",
     " Total Fwd Packets",
@@ -67,7 +67,6 @@ TIME_COLS = [
     " Bwd IAT Mean", " Bwd IAT Std", " Bwd IAT Max", " Bwd IAT Min",
 ]
 
-
 def main():
     usecols = BASE_COLS + FLAG_COLS + [" Label"]
     frames = []
@@ -97,8 +96,8 @@ def main():
         print(f"Rows with negative Flow Duration: {len(neg_dur):,} "
               f"(classes: {neg_dur['Class'].value_counts().to_dict()})\n")
 
-    # 已舍弃 TCP flags
-    # dropped from 20-D schema
+    #已舍弃TCP flags
+    #dropped from 20-D schema
     print("=== 2. Flag column reliability per class ===")
     for col in FLAG_COLS:
         parts = []
@@ -113,8 +112,8 @@ def main():
         print(f"{col.strip():<16} " + " | ".join(parts))
     print()
 
-    # 动机：按组划分
-    # motivates group split
+    #动机：按组划分
+    #motivates group split
     print("=== 3. Duplicate feature rows (on base columns) ===")
     dup_mask = df.duplicated(subset=BASE_COLS, keep="first")
     for cls in CLASSES:
@@ -138,7 +137,6 @@ def main():
     })
     stats = snapshot.groupby("Class").quantile([0.5, 0.95]).round(2)
     print(stats.to_string())
-
 
 if __name__ == "__main__":
     main()

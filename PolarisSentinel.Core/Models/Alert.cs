@@ -32,7 +32,7 @@ public class Alert
     public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
 
     // Policy decision applied to this alert
-    // 该告警对应的策略决策
+    //该告警对应的策略决策
     public PolicyAction Action { get; set; } = PolicyAction.Monitor;
 
     public string? RuleName { get; set; }

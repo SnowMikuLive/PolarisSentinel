@@ -1,5 +1,5 @@
-# RF 基线训练。输出: rf_baseline.joblib, metrics_baseline.json
-# Train RF baseline. Outputs: rf_baseline.joblib, metrics_baseline.json
+#RF基线训练。输出:rf_baseline.joblib,metrics_baseline.json
+#Train RF baseline. Outputs:rf_baseline.joblib,metrics_baseline.json
 import json
 import sys
 import time
@@ -18,16 +18,14 @@ METRICS_PATH = ROOT / "artifacts" / "metrics_baseline.json"
 SEED = 42
 BENIGN = 0
 
-
-# 良性误报率
-# Benign FPR.
+#良性误报率
+#Benign FPR.
 def benign_fpr(y_true, y_pred):
     benign_mask = y_true == BENIGN
     return float((y_pred[benign_mask] != BENIGN).mean())
 
-
-# 模拟 PreFilter
-# Simulate PreFilter.
+#模拟PreFilter
+#Simulate PreFilter.
 def system_view(X, y_true, y_pred, class_names, min_packets):
     total_pkts = X[:, 1] + X[:, 2]  # fwd + bwd packets
     effective = np.where(total_pkts < min_packets, BENIGN, y_pred)
@@ -38,7 +36,6 @@ def system_view(X, y_true, y_pred, class_names, min_packets):
         mask = y_true == idx
         out[f"{name}_recall"] = float((effective[mask] == idx).mean())
     return out
-
 
 def main():
     data = np.load(DATA_PATH)
@@ -119,7 +116,6 @@ def main():
     joblib.dump(model, MODEL_PATH, compress=3)
     print(f"\nSaved {METRICS_PATH}")
     print(f"Saved {MODEL_PATH} ({MODEL_PATH.stat().st_size / 1e6:.1f} MB)")
-
 
 if __name__ == "__main__":
     main()

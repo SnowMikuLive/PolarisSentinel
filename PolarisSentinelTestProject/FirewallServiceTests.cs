@@ -17,8 +17,8 @@ namespace PolarisSentienlUnitTestProject
     {
         #region Rules Page Backing Tests
 
-        // Rules 页面读取实时规则（仅托管规则）
-        // Rules page reads live managed rules
+        //Rules页面读取实时规则（仅托管规则）
+        //Rules page reads live managed rules
         [TestMethod]
         public void FirewallRulesPage_GetAllRules_ShouldReturnCreatedRule()
         {
@@ -34,8 +34,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("203.0.113.66", rules.Single().RemoteAddress);
         }
 
-        // Rules 页面的 Remove All 删除全部托管规则
-        // Rules page Remove All clears every managed rule
+        //Rules页面的Remove All删除全部托管规则
+        //Rules page Remove All clears every managed rule
         [TestMethod]
         public void FirewallRulesPage_RemoveAll_ShouldRemoveCreatedRules()
         {
@@ -55,8 +55,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Sweeper Tests
 
-        // 启动清扫服务时删除已过期规则
-        // Remove expired rules when the sweeper starts
+        //启动清扫服务时删除已过期规则
+        //Remove expired rules when the sweeper starts
         [TestMethod]
         public async Task FirewallRuleSweeper_Start_ShouldRemoveExpiredRule()
         {
@@ -85,8 +85,8 @@ namespace PolarisSentienlUnitTestProject
 
         #region Helper Methods
 
-        // 默认 DryRun，测试只操作内存规则
-        // Default DryRun keeps test rules in memory
+        //默认DryRun，测试只操作内存规则
+        //Default DryRun keeps test rules in memory
         private WindowsFirewallEnforcer CreateEngine(FakeTimeProvider clock)
         {
             return new WindowsFirewallEnforcer(
@@ -94,8 +94,8 @@ namespace PolarisSentienlUnitTestProject
                 NullLogger<WindowsFirewallEnforcer>.Instance);
         }
 
-        // 默认使用 RFC 5737 文档地址
-        // Default uses RFC 5737 documentation addresses
+        //默认使用RFC 5737文档地址
+        //Default uses RFC 5737 documentation addresses
         private Policy CreateDecision()
         {
             return new Policy

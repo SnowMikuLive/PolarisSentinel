@@ -10,8 +10,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace PolarisSentinel.Web.Service
 {
-    // 抓包事件适配器：调用检测管线、推送 SignalR、持久化结果
-    // Capture adapter: runs detection pipeline, pushes SignalR, persists results
+    //抓包事件适配器：调用检测管线、推送SignalR、持久化结果
+    //Capture adapter:runs detection pipeline,pushes SignalR,persists results
     public class TrafficBroadcastService:IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
@@ -88,8 +88,8 @@ namespace PolarisSentinel.Web.Service
         {
             try
             {
-                // 抓包特征已对齐模型契约，保留流地址和时间
-                // Capture features already match the model contract; keep the flow addresses and times
+                //抓包特征已对齐模型契约，保留流地址和时间
+                //Capture features already match the model contract; keep the flow addresses and times
                 var modelFlow = new FlowFeatureVector
                 {
                     Features = flow.Features,
@@ -122,8 +122,8 @@ namespace PolarisSentinel.Web.Service
                     decision.DetectionSource.ToString(),
                     decision.RuleName);
 
-                // 先推送结果，写库失败不影响实时页面
-                // Push results first so a database error does not stop live updates
+                //先推送结果，写库失败不影响实时页面
+                //Push results first so a database error does not stop live updates
                 _state.Record(record);
                 await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
 
@@ -151,8 +151,8 @@ namespace PolarisSentinel.Web.Service
                             DetectedAt = decision.DecidedAt
                         });
 
-                        // 审计：Block 决策产生防火墙规则时记录一条 Rule
-                        // Audit: record a Rule row when a Block creates a firewall rule
+                        //审计：Block决策产生防火墙规则时记录一条Rule
+                        //Audit:record a Rule row when a Block creates a firewall rule
                         if (decision.Action == PolicyAction.Block && !string.IsNullOrEmpty(decision.RuleName))
                         {
                             unitOfWork.Rules.Add(new Rule
@@ -187,8 +187,8 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // 生成下一个 R-n 审计编号
-        // Build the next "R-n" audit number
+        //生成下一个R-n审计编号
+        //Build the next "R-n" audit number
         private static async Task<int> NextRuleNumberAsync(IUnitOfWork unitOfWork)
         {
             var rules = await unitOfWork.Rules.GetAllAsync();

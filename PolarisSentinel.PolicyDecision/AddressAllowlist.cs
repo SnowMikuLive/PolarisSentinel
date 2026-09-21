@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 
 namespace PolarisSentinel.PolicyDecision
 {
-    // 内置和用户配置的白名单
-    // Built-in and configured allowlist
+    //内置和用户配置的白名单
+    //Built-in and configured allowlist
     public class AddressAllowlist
     {
         private static readonly string[] BuiltInEntries =
@@ -65,8 +65,8 @@ namespace PolarisSentinel.PolicyDecision
                 return false;
             }
 
-            // 映射地址按 IPv4 检查
-            // Check mapped addresses as IPv4
+            //映射地址按IPv4检查
+            //Check mapped addresses as IPv4
             if (parsedAddress.IsIPv4MappedToIPv6)
             {
                 parsedAddress = parsedAddress.MapToIPv4();
@@ -159,8 +159,8 @@ namespace PolarisSentinel.PolicyDecision
                     return false;
                 }
 
-                // 只比较网络前缀
-                // Compare only the network prefix
+                //只比较网络前缀
+                //Compare only the network prefix
                 int fullBytes = _prefixLength / 8;
                 for (int i = 0; i < fullBytes; i++)
                 {

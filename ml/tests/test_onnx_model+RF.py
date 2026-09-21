@@ -1,5 +1,5 @@
-# RF ONNX 一致性测试。需先运行 prepare_dataset.py 和 export_onnx.py
-# RF ONNX parity tests. Requires prepare_dataset.py and export_onnx.py first.
+#RF ONNX一致性测试。需先运行prepare_dataset.py和export_onnx.py
+#RF ONNX parity tests. Requires prepare_dataset.py and export_onnx.py first.
 import json
 from pathlib import Path
 import joblib
@@ -17,7 +17,6 @@ needs_artifacts = pytest.mark.skipif(
     not (ONNX_PATH.exists() and MODEL_PATH.exists() and DATA_PATH.exists()),
     reason="run prepare_dataset.py and export_onnx.py first",
 )
-
 
 @needs_artifacts
 def test_onnx_parity_with_sklearn():
@@ -41,7 +40,6 @@ def test_onnx_parity_with_sklearn():
     # Assert
     assert matching_labels.all()
     assert probability_diff.max() <= 1e-5
-
 
 @needs_artifacts
 def test_onnx_metadata_matches_schema():

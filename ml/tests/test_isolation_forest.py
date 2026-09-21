@@ -1,5 +1,5 @@
-# IF留出集与 ONNX 测试
-# IF novelty holdout and ONNX tests.
+#IF留出集与ONNX测试
+#IF novelty holdout and ONNX tests.
 import json
 from pathlib import Path
 import joblib
@@ -23,7 +23,6 @@ needs_artifacts = pytest.mark.skipif(
     reason="run tune_if.py and export_if_onnx.py first",
 )
 
-
 def test_novelty_groups_are_disjoint_from_known_labels():
     # Arrange
     novelty_labels = ("DDoS", "Bot", "Infiltration", "Heartbleed")
@@ -37,15 +36,13 @@ def test_novelty_groups_are_disjoint_from_known_labels():
     known_results = []
     for label in LABEL_MAPPING:
         known_results.append(classify(label))
-
     novelty_results = {}
     for label in novelty_labels:
         novelty_results[label] = classify(label)
-
     web_results = []
     for label in web_labels:
         web_results.append(classify(label))
-
+  
     # Assert
     for group in known_results:
         assert group is None
@@ -53,7 +50,6 @@ def test_novelty_groups_are_disjoint_from_known_labels():
         assert novelty_results[label] == label
     for group in web_results:
         assert group == "WebAttack"
-
 
 @needs_novelty
 def test_novelty_arrays_share_the_feature_contract():
@@ -120,11 +116,10 @@ def test_if_onnx_agrees_with_sklearn_on_anomaly_decisions():
 
     # Assert
     assert median_diff < 1e-6
-    # float32 切分阈值偏差
-    # float32 split threshold drift
+    #float32切分阈值偏差
+    #float32 split threshold drift
     assert diff.max() < 0.02
     assert agreement >= 0.9999
-
 
 @needs_artifacts
 def test_if_onnx_metadata_matches_tuning_result():
@@ -150,8 +145,8 @@ def test_if_onnx_metadata_matches_tuning_result():
     assert meta["model_type"] == "IsolationForest"
     assert threshold == pytest.approx(system["selected_threshold"])
     assert at_060 == pytest.approx(threshold)
-    # 分数越低越异常
-    # Lower score = more anomalous
+    #分数越低越异常
+    #Lower score = more anomalous
     assert at_095 < at_060
     assert at_060 < 0
 
