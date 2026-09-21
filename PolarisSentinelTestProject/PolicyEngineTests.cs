@@ -121,8 +121,8 @@ namespace PolarisSentienlUnitTestProject
         [TestMethod]
         public void PolicyEngineEvaluateAllowlistIpShouldMonitor()
         {
-            var settings = new Policy { Name = string.Empty };
-            settings.Allowlist = new string[] { "8.8.8.8" };
+            var settings = new UserSettings();
+            settings.Allowlist = "8.8.8.8";
             var engine = CreateEngine(settings);
             var detection = CreateDetectionResult();
             var decision = engine.Evaluate(detection);
@@ -150,9 +150,10 @@ namespace PolarisSentienlUnitTestProject
         public void PolicyEngineEvaluateSameIpTwiceShouldIgnoreSecondBlock()
         {
             var engine = CreateEngine();
-            var detection = CreateDetectionResult();
-            var first = engine.Evaluate(detection);
-            var second = engine.Evaluate(detection);
+            // 每次传入新实例；Evaluate 会就地写入决策字段
+            // Pass a fresh instance each time; Evaluate writes decision fields in place
+            var first = engine.Evaluate(CreateDetectionResult());
+            var second = engine.Evaluate(CreateDetectionResult());
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Ignore, second.Action);
         }
@@ -161,13 +162,12 @@ namespace PolarisSentienlUnitTestProject
         public void PolicyEngineEvaluateAfterCooldownShouldBlockAgain()
         {
             var clock = new FakeTimeProvider();
-            var engine = CreateEngine(new Policy { Name = string.Empty }, clock);
-            var detection = CreateDetectionResult();
-            var first = engine.Evaluate(detection);
+            var engine = CreateEngine(new UserSettings(), clock);
+            var first = engine.Evaluate(CreateDetectionResult());
             // 冷却期满（60s）后可再次 Block
             // Block allowed again after cooldown expires
             clock.Advance(TimeSpan.FromSeconds(60));
-            var second = engine.Evaluate(detection);
+            var second = engine.Evaluate(CreateDetectionResult());
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Block, second.Action);
         }
@@ -189,17 +189,15 @@ namespace PolarisSentienlUnitTestProject
         [TestMethod]
         public void PolicyEngineEvaluateAfterThresholdChangeShouldUseNewValue()
         {
-            var settings = new Policy { Name = string.Empty };
+            var settings = new UserSettings();
             var engine = CreateEngine(settings);
-            var detection = CreateDetectionResult("8.8.8.8", 0.65f, AttackTypes.DoS, DetectionSource.RandomForest);
-
-            var before = engine.Evaluate(detection);
+            var before = engine.Evaluate(CreateDetectionResult("8.8.8.8", 0.65f, AttackTypes.DoS, DetectionSource.RandomForest));
             Assert.AreEqual(PolicyAction.Monitor, before.Action);
 
             // 修改阈值后下一次 Evaluate 立即生效
             // Next Evaluate uses updated threshold immediately
             settings.RfConfidenceThreshold = 0.9f;
-            var after = engine.Evaluate(detection);
+            var after = engine.Evaluate(CreateDetectionResult("8.8.8.8", 0.65f, AttackTypes.DoS, DetectionSource.RandomForest));
             Assert.AreEqual(PolicyAction.Ignore, after.Action);
         }
 
@@ -222,11 +220,12 @@ namespace PolarisSentienlUnitTestProject
         public void PolicyEngineEvaluateShouldGenerateAlertId()
         {
             var engine = CreateEngine();
-            var detection = CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest);
-            var first = engine.Evaluate(detection);
-            var second = engine.Evaluate(detection);
-            Assert.IsFalse(string.IsNullOrEmpty(first.AlertId));
-            Assert.AreNotEqual(first.AlertId, second.AlertId);
+            // 每次传入新实例；Evaluate 会就地写入告警编号
+            // Pass a fresh instance each time; Evaluate writes the alert id in place
+            var first = engine.Evaluate(CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest));
+            var second = engine.Evaluate(CreateDetectionResult("8.8.8.8", 0.70f, AttackTypes.DoS, DetectionSource.RandomForest));
+            Assert.IsFalse(string.IsNullOrEmpty(first.Id));
+            Assert.AreNotEqual(first.Id, second.Id);
         }
 
         #endregion
@@ -235,15 +234,15 @@ namespace PolarisSentienlUnitTestProject
 
         private PolicyEngine CreateEngine()
         {
-            return CreateEngine(new Policy { Name = string.Empty }, TimeProvider.System);
+            return CreateEngine(new UserSettings(), TimeProvider.System);
         }
 
-        private PolicyEngine CreateEngine(Policy settings)
+        private PolicyEngine CreateEngine(UserSettings settings)
         {
             return CreateEngine(settings, TimeProvider.System);
         }
 
-        private PolicyEngine CreateEngine(Policy settings, TimeProvider clock)
+        private PolicyEngine CreateEngine(UserSettings settings, TimeProvider clock)
         {
             return new PolicyEngine(() => settings, clock, NullLogger<PolicyEngine>.Instance);
         }

@@ -15,4 +15,8 @@
     <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PolarisSentinelTestProject" />
+  </ItemGroup>
+
 </Project>

@@ -1,35 +1,20 @@
-@model PolarisSentinel.Core.Models.Policy
+@model PolarisSentinel.Core.Models.UserSettings
 @{
     ViewData["Title"] = "Settings";
 }
 
 <div class="container-fluid">
     <h2 class="text-primary">Settings</h2>
-    <p class="text-muted">Configure display time zone, monitored network interface, detection policy and firewall behaviour.</p>
+    <p class="text-muted">Per-user settings: detection thresholds. Defaults come from the system configuration.</p>
+
+    <div class="alert alert-secondary py-2">
+        <span class="text-muted small">Signed in as</span>
+        <span class="fw-semibold">@User.Identity?.Name</span>
+        <span class="text-muted small ms-2">(settings are saved for this account)</span>
+    </div>
 
     <form asp-action="Save" method="post" class="row g-3">
-        @* Time zone *@
-        <div class="col-12">
-            <div class="card shadow-sm border-primary">
-                <div class="card-header bg-primary text-white">
-                    Time Zone
-                </div>
-                <div class="card-body">
-                    <label for="timeZoneId" class="form-label">Display time zone</label>
-                    <select id="timeZoneId" name="timeZoneId" class="form-select">
-                        <option value="UTC" selected="@(ViewBag.CurrentTimeZone == "UTC")">UTC</option>
-                        <option value="SystemLocal" selected="@(ViewBag.CurrentTimeZone == "SystemLocal")">System local</option>
-                        @foreach (var tz in ViewBag.TimeZones)
-                        {
-                            <option value="@tz" selected="@(ViewBag.CurrentTimeZone == tz)">@tz</option>
-                        }
-                    </select>
-                    <div class="text-muted small mt-2">Affects all displayed times (alerts, rules, policies, live traffic).</div>
-                </div>
-            </div>
-        </div>
-
-        @* Network interface *@
+        @* Network interface (machine-wide, not per user) *@
         <div class="col-12">
             <div class="card shadow-sm border-primary">
                 <div class="card-header bg-primary text-white">
@@ -47,6 +32,7 @@
                             </option>
                         }
                     </select>
+                    <div class="text-muted small mt-2">Machine-wide capture interface (shared by all users).</div>
                 </div>
             </div>
         </div>
@@ -76,7 +62,7 @@
                         </div>
                         <div class="col-12">
                             <label asp-for="Allowlist" class="form-label">Allowlist (comma separated CIDR)</label>
-                            <input asp-for="Allowlist" class="form-control" value="@string.Join(", ", Model.Allowlist)" />
+                            <input asp-for="Allowlist" class="form-control" />
                             <div class="text-muted small mt-1">Addresses/ranges that are never blocked; a Block decision on a match is downgraded to Monitor.</div>
                         </div>
                     </div>
@@ -119,39 +105,6 @@
                                 <label asp-for="FlowIdleTimeoutMilliseconds" class="form-label">Flow Idle Timeout (ms)</label>
                                 <input asp-for="FlowIdleTimeoutMilliseconds" class="form-control" type="number" min="1000" />
                                 <div class="text-muted small mt-1">Inactivity after which a flow is considered finished and exported for inference.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        @* Firewall options (editable) *@
-        @{ var firewall = ViewBag.Firewall as PolarisSentinel.FirewallEnforement.FirewallOptions; }
-        <div class="col-12">
-            <div class="card shadow-sm border-primary">
-                <div class="card-header bg-primary text-white">
-                    Firewall
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="form-check form-switch">
-                                <input type="hidden" name="firewall.DryRun" value="false" />
-                                <input class="form-check-input" type="checkbox" id="firewallDryRun" name="firewall.DryRun"
-                                       value="true" @(firewall?.DryRun == true ? "checked" : "") />
-                                <label class="form-check-label" for="firewallDryRun">Dry Run</label>
-                            </div>
-                            <div class="text-muted small mt-2">
-                                Dry Run: when on, blocks are only simulated in memory and no real Windows Firewall rule is created.
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="firewallSweepSeconds">Sweep Interval (seconds)</label>
-                            <input class="form-control" type="number" min="1" id="firewallSweepSeconds"
-                                   name="firewall.SweepSeconds" value="@(firewall?.SweepSeconds ?? 30)" />
-                            <div class="text-muted small mt-2">
-                                Sweep Seconds: how often expired block rules are automatically removed.
                             </div>
                         </div>
                     </div>

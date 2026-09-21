@@ -37,5 +37,11 @@ internal sealed class FlowRecord
     public double DurationSeconds => (LastSeenTime - StartTime).TotalSeconds;
     public long TotalPackets => FwdPackets + BwdPackets;
 
+    // Outbound packet rate, used by the pre-filter to spot floods.
+    public double FwdPacketsPerSecond => DurationSeconds > 0 ? FwdPackets / DurationSeconds : 0;
+
     public int DestinationPort { get; internal set; }
+
+    // IP protocol number; set when the flow is created.
+    public byte Protocol { get; internal set; }
 }

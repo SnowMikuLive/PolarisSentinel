@@ -1,3 +1,4 @@
+@model IReadOnlyList<PolarisSentinel.Core.Models.Rule>
 @{
     ViewData["Title"] = "Firewall Rules";
     //Read policy list and enums from ViewBag
@@ -64,6 +65,7 @@
                     <tbody id="rulesTableBody">
                         <tr>
                             <td colspan="11" class="text-center text-muted py-3">Loading...</td>
+                            
                         </tr>
                     </tbody>
                 </table>

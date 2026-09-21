@@ -16,4 +16,7 @@ public class FlowFeatureVector
 
     public long TotalPackets { get; init; }
     public long TotalBytes { get; init; }
+
+    // Rule-based verdict from the capture-layer pre-filter; null when the flow is only suspicious.
+    public PreFilterResult? PreFilterVerdict { get; init; }
 }

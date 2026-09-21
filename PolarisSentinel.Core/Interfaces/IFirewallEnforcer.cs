@@ -8,7 +8,7 @@ public interface IFirewallEnforcer
 {
     // 按决策封禁，duration 指定规则有效期
     // Block from a decision for the supplied duration
-    void BlockIp(Policy decision, TimeSpan duration);
+    void BlockIp(Alert decision, TimeSpan duration);
 
     void RemoveRule(string ruleName);
 

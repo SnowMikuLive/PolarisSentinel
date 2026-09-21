@@ -20,8 +20,7 @@ namespace PolarisSentinel.Web.Service
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CaptureControlService _captureControl;
         private readonly ILogger<TrafficBroadcastService> _logger;
-        private readonly SettingsService _settings;
-        private readonly IOptionsMonitor<Policy> _policySettings;
+        private readonly IOptionsMonitor<UserSettings> _policySettings;
 
         private readonly DetectionStateService _state;
 
@@ -32,8 +31,7 @@ namespace PolarisSentinel.Web.Service
             IServiceScopeFactory scopeFactory,
             CaptureControlService captureControl,
             DetectionStateService state,
-            SettingsService settings,
-            IOptionsMonitor<Policy> policySettings,
+            IOptionsMonitor<UserSettings> policySettings,
             ILogger<TrafficBroadcastService> logger
             )
         {
@@ -43,7 +41,6 @@ namespace PolarisSentinel.Web.Service
             _scopeFactory = scopeFactory;
             _captureControl = captureControl;
             _state = state;
-            _settings = settings;
             _policySettings = policySettings;
             _logger = logger;
         }
@@ -88,8 +85,7 @@ namespace PolarisSentinel.Web.Service
         {
             try
             {
-                // 抓包特征已对齐模型契约，保留流地址和时间
-                // Capture features already match the model contract; keep the flow addresses and times
+                // Capture features already match the model contract; keep the flow addresses and times.
                 var modelFlow = new FlowFeatureVector
                 {
                     Features = flow.Features,
@@ -101,25 +97,27 @@ namespace PolarisSentinel.Web.Service
                     FlowStartTime = flow.FlowStartTime,
                     FlowEndTime = flow.FlowEndTime,
                     TotalPackets = flow.TotalPackets,
-                    TotalBytes = flow.TotalBytes
+                    TotalBytes = flow.TotalBytes,
+                    PreFilterVerdict = flow.PreFilterVerdict
                 };
                 var decision = _pipeline.ProcessFlow(modelFlow);
                 _logger.LogInformation(
                     "Flow {SourceIp}: {InputCount}->20 features, {AttackType}, {Source}, {Action}, {Reason}",
                     decision.SourceIp, flow.Features.Length, decision.AttackType,
-                    decision.DetectionSource, decision.Action, decision.Reason);
+                    decision.Source, decision.Action, decision.Reason);
 
                 var record = new DetectionRecord(
-                    decision.AlertId,
+                    decision.Id,
                     decision.SourceIp,
                     flow.DestinationIp,
                     flow.DestinationPort,
                     decision.AttackType,
                     decision.Confidence,
                     decision.Action.ToString(),
-                    _settings.Format(decision.DecidedAt),
+                    // Background service has no request context; stamp the local system time.
+                    SettingsService.Format(decision.DecidedAt),
                     decision.Reason,
-                    decision.DetectionSource.ToString(),
+                    decision.Source.ToString(),
                     decision.RuleName);
 
                 // 先推送结果，写库失败不影响实时页面
@@ -134,22 +132,11 @@ namespace PolarisSentinel.Web.Service
                     await using (var scope = _scopeFactory.CreateAsyncScope())
                     {
                         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                        unitOfWork.Alerts.Add(new Alert
-                        {
-                            Id = decision.AlertId,
-                            SourceIp = flow.SourceIp,
-                            SourcePort = flow.SourcePort,
-                            DestinationIp = flow.DestinationIp,
-                            DestinationPort = flow.DestinationPort,
-                            Protocol = flow.Protocol,
-                            AttackType = decision.AttackType,
-                            Confidence = decision.Confidence,
-                            Source = decision.DetectionSource,
-                            Action = decision.Action,
-                            RuleName = decision.RuleName,
-                            Reason = decision.Reason,
-                            DetectedAt = decision.DecidedAt
-                        });
+                        unitOfWork.Alerts.Add(decision);
+
+                        // 先提交告警，保证 Rule.AlertId 的外键父行已存在
+                        // Commit the alert first so the Rule.AlertId FK parent exists
+                        await unitOfWork.SaveChangesAsync();
 
                         // 审计：Block 决策产生防火墙规则时记录一条 Rule
                         // Audit: record a Rule row when a Block creates a firewall rule
@@ -160,25 +147,23 @@ namespace PolarisSentinel.Web.Service
                                 Id = EntityIds.Rule(await NextRuleNumberAsync(unitOfWork)),
                                 Name = decision.RuleName,
                                 PolicyId = null,
-                                AlertId = decision.AlertId,
+                                AlertId = decision.Id,
                                 Action = decision.Action,
                                 RemoteAddress = decision.SourceIp,
-                                Status = RuleStatus.Active,
                                 Enabled = true,
-                                IsBlockRule = true,
                                 AttackType = decision.AttackType,
                                 CreatedAt = decision.DecidedAt,
                                 ExpiresAt = decision.DecidedAt.AddMinutes(_policySettings.CurrentValue.BlockDurationMinutes)
                             });
-                        }
 
-                        await unitOfWork.SaveChangesAsync();
+                            await unitOfWork.SaveChangesAsync();
+                        }
                     }
                 }
 
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Cannot save detection {AlertId}", decision.AlertId);
+                    _logger.LogError(ex, "Cannot save detection {AlertId}", decision.Id);
                 }
             }
             catch (Exception ex)

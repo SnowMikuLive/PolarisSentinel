@@ -19,9 +19,19 @@ public class SentinelDbContext : IdentityDbContext
 
     public DbSet<Rule> Rules => Set<Rule>();
 
+    public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<UserSettings>(e =>
+        {
+            e.ToTable("UserSettings");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.UserId).HasMaxLength(450);
+            e.Property(x => x.Allowlist).HasMaxLength(1024);
+        });
 
         modelBuilder.Entity<Policy>(e =>
         {
@@ -31,23 +41,7 @@ public class SentinelDbContext : IdentityDbContext
             e.Property(x => x.Name).HasMaxLength(128).IsRequired();
             e.Property(x => x.Description).HasMaxLength(512);
             e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
-            e.Property(x => x.DetectionSource).HasConversion<string>().HasMaxLength(32);
             e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
-
-            // Runtime settings (merged from PolicySettings) are appsettings config, not per-policy columns.
-            e.Ignore(x => x.IfAnomalyThreshold);
-            e.Ignore(x => x.FlowIdleTimeoutMilliseconds);
-            e.Ignore(x => x.PreFilterMinPackets);
-            e.Ignore(x => x.Allowlist);
-
-            // Decision fields (merged from PolicyDecision) are transient engine output, not stored per policy.
-            e.Ignore(x => x.AlertId);
-            e.Ignore(x => x.SourceIp);
-            e.Ignore(x => x.AttackType);
-            e.Ignore(x => x.Confidence);
-            e.Ignore(x => x.DecidedAt);
-            e.Ignore(x => x.Reason);
-            e.Ignore(x => x.RuleName);
 
             e.HasData(
                 new Policy
@@ -55,12 +49,7 @@ public class SentinelDbContext : IdentityDbContext
                     Id = "P-1",
                     Name = "Default Monitor",
                     UserId = string.Empty,
-                    DetectionSource = DetectionSource.RandomForest,
                     Action = PolicyAction.Monitor,
-                    RfConfidenceThreshold = 0.6f,
-                    AutoBlockConfidenceThreshold = 0.8f,
-                    BlockDurationMinutes = 60,
-                    DecisionCooldownSeconds = 60,
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -69,12 +58,7 @@ public class SentinelDbContext : IdentityDbContext
                     Id = "P-2",
                     Name = "Default Block",
                     UserId = string.Empty,
-                    DetectionSource = DetectionSource.RandomForest,
                     Action = PolicyAction.Block,
-                    RfConfidenceThreshold = 0.7f,
-                    AutoBlockConfidenceThreshold = 0.9f,
-                    BlockDurationMinutes = 120,
-                    DecisionCooldownSeconds = 30,
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 });
@@ -88,7 +72,6 @@ public class SentinelDbContext : IdentityDbContext
             e.Property(x => x.SourceIp).HasMaxLength(45).IsRequired();
             e.Property(x => x.DestinationIp).HasMaxLength(45).IsRequired();
             e.Property(x => x.AttackType).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
             e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.RuleName).HasMaxLength(128);
@@ -108,9 +91,9 @@ public class SentinelDbContext : IdentityDbContext
                     Protocol = 6,
                     AttackType = AttackTypes.DoS,
                     Confidence = 0.95f,
-                    Severity = Severity.High,
                     Source = DetectionSource.RandomForest,
                     DetectedAt = new DateTime(2026, 1, 2, 10, 0, 0, DateTimeKind.Utc),
+                    DecidedAt = new DateTime(2026, 1, 2, 10, 0, 0, DateTimeKind.Utc),
                     Action = PolicyAction.Block,
                     RuleName = "PolarisSentinel_Block_A-RF-1",
                     Reason = "rf_block_confidence"
@@ -125,9 +108,9 @@ public class SentinelDbContext : IdentityDbContext
                     Protocol = 6,
                     AttackType = AttackTypes.PortScan,
                     Confidence = 0.88f,
-                    Severity = Severity.Medium,
                     Source = DetectionSource.RandomForest,
                     DetectedAt = new DateTime(2026, 1, 2, 12, 0, 0, DateTimeKind.Utc),
+                    DecidedAt = new DateTime(2026, 1, 2, 12, 0, 0, DateTimeKind.Utc),
                     Action = PolicyAction.Block,
                     RuleName = "PolarisSentinel_Block_A-RF-2",
                     Reason = "rf_block_confidence"
@@ -140,8 +123,7 @@ public class SentinelDbContext : IdentityDbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
             e.Property(x => x.Name).HasMaxLength(128);
-            e.Property(x => x.RemoteAddress).HasMaxLength(45).IsRequired();
-            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.RemoteAddress).HasMaxLength(64).IsRequired();
             e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.AttackType).HasMaxLength(64);
             e.HasOne(x => x.Policy)
@@ -163,9 +145,7 @@ public class SentinelDbContext : IdentityDbContext
                     AlertId = "A-RF-1",
                     Action = PolicyAction.Block,
                     RemoteAddress = "203.0.113.10",
-                    Status = RuleStatus.Active,
                     Enabled = true,
-                    IsBlockRule = true,
                     AttackType = AttackTypes.DoS,
                     CreatedAt = new DateTime(2026, 1, 2, 10, 0, 0, DateTimeKind.Utc),
                     ExpiresAt = new DateTime(2026, 1, 2, 11, 0, 0, DateTimeKind.Utc)
@@ -178,9 +158,7 @@ public class SentinelDbContext : IdentityDbContext
                     AlertId = "A-RF-2",
                     Action = PolicyAction.Block,
                     RemoteAddress = "198.51.100.23",
-                    Status = RuleStatus.Active,
                     Enabled = true,
-                    IsBlockRule = true,
                     AttackType = AttackTypes.PortScan,
                     CreatedAt = new DateTime(2026, 1, 2, 12, 0, 0, DateTimeKind.Utc),
                     ExpiresAt = new DateTime(2026, 1, 2, 13, 0, 0, DateTimeKind.Utc)

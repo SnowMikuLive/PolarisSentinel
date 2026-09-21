@@ -1,5 +1,5 @@
 @model PolarisSentinel.Core.Models.Policy
-@inject PolarisSentinel.Web.Service.SettingsService Settings
+@using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Policy Details";
 }
@@ -25,29 +25,14 @@
                 <dt class="col-sm-3">Owner (UserId)</dt>
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.UserId) ? "-" : Model.UserId)</dd>
 
-                <dt class="col-sm-3">Detection Source</dt>
-                <dd class="col-sm-9"><span class="badge bg-info text-dark">@Model.DetectionSource</span></dd>
-
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
-
-                <dt class="col-sm-3">RF Confidence Threshold</dt>
-                <dd class="col-sm-9">@Model.RfConfidenceThreshold.ToString("0.00")</dd>
-
-                <dt class="col-sm-3">Auto Block Threshold</dt>
-                <dd class="col-sm-9">@Model.AutoBlockConfidenceThreshold.ToString("0.00")</dd>
-
-                <dt class="col-sm-3">Block Duration</dt>
-                <dd class="col-sm-9">@Model.BlockDurationMinutes minutes</dd>
-
-                <dt class="col-sm-3">Decision Cooldown</dt>
-                <dd class="col-sm-9">@Model.DecisionCooldownSeconds seconds</dd>
 
                 <dt class="col-sm-3">Active</dt>
                 <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
 
                 <dt class="col-sm-3">Created At</dt>
-                <dd class="col-sm-9">@Settings.Format(Model.CreatedAt)</dd>
+                <dd class="col-sm-9">@SettingsService.Format(Model.CreatedAt)</dd>
             </dl>
         </div>
     </div>

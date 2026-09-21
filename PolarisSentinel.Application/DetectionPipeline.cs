@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Logging;
+using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
-// 检测用例编排：推理 → 策略 → 防火墙执行
-// Orchestrates inference, policy decision, and firewall enforcement
+// Application use case: pre-filter verdict -> inference -> policy -> firewall enforcement.
 public class DetectionPipeline : IDetectionPipeline
 {
     private readonly IInferenceEngine _inference;
@@ -29,7 +29,8 @@ public class DetectionPipeline : IDetectionPipeline
         _logger = logger;
     }
 
-    public Policy ProcessFlow(FlowFeatureVector flow)
+    // Runs one flow through detection, policy evaluation and enforcement.
+    public Alert ProcessFlow(FlowFeatureVector flow)
     {
         var detection = _inference.Detect(flow);
         var decision = _policy.Evaluate(detection);
@@ -38,10 +39,9 @@ public class DetectionPipeline : IDetectionPipeline
         {
             var duration = TimeSpan.FromMinutes(_blockDurationMinutes);
             _firewall.BlockIp(decision, duration);
-            // 同一 IP 可能复用已有规则
-            // The same IP may reuse an existing rule
+            // The same IP may reuse an existing rule.
             decision.RuleName = _firewall.GetAllRules().FirstOrDefault(rule =>
-                rule.RemoteAddress == decision.SourceIp && rule.Enabled && rule.IsBlockRule &&
+                rule.RemoteAddress == decision.SourceIp && rule.Enabled &&
                 rule.ExpiresAt > new DateTimeOffset(decision.DecidedAt))?.Name;
             _logger.LogInformation(
                 "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
@@ -50,4 +50,25 @@ public class DetectionPipeline : IDetectionPipeline
 
         return decision;
     }
+
+    // Builds a detection result straight from a rule-based pre-filter verdict.
+    public static Alert FromPreFilterVerdict(FlowFeatureVector flow, PreFilterResult verdict)
+    {
+        return new Alert
+        {
+            SourceIp = flow.SourceIp,
+            SourcePort = flow.SourcePort,
+            DestinationIp = flow.DestinationIp,
+            DestinationPort = flow.DestinationPort,
+            Protocol = flow.Protocol,
+            AttackType = verdict.AttackType,
+            Confidence = verdict.Confidence,
+            Source = DetectionSource.PreFilter,
+            DetectedAt = flow.FlowEndTime,
+            Reason = verdict.Reason
+        };
+    }
+
+    // Pre-filter attacks are treated exactly like a model detection, so no confidence is needed.
+    public static bool IsPreFilterAttack(FlowFeatureVector flow) => flow.PreFilterVerdict is not null;
 }

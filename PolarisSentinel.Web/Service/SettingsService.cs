@@ -1,125 +1,120 @@
-using System.Text.Json;
+using System.Security.Claims;
+using Microsoft.Extensions.DependencyInjection;
+using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using PolarisSentinel.FirewallEnforement;
 
 namespace PolarisSentinel.Web.Service;
 
-// Holds runtime settings (timezone + NIC) and persists them to appsettings.json.
+// Per-user settings (detection thresholds + firewall options).
+// Defaults come from appsettings.json; overrides are persisted per user in the DB.
 public class SettingsService
 {
-    public const string Utc = "UTC";
-    public const string SystemLocal = "SystemLocal";
-
     private readonly IConfiguration _config;
-    private readonly IWebHostEnvironment _env;
-    private readonly object _lock = new();
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public SettingsService(IConfiguration config, IWebHostEnvironment env)
+    public SettingsService(
+        IConfiguration config,
+        IServiceScopeFactory scopeFactory,
+        IHttpContextAccessor httpContextAccessor)
     {
         _config = config;
-        _env = env;
-        TimeZoneId = _config["Settings:TimeZoneId"] ?? Utc;
+        _scopeFactory = scopeFactory;
+        _httpContextAccessor = httpContextAccessor;
     }
 
-    // "UTC", "SystemLocal", or an IANA id (e.g. "Asia/Shanghai").
-    public string TimeZoneId { get; private set; }
+    // Signed-in user id for the current request; empty when unauthenticated.
+    public string CurrentUserId =>
+        _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
-    // IANA timezone ids for the dropdown.
-    public static IReadOnlyList<string> AvailableTimeZones =>
-        TimeZoneInfo.GetSystemTimeZones().Select(tz => tz.Id).ToList();
-
-    // Convert a UTC timestamp to the configured display timezone.
-    public DateTime ConvertToDisplay(DateTime utc)
+    // Load the current user's settings for synchronous view use.
+    public async Task<UserSettings> LoadForCurrentUserAsync(CancellationToken cancellationToken = default)
     {
-        var dt = utc.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(utc, DateTimeKind.Utc)
-            : utc;
-
-        if (TimeZoneId == Utc)
-        {
-            return dt;
-        }
-
-        if (TimeZoneId == SystemLocal)
-        {
-            return dt.ToLocalTime();
-        }
-
-        var info = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
-        return TimeZoneInfo.ConvertTimeFromUtc(dt, info);
+        return await GetForCurrentUserAsync(cancellationToken);
     }
 
-    // Format helper used by views.
-    public string Format(DateTime utc) => ConvertToDisplay(utc).ToString("yyyy-MM-dd HH:mm:ss");
-
-    // Persist the timezone to appsettings.json and keep it hot in memory.
-    public bool SetTimeZone(string timeZoneId)
+    // Current user's settings (seeded from appsettings when no row exists yet).
+    public async Task<UserSettings> GetForCurrentUserAsync(CancellationToken cancellationToken = default)
     {
-        if (timeZoneId != Utc && timeZoneId != SystemLocal)
+        string userId = CurrentUserId;
+        if (string.IsNullOrEmpty(userId))
         {
-            try
-            {
-                _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return false;
-            }
+            return Defaults();
         }
 
-        lock (_lock)
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var settings = await uow.UserSettings.GetByUserAsync(userId, cancellationToken);
+        if (settings != null)
         {
-            TimeZoneId = timeZoneId;
+            return settings;
         }
 
-        SaveSection("Settings", "TimeZoneId", JsonSerializer.SerializeToElement(timeZoneId));
-        return true;
+        // 首次使用：以 appsettings 默认值建行并保存
+        // First use: create a row from the appsettings defaults and persist it
+        var seeded = Defaults();
+        seeded.UserId = userId;
+        uow.UserSettings.Add(seeded);
+        await uow.SaveChangesAsync(cancellationToken);
+        return seeded;
     }
 
-    // Persist editable policy settings to the PolicySettings section.
-    public void SavePolicySettings(Policy settings)
+    // Persist the current user's settings; the owner is always the signed-in user.
+    public async Task<UserSettings> SaveForCurrentUserAsync(UserSettings settings, CancellationToken cancellationToken = default)
     {
-        SaveSection("PolicySettings", null, JsonSerializer.SerializeToElement(settings));
+        string userId = CurrentUserId;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return settings;
+        }
+
+        // Ignore any owner supplied by the caller/form.
+        settings.UserId = userId;
+        settings.UpdatedAt = DateTime.UtcNow;
+
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var existing = await uow.UserSettings.GetByUserAsync(userId, cancellationToken);
+        if (existing == null)
+        {
+            uow.UserSettings.Add(settings);
+        }
+        else
+        {
+            uow.UserSettings.Update(settings);
+        }
+        await uow.SaveChangesAsync(cancellationToken);
+        return settings;
     }
 
-    // Persist firewall options to the Firewall section.
-    public void SaveFirewallOptions(FirewallOptions options)
+    // Format a timestamp using the local system time zone.
+    public static string Format(DateTime value) =>
+        ToLocal(value).ToString("yyyy-MM-dd HH:mm:ss");
+
+    // Convert a stored UTC timestamp to the local system time zone.
+    public static DateTime ToLocal(DateTime value)
     {
-        SaveSection("Firewall", null, JsonSerializer.SerializeToElement(options));
+        var utc = value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value;
+        return utc.ToLocalTime();
     }
 
-    // Merge a single key (or a whole section when key is null) into appsettings.json.
-    private void SaveSection(string section, string? key, JsonElement value)
+    // Defaults sourced from appsettings.json (used before a user has saved anything).
+    private UserSettings Defaults()
     {
-        var path = Path.Combine(_env.ContentRootPath, "appsettings.json");
-        try
-        {
-            var json = File.ReadAllText(path);
-            var root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
-            if (root == null)
-            {
-                return;
-            }
+        var policy = _config.GetSection("PolicySettings");
 
-            if (key == null)
-            {
-                root[section] = value;
-            }
-            else
-            {
-                var sectionMap = root.TryGetValue(section, out var el) && el.ValueKind == JsonValueKind.Object
-                    ? JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(el.GetRawText()) ?? new()
-                    : new Dictionary<string, JsonElement>();
-                sectionMap[key] = value;
-                root[section] = JsonSerializer.SerializeToElement(sectionMap);
-            }
-
-            File.WriteAllText(path, JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (Exception ex)
+        return new UserSettings
         {
-            // Persistence failure must not break the running app.
-            System.Diagnostics.Debug.WriteLine($"Failed to persist {section}: {ex.Message}");
-        }
+            RfConfidenceThreshold = policy.GetValue<float?>("RfConfidenceThreshold") ?? 0.6f,
+            AutoBlockConfidenceThreshold = policy.GetValue<float?>("AutoBlockConfidenceThreshold") ?? 0.8f,
+            IfAnomalyThreshold = policy.GetValue<double?>("IfAnomalyThreshold") ?? -0.150806,
+            BlockDurationMinutes = policy.GetValue<int?>("BlockDurationMinutes") ?? 60,
+            DecisionCooldownSeconds = policy.GetValue<int?>("DecisionCooldownSeconds") ?? 60,
+            PreFilterMinPackets = policy.GetValue<int?>("PreFilterMinPackets") ?? 3,
+            FlowIdleTimeoutMilliseconds = policy.GetValue<int?>("FlowIdleTimeoutMilliseconds") ?? 120000,
+            Allowlist = string.Join(", ", policy.GetSection("Allowlist").Get<string[]>() ?? [])
+        };
     }
 }

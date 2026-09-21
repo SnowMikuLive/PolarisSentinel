@@ -20,8 +20,8 @@
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9">@Model.Action</dd>
 
-                <dt class="col-sm-3">Status</dt>
-                <dd class="col-sm-9">@Model.Status</dd>
+                <dt class="col-sm-3">Enabled</dt>
+                <dd class="col-sm-9">@(Model.Enabled ? "Yes" : "No")</dd>
             </dl>
 
             <form asp-action="Delete" method="post">

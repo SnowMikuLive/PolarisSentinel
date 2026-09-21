@@ -25,12 +25,12 @@ namespace PolarisSentinel.DataAccess.Migrations
                     Protocol = table.Column<byte>(type: "tinyint", nullable: false),
                     AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     Confidence = table.Column<float>(type: "real", nullable: false),
-                    Severity = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: true),
                     Source = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     DetectedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     RuleName = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    Reason = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                    Reason = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    DecidedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -84,18 +84,36 @@ namespace PolarisSentinel.DataAccess.Migrations
                     Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                     Description = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
                     UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    DetectionSource = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RfConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
-                    AutoBlockConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
-                    BlockDurationMinutes = table.Column<int>(type: "int", nullable: false),
-                    DecisionCooldownSeconds = table.Column<int>(type: "int", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Policies", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserSettings",
+                columns: table => new
+                {
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    TimeZoneId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    RfConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
+                    AutoBlockConfidenceThreshold = table.Column<float>(type: "real", nullable: false),
+                    IfAnomalyThreshold = table.Column<double>(type: "float", nullable: false),
+                    BlockDurationMinutes = table.Column<int>(type: "int", nullable: false),
+                    DecisionCooldownSeconds = table.Column<int>(type: "int", nullable: false),
+                    PreFilterMinPackets = table.Column<int>(type: "int", nullable: false),
+                    FlowIdleTimeoutMilliseconds = table.Column<int>(type: "int", nullable: false),
+                    Allowlist = table.Column<string>(type: "nvarchar(1024)", maxLength: 1024, nullable: false),
+                    FirewallDryRun = table.Column<bool>(type: "bit", nullable: false),
+                    FirewallSweepSeconds = table.Column<int>(type: "int", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserSettings", x => x.UserId);
                 });
 
             migrationBuilder.CreateTable(
@@ -213,10 +231,8 @@ namespace PolarisSentinel.DataAccess.Migrations
                     PolicyId = table.Column<string>(type: "nvarchar(32)", nullable: true),
                     AlertId = table.Column<string>(type: "nvarchar(32)", nullable: true),
                     Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RemoteAddress = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
-                    Status = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    RemoteAddress = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     Enabled = table.Column<bool>(type: "bit", nullable: false),
-                    IsBlockRule = table.Column<bool>(type: "bit", nullable: false),
                     AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: true)
@@ -240,29 +256,29 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             migrationBuilder.InsertData(
                 table: "Alerts",
-                columns: new[] { "Id", "Action", "AttackType", "Confidence", "DestinationIp", "DestinationPort", "DetectedAt", "Protocol", "Reason", "RuleName", "Severity", "Source", "SourceIp", "SourcePort" },
+                columns: new[] { "Id", "Action", "AttackType", "Confidence", "DecidedAt", "DestinationIp", "DestinationPort", "DetectedAt", "Protocol", "Reason", "RuleName", "Source", "SourceIp", "SourcePort" },
                 values: new object[,]
                 {
-                    { "A-RF-1", "Block", "DoS", 0.95f, "192.168.1.10", 80, new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc), (byte)6, "rf_block_confidence", "PolarisSentinel_Block_A-RF-1", "High", "RandomForest", "203.0.113.10", 44321 },
-                    { "A-RF-2", "Block", "PortScan", 0.88f, "192.168.1.10", 22, new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc), (byte)6, "rf_block_confidence", "PolarisSentinel_Block_A-RF-2", "Medium", "RandomForest", "198.51.100.23", 51234 }
+                    { "A-RF-1", "Block", "DoS", 0.95f, new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc), "192.168.1.10", 80, new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc), (byte)6, "rf_block_confidence", "PolarisSentinel_Block_A-RF-1", "RandomForest", "203.0.113.10", 44321 },
+                    { "A-RF-2", "Block", "PortScan", 0.88f, new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc), "192.168.1.10", 22, new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc), (byte)6, "rf_block_confidence", "PolarisSentinel_Block_A-RF-2", "RandomForest", "198.51.100.23", 51234 }
                 });
 
             migrationBuilder.InsertData(
                 table: "Policies",
-                columns: new[] { "Id", "Action", "AutoBlockConfidenceThreshold", "BlockDurationMinutes", "CreatedAt", "DecisionCooldownSeconds", "Description", "DetectionSource", "IsActive", "Name", "RfConfidenceThreshold", "UserId" },
+                columns: new[] { "Id", "Action", "CreatedAt", "Description", "IsActive", "Name", "UserId" },
                 values: new object[,]
                 {
-                    { "P-1", "Monitor", 0.8f, 60, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), 60, null, "RandomForest", true, "Default Monitor", 0.6f, "" },
-                    { "P-2", "Block", 0.9f, 120, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), 30, null, "RandomForest", true, "Default Block", 0.7f, "" }
+                    { "P-1", "Monitor", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, true, "Default Monitor", "" },
+                    { "P-2", "Block", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, true, "Default Block", "" }
                 });
 
             migrationBuilder.InsertData(
                 table: "Rules",
-                columns: new[] { "Id", "Action", "AlertId", "AttackType", "CreatedAt", "Enabled", "ExpiresAt", "IsBlockRule", "Name", "PolicyId", "RemoteAddress", "Status" },
+                columns: new[] { "Id", "Action", "AlertId", "AttackType", "CreatedAt", "Enabled", "ExpiresAt", "Name", "PolicyId", "RemoteAddress" },
                 values: new object[,]
                 {
-                    { "R-1", "Block", "A-RF-1", "DoS", new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc), true, new DateTime(2026, 1, 2, 11, 0, 0, 0, DateTimeKind.Utc), true, "PolarisSentinel_Block_A-RF-1", "P-2", "203.0.113.10", "Active" },
-                    { "R-2", "Block", "A-RF-2", "PortScan", new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc), true, new DateTime(2026, 1, 2, 13, 0, 0, 0, DateTimeKind.Utc), true, "PolarisSentinel_Block_A-RF-2", "P-2", "198.51.100.23", "Active" }
+                    { "R-1", "Block", "A-RF-1", "DoS", new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc), true, new DateTime(2026, 1, 2, 11, 0, 0, 0, DateTimeKind.Utc), "PolarisSentinel_Block_A-RF-1", "P-2", "203.0.113.10" },
+                    { "R-2", "Block", "A-RF-2", "PortScan", new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc), true, new DateTime(2026, 1, 2, 13, 0, 0, 0, DateTimeKind.Utc), "PolarisSentinel_Block_A-RF-2", "P-2", "198.51.100.23" }
                 });
 
             migrationBuilder.CreateIndex(
@@ -345,6 +361,9 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             migrationBuilder.DropTable(
                 name: "Rules");
+
+            migrationBuilder.DropTable(
+                name: "UserSettings");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

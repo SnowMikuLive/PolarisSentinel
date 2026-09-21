@@ -47,12 +47,12 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(firewall.IsDryRun);
             Assert.AreEqual(PolicyAction.Block, first.Action);
             Assert.AreEqual(PolicyAction.Block, second.Action);
-            Assert.AreEqual(DetectionSource.RandomForest, first.DetectionSource);
+            Assert.AreEqual(DetectionSource.RandomForest, first.Source);
             Assert.HasCount(1, rules);
-            Assert.AreEqual(EntityIds.FirewallRule(first.AlertId), rules[0].Name);
+            Assert.AreEqual(EntityIds.FirewallRule(first.Id), rules[0].Name);
             Assert.AreEqual(rules[0].Name, first.RuleName);
             Assert.AreEqual(first.RuleName, second.RuleName);
-            Assert.AreNotEqual(first.AlertId, second.AlertId);
+            Assert.AreNotEqual(first.Id, second.Id);
         }
 
         [TestMethod]
@@ -77,7 +77,7 @@ namespace PolarisSentienlUnitTestProject
 
             // Assert
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual(DetectionSource.IsolationForest, decision.DetectionSource);
+            Assert.AreEqual(DetectionSource.IsolationForest, decision.Source);
             Assert.IsNull(decision.RuleName);
             Assert.IsEmpty(firewall.GetAllRules());
         }
@@ -125,7 +125,7 @@ namespace PolarisSentienlUnitTestProject
         private DetectionPipeline CreatePipeline(Alert detection, FakeTimeProvider clock,
             WindowsFirewallEnforcer firewall)
         {
-            var policy = new PolicyEngine(() => new Policy { Name = string.Empty }, clock,
+            var policy = new PolicyEngine(() => new UserSettings(), clock,
                 NullLogger<PolicyEngine>.Instance);
             return new DetectionPipeline(new TestInferenceEngine(detection), policy, firewall,
                 60, NullLogger<DetectionPipeline>.Instance);
@@ -147,7 +147,9 @@ namespace PolarisSentienlUnitTestProject
         }
 
         // 固定推理结果，用来检查后续策略和防火墙流程
-        // Fixed inference result for testing policy and firewall together
+        // 每次返回新实例，因为策略引擎会就地写入决策字段
+        // Fixed inference result for testing policy and firewall together.
+        // Returns a fresh instance each call because the policy engine mutates in place.
         private class TestInferenceEngine : IInferenceEngine
         {
             private readonly Alert _result;
@@ -159,7 +161,19 @@ namespace PolarisSentienlUnitTestProject
 
             public Alert Detect(FlowFeatureVector flow)
             {
-                return _result;
+                return new Alert
+                {
+                    SourceIp = _result.SourceIp,
+                    SourcePort = _result.SourcePort,
+                    DestinationIp = _result.DestinationIp,
+                    DestinationPort = _result.DestinationPort,
+                    Protocol = _result.Protocol,
+                    AttackType = _result.AttackType,
+                    Confidence = _result.Confidence,
+                    Source = _result.Source,
+                    DetectedAt = _result.DetectedAt,
+                    Reason = _result.Reason
+                };
             }
         }
 
