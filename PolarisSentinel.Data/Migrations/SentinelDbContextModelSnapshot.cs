@@ -410,6 +410,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsBlockRule")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -422,6 +425,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -441,9 +447,11 @@ namespace PolarisSentinel.DataAccess.Migrations
                             CreatedAt = new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = true,
                             ExpiresAt = new DateTime(2026, 1, 2, 11, 0, 0, 0, DateTimeKind.Utc),
+                            IsBlockRule = true,
                             Name = "PolarisSentinel_Block_A-RF-1",
                             PolicyId = "P-2",
-                            RemoteAddress = "203.0.113.10"
+                            RemoteAddress = "203.0.113.10",
+                            Status = 0
                         },
                         new
                         {
@@ -454,9 +462,11 @@ namespace PolarisSentinel.DataAccess.Migrations
                             CreatedAt = new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = true,
                             ExpiresAt = new DateTime(2026, 1, 2, 13, 0, 0, 0, DateTimeKind.Utc),
+                            IsBlockRule = true,
                             Name = "PolarisSentinel_Block_A-RF-2",
                             PolicyId = "P-2",
-                            RemoteAddress = "198.51.100.23"
+                            RemoteAddress = "198.51.100.23",
+                            Status = 0
                         });
                 });
 

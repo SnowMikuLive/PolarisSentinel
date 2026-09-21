@@ -30,6 +30,10 @@ public class Rule
     // Whether the underlying firewall rule is enabled.
     public bool Enabled { get; set; } = true;
 
+    public RuleStatus Status { get; set; } = RuleStatus.Active;
+
+    public bool IsBlockRule { get; set; } = true;
+
     public string? AttackType { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
