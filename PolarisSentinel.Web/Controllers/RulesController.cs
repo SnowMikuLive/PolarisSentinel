@@ -58,12 +58,13 @@ namespace PolarisSentinel.Web.Controllers
 
             // Manual rules have no originating alert, so AlertId stays null
             // (it is a foreign key into Alerts and would otherwise be violated).
+            // A null port / protocol means Any and is normalised to 0.
             _firewall.Block(
-                rule.SourceIp,
-                rule.SourcePort,
-                rule.DestinationIp,
-                rule.DestinationPort,
-                rule.Protocol,
+                rule.SourceIp ?? string.Empty,
+                rule.SourcePort ?? 0,
+                rule.DestinationIp ?? string.Empty,
+                rule.DestinationPort ?? 0,
+                rule.Protocol ?? 0,
                 rule.Action,
                 null,
                 null,
@@ -105,11 +106,11 @@ namespace PolarisSentinel.Web.Controllers
 
             var updated = _firewall.Update(
                 id,
-                rule.SourceIp,
-                rule.SourcePort,
-                rule.DestinationIp,
-                rule.DestinationPort,
-                rule.Protocol,
+                rule.SourceIp ?? string.Empty,
+                rule.SourcePort ?? 0,
+                rule.DestinationIp ?? string.Empty,
+                rule.DestinationPort ?? 0,
+                rule.Protocol ?? 0,
                 rule.Action,
                 rule.Enabled,
                 ResolveDuration(durationValue, durationUnit));

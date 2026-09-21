@@ -94,12 +94,13 @@
 
 @functions {
     // Map an IP protocol number to a readable name.
-    static string ProtocolName(byte protocol) => protocol switch
+    static string ProtocolName(byte? protocol) => protocol switch
     {
         1 => "ICMP",
         6 => "TCP",
         17 => "UDP",
         0 => "Any",
-        _ => protocol.ToString()
+        null => "Any",
+        _ => protocol.Value.ToString()
     };
 }

@@ -277,7 +277,7 @@ namespace PolarisSentinel.FirewallEnforement
 
             // Empty address means Any: Windows Firewall uses "*" for that.
             bool anyAddress = string.IsNullOrWhiteSpace(rule.SourceIp);
-            string? ip = anyAddress ? "*" : NormalizeIp(rule.SourceIp);
+            string? ip = anyAddress ? "*" : NormalizeIp(rule.SourceIp!);
             if (ip == null)
             {
                 _logger.LogWarning("Cannot apply rule {RuleName}: invalid source address {SourceIp}", rule.Name, rule.SourceIp);
@@ -285,13 +285,15 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             // Port 0 and protocol 0 mean Any and are passed through as wildcards.
+            // Null / 0 port and null / 0 protocol all mean Any and are passed through
+            // as wildcards; the Windows layer maps them to "*" / 256.
             _firewall.Save(new FirewallStoredRule
             {
                 Name = rule.Name,
                 RemoteAddress = ip,
-                LocalPort = Math.Max(0, rule.DestinationPort),
-                RemotePort = Math.Max(0, rule.SourcePort),
-                Protocol = rule.Protocol,
+                LocalPort = Math.Max(0, rule.DestinationPort ?? 0),
+                RemotePort = Math.Max(0, rule.SourcePort ?? 0),
+                Protocol = rule.Protocol ?? 0,
                 Enabled = rule.Enabled,
                 IsBlockRule = rule.Action == PolicyAction.Block,
                 Direction = 1

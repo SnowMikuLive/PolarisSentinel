@@ -297,19 +297,11 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("Allowlist")
-                        .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)");
-
                     b.Property<int>("BlockDurationMinutes")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<int>("DecisionCooldownSeconds")
-                        .HasColumnType("int");
 
                     b.Property<string>("DetectionSource")
                         .IsRequired()
@@ -360,6 +352,82 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Policies", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "P-1",
+                            BlockDurationMinutes = 10,
+                            CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            DetectionSource = "PreFilter",
+                            MatchProtocol = (byte)0,
+                            RuleDestinationIpAction = "Allow",
+                            RuleDestinationPortAction = "Allow",
+                            RuleSourceIpAction = "Block",
+                            RuleSourcePortAction = "Allow",
+                            UpdatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-2",
+                            BlockDurationMinutes = 10,
+                            CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            DetectionSource = "PreFilter",
+                            MatchAttackTypes = "DoS",
+                            MatchProtocol = (byte)0,
+                            RuleDestinationIpAction = "Allow",
+                            RuleDestinationPortAction = "Allow",
+                            RuleSourceIpAction = "Block",
+                            RuleSourcePortAction = "Block",
+                            UpdatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-3",
+                            BlockDurationMinutes = 10,
+                            CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            DetectionSource = "PreFilter",
+                            MatchAttackTypes = "DoS",
+                            MatchProtocol = (byte)1,
+                            RuleDestinationIpAction = "Allow",
+                            RuleDestinationPortAction = "Allow",
+                            RuleSourceIpAction = "Block",
+                            RuleSourcePortAction = "Allow",
+                            UpdatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-4",
+                            BlockDurationMinutes = 10,
+                            CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            DetectionSource = "PreFilter",
+                            MatchAttackTypes = "DoS",
+                            MatchProtocol = (byte)17,
+                            RuleDestinationIpAction = "Allow",
+                            RuleDestinationPortAction = "Allow",
+                            RuleSourceIpAction = "Block",
+                            RuleSourcePortAction = "Allow",
+                            UpdatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-5",
+                            BlockDurationMinutes = 10,
+                            CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            DetectionSource = "RandomForest",
+                            MatchProtocol = (byte)0,
+                            RfConfidenceThreshold = 0.6f,
+                            RuleDestinationIpAction = "Allow",
+                            RuleDestinationPortAction = "Allow",
+                            RuleSourceIpAction = "Block",
+                            RuleSourcePortAction = "Allow",
+                            UpdatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        });
                 });
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
@@ -384,11 +452,10 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("DestinationIp")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<int>("DestinationPort")
+                    b.Property<int?>("DestinationPort")
                         .HasColumnType("int");
 
                     b.Property<bool>("Enabled")
@@ -405,15 +472,14 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<string>("PolicyId")
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<byte>("Protocol")
+                    b.Property<byte?>("Protocol")
                         .HasColumnType("tinyint");
 
                     b.Property<string>("SourceIp")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
-                    b.Property<int>("SourcePort")
+                    b.Property<int?>("SourcePort")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")

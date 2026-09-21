@@ -28,7 +28,6 @@
                         <th>RF Threshold</th>
                         <th>IF Threshold</th>
                         <th>Block Duration</th>
-                        <th>Cooldown</th>
                         <th>Created</th>
                         <th>Updated</th>
                         <th class="text-end">Actions</th>
@@ -38,7 +37,7 @@
                     @if (Model.Count == 0)
                     {
                         <tr>
-                            <td colspan="10" class="text-center text-muted py-3">No policies.</td>
+                            <td colspan="9" class="text-center text-muted py-3">No policies.</td>
                         </tr>
                     }
                     else
@@ -52,7 +51,6 @@
                                 <td>@(item.RfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
                                 <td>@(item.IfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
                                 <td>@item.BlockDurationMinutes min</td>
-                                <td>@item.DecisionCooldownSeconds s</td>
                                 <td>@TimeFormat.Format(item.CreatedAt)</td>
                                 <td>@TimeFormat.Format(item.UpdatedAt)</td>
                                 <td class="text-end text-nowrap">

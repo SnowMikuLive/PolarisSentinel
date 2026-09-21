@@ -17,9 +17,9 @@ namespace PolarisSentienlUnitTestProject
     {
         #region Pipeline Tests
 
-        // A pre-filter verdict is treated like a model detection and blocks without confidence.
+        // A pre-filter verdict is treated like a model detection and blocks immediately.
         [TestMethod]
-        public void PreFilterVerdict_ShouldBlockWithoutConfidence()
+        public void PreFilterVerdict_ShouldBlockImmediately()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -29,7 +29,7 @@ namespace PolarisSentienlUnitTestProject
 
             Assert.AreEqual(PolicyAction.Block, decision.Action);
             Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
-            Assert.AreEqual("confidence_threshold_met", decision.Reason);
+            Assert.AreEqual("attack_detected", decision.Reason);
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
@@ -43,22 +43,6 @@ namespace PolarisSentienlUnitTestProject
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.PortScan), CreatePolicy());
 
             Assert.StartsWith("A-PF-", decision.Id);
-        }
-
-        // Allowlisted addresses downgrade a pre-filter block to Monitor.
-        [TestMethod]
-        public void PreFilterVerdict_AllowlistedAddress_ShouldMonitor()
-        {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var pipeline = CreatePipeline(clock, firewall);
-            var policy = CreatePolicy();
-            policy.Allowlist = "203.0.113.9";
-
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), policy);
-
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.IsEmpty(firewall.GetAllRules());
         }
 
         // The pre-filter alert carries the flow's 5-tuple.
@@ -100,8 +84,7 @@ namespace PolarisSentienlUnitTestProject
             DetectionSource = DetectionSource.PreFilter,
             RfConfidenceThreshold = 0.6f,
             IfConfidenceThreshold = 0.6f,
-            BlockDurationMinutes = 60,
-            DecisionCooldownSeconds = 60
+            BlockDurationMinutes = 60
         };
 
         private static FlowFeatureVector CreateFlow(string sourceIp, string attackType) => new()

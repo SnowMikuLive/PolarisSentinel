@@ -91,7 +91,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, rule.SourcePort);
             Assert.AreEqual(string.Empty, rule.DestinationIp);
             Assert.AreEqual(0, rule.DestinationPort);
-            Assert.AreEqual(0, rule.Protocol);
+            Assert.AreEqual((byte)0, rule.Protocol);
         }
     }
 }

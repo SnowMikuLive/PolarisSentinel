@@ -82,8 +82,6 @@ public class PolicyService
         RfConfidenceThreshold = 0.6f,
         IfConfidenceThreshold = 0.6f,
         BlockDurationMinutes = 60,
-        DecisionCooldownSeconds = 60,
-        Allowlist = string.Empty,
         CreatedAt = DateTime.Now,
         UpdatedAt = DateTime.Now
     };

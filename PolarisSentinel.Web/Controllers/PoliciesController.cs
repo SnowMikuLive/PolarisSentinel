@@ -45,7 +45,7 @@ namespace PolarisSentinel.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,DecisionCooldownSeconds,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
+            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -83,7 +83,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             string id,
-            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,DecisionCooldownSeconds,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
+            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -104,7 +104,6 @@ namespace PolarisSentinel.Web.Controllers
             existing.RfConfidenceThreshold = policy.RfConfidenceThreshold;
             existing.IfConfidenceThreshold = policy.IfConfidenceThreshold;
             existing.BlockDurationMinutes = policy.BlockDurationMinutes;
-            existing.DecisionCooldownSeconds = policy.DecisionCooldownSeconds;
             existing.MatchAttackTypes = policy.MatchAttackTypes;
             existing.MatchProtocol = policy.MatchProtocol;
             existing.RuleSourceIpAction = policy.RuleSourceIpAction;

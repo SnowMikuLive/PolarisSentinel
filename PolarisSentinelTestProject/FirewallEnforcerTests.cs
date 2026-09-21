@@ -41,7 +41,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(44321, stored.SourcePort);
             Assert.AreEqual("192.168.1.10", stored.DestinationIp);
             Assert.AreEqual(80, stored.DestinationPort);
-            Assert.AreEqual(6, stored.Protocol);
+            Assert.AreEqual((byte)6, stored.Protocol);
         }
 
         // Blocking the same alert id again only pushes the expiry out.
@@ -124,7 +124,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("PolarisSentinel_Block_ANY", first.Name);
             Assert.AreEqual(first.Id, second.Id);
             Assert.AreEqual(string.Empty, first.SourceIp);
-            Assert.AreEqual(0, first.Protocol);
+            Assert.AreEqual((byte)0, first.Protocol);
         }
 
         // Partial scopes keep only the fields the policy chose to block.
@@ -141,7 +141,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, rule.SourcePort);
             Assert.AreEqual(string.Empty, rule.DestinationIp);
             Assert.AreEqual(0, rule.DestinationPort);
-            Assert.AreEqual(6, rule.Protocol);
+            Assert.AreEqual((byte)6, rule.Protocol);
             Assert.IsFalse(rule.Name.EndsWith("ANY", StringComparison.Ordinal));
         }
 
@@ -162,7 +162,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsNotNull(updated);
             Assert.AreEqual("198.51.100.23", updated.SourceIp);
             Assert.AreEqual(443, updated.DestinationPort);
-            Assert.AreEqual(17, updated.Protocol);
+            Assert.AreEqual((byte)17, updated.Protocol);
         }
 
         [TestMethod]

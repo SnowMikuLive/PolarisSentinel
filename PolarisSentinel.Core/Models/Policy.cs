@@ -17,10 +17,6 @@ public class Policy
 
     public int BlockDurationMinutes { get; set; } = 60;
 
-    public int DecisionCooldownSeconds { get; set; } = 60;
-
-    public string Allowlist { get; set; } = string.Empty;
-
     public string? MatchAttackTypes { get; set; }
 
     // 0 = any protocol.

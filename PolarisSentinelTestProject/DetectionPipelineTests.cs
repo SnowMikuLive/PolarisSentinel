@@ -85,9 +85,9 @@ namespace PolarisSentienlUnitTestProject
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
-        // Private addresses are downgraded to Monitor and create no rule.
+        // Private addresses are blocked too: there is no allowlist any more.
         [TestMethod]
-        public void DetectionPipeline_PrivateIp_ShouldMonitorWithoutRule()
+        public void DetectionPipeline_PrivateIp_ShouldBlockAndCreateRule()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -96,9 +96,9 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("192.168.1.5"), CreatePolicy());
 
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.IsNull(decision.RuleName);
-            Assert.IsEmpty(firewall.GetAllRules());
+            Assert.AreEqual(PolicyAction.Block, decision.Action);
+            Assert.IsNotNull(decision.RuleName);
+            Assert.HasCount(1, firewall.GetAllRules());
         }
 
         #endregion
@@ -130,8 +130,7 @@ namespace PolarisSentienlUnitTestProject
             DetectionSource = source,
             RfConfidenceThreshold = 0.6f,
             IfConfidenceThreshold = 0.6f,
-            BlockDurationMinutes = 60,
-            DecisionCooldownSeconds = 60
+            BlockDurationMinutes = 60
         };
 
         private static Alert CreateDetection(string attackType = AttackTypes.DoS, float confidence = 0.95f,

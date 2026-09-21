@@ -42,13 +42,13 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
-        public void PolicyEngineEvaluateLowConfidenceShouldMonitor()
+        public void PolicyEngineEvaluateLowConfidenceShouldStillBlock()
         {
             var engine = CreateEngine();
             var alert = CreateAlert("8.8.8.8", 0.50f, AttackTypes.DoS, DetectionSource.RandomForest);
             var decision = engine.Evaluate(alert, CreatePolicy(0.6f));
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("confidence_below_threshold", decision.Reason);
+            Assert.AreEqual(PolicyAction.Block, decision.Action);
+            Assert.AreEqual("attack_detected", decision.Reason);
         }
 
         [TestMethod]
@@ -69,13 +69,13 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
-        // A null Random Forest threshold disables that detector.
+        // Thresholds no longer gate the decision: a null threshold still blocks.
         [TestMethod]
-        public void PolicyEngineEvaluateNullRfThresholdShouldMonitor()
+        public void PolicyEngineEvaluateNullRfThresholdShouldStillBlock()
         {
             var engine = CreateEngine();
             var decision = engine.Evaluate(CreateAlert(), CreatePolicy(rfThreshold: null));
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
         // Isolation Forest detections use the IF threshold, not the RF one.
@@ -89,26 +89,26 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
-        // An Isolation Forest detection below its threshold is monitored.
+        // The engine ignores confidence entirely: any Isolation Forest alert blocks.
         [TestMethod]
-        public void PolicyEngineEvaluateIsolationForestBelowIfThresholdShouldMonitor()
+        public void PolicyEngineEvaluateIsolationForestBelowIfThresholdShouldStillBlock()
         {
             var engine = CreateEngine();
             var alert = CreateAlert("8.8.8.8", 0.50f, AttackTypes.DoS, DetectionSource.IsolationForest);
             var policy = CreatePolicy(rfThreshold: 0.6f, ifThreshold: 0.7f, source: DetectionSource.IsolationForest);
             var decision = engine.Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
-        // A pre-filter verdict carries confidence 1, so it always passes the threshold.
+        // A pre-filter verdict blocks immediately.
         [TestMethod]
-        public void PolicyEngineEvaluatePreFilterShouldBlockWithoutConfidence()
+        public void PolicyEngineEvaluatePreFilterShouldBlockImmediately()
         {
             var engine = CreateEngine();
             var alert = CreateAlert("8.8.8.8", 1f, AttackTypes.DoS, DetectionSource.PreFilter);
             var decision = engine.Evaluate(alert, CreatePolicy(source: DetectionSource.PreFilter));
             Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.AreEqual("confidence_threshold_met", decision.Reason);
+            Assert.AreEqual("attack_detected", decision.Reason);
         }
 
         #endregion
@@ -126,27 +126,16 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(PolicyAction.Block, decision.Action);
         }
 
-        // A Random Forest alert is judged against the RF threshold.
+        // The engine blocks any non-benign alert that matches the criteria.
         [TestMethod]
-        public void PolicyEngineEvaluateRandomForestUsesRfThresholdOnly()
+        public void PolicyEngineEvaluateRandomForestLowConfidenceShouldStillBlock()
         {
             var engine = CreateEngine();
             var alert = CreateAlert("8.8.8.8", 0.4f, AttackTypes.DoS, DetectionSource.RandomForest);
             var policy = CreatePolicy(rfThreshold: 0.6f, ifThreshold: 0.1f, source: DetectionSource.IsolationForest);
             var decision = engine.Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("confidence_below_threshold", decision.Reason);
-        }
-
-        // A null threshold means that detector is disabled: keep monitoring.
-        [TestMethod]
-        public void PolicyEngineEvaluateNullThresholdShouldMonitor()
-        {
-            var engine = CreateEngine();
-            var alert = CreateAlert("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-            var decision = engine.Evaluate(alert, CreatePolicy(rfThreshold: null));
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("confidence_below_threshold", decision.Reason);
+            Assert.AreEqual(PolicyAction.Block, decision.Action);
+            Assert.AreEqual("attack_detected", decision.Reason);
         }
 
         #endregion
@@ -234,90 +223,6 @@ namespace PolarisSentienlUnitTestProject
 
         #endregion
 
-        #region Allowlist Tests
-
-        [TestMethod]
-        public void PolicyEngineEvaluatePrivateIpShouldMonitor()
-        {
-            var engine = CreateEngine();
-            var alert = CreateAlert("192.168.1.100", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-            var decision = engine.Evaluate(alert, CreatePolicy());
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-        }
-
-        [TestMethod]
-        public void PolicyEngineEvaluateLocalhostShouldMonitor()
-        {
-            var engine = CreateEngine();
-            var alert = CreateAlert("127.0.0.1", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-            var decision = engine.Evaluate(alert, CreatePolicy());
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-        }
-
-        [TestMethod]
-        public void PolicyEngineEvaluateAllowlistIpShouldMonitor()
-        {
-            var engine = CreateEngine();
-            var policy = CreatePolicy();
-            policy.Allowlist = "8.8.8.8";
-            var decision = engine.Evaluate(CreateAlert(), policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-        }
-
-        [TestMethod]
-        public void PolicyEngineEvaluatePublicIpShouldBlock()
-        {
-            var engine = CreateEngine();
-            var alert = CreateAlert("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest);
-            var decision = engine.Evaluate(alert, CreatePolicy());
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.IsNotNull(decision.Reason);
-        }
-
-        #endregion
-
-        #region Cooldown Tests
-
-        [TestMethod]
-        public void PolicyEngineEvaluateSameIpTwiceShouldMonitorSecondBlock()
-        {
-            var engine = CreateEngine();
-            var policy = CreatePolicy();
-            var first = engine.Evaluate(CreateAlert(), policy);
-            var second = engine.Evaluate(CreateAlert(), policy);
-            Assert.AreEqual(PolicyAction.Block, first.Action);
-            Assert.AreEqual(PolicyAction.Monitor, second.Action);
-            Assert.AreEqual("cooldown", second.Reason);
-        }
-
-        [TestMethod]
-        public void PolicyEngineEvaluateAfterCooldownShouldBlockAgain()
-        {
-            var clock = new FakeTimeProvider();
-            var engine = CreateEngine(clock);
-            var policy = CreatePolicy();
-
-            var first = engine.Evaluate(CreateAlert(), policy);
-            clock.Advance(TimeSpan.FromSeconds(60));
-            var second = engine.Evaluate(CreateAlert(), policy);
-
-            Assert.AreEqual(PolicyAction.Block, first.Action);
-            Assert.AreEqual(PolicyAction.Block, second.Action);
-        }
-
-        [TestMethod]
-        public void PolicyEngineEvaluateDifferentIpsShouldBlockBoth()
-        {
-            var engine = CreateEngine();
-            var policy = CreatePolicy();
-            var first = engine.Evaluate(CreateAlert("8.8.8.8", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest), policy);
-            var second = engine.Evaluate(CreateAlert("1.1.1.1", 0.99f, AttackTypes.DoS, DetectionSource.RandomForest), policy);
-            Assert.AreEqual(PolicyAction.Block, first.Action);
-            Assert.AreEqual(PolicyAction.Block, second.Action);
-        }
-
-        #endregion
-
         #region Decision Result Tests
 
         [TestMethod]
@@ -369,7 +274,7 @@ namespace PolarisSentienlUnitTestProject
             return new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
         }
 
-        // Default policy: RF enabled at 0.6, IF enabled at 0.6, 60 s cooldown.
+        // Default policy: any attack type, any protocol.
         private static Policy CreatePolicy(
             float? rfThreshold = 0.6f,
             float? ifThreshold = 0.6f,
@@ -381,8 +286,7 @@ namespace PolarisSentienlUnitTestProject
                 DetectionSource = source,
                 RfConfidenceThreshold = rfThreshold,
                 IfConfidenceThreshold = ifThreshold,
-                BlockDurationMinutes = 60,
-                DecisionCooldownSeconds = 60
+                BlockDurationMinutes = 60
             };
         }
 

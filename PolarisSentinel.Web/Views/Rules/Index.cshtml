@@ -97,19 +97,20 @@
 
 @functions {
     // Render "ip:port", falling back to the bare IP when the port is unknown.
-    static string FormatEndpoint(string ip, int port)
+    static string FormatEndpoint(string? ip, int? port)
     {
         string host = string.IsNullOrEmpty(ip) ? "Any" : ip;
         return port > 0 ? $"{host}:{port}" : host;
     }
 
     // Map an IP protocol number to a readable name.
-    static string ProtocolName(byte protocol) => protocol switch
+    static string ProtocolName(byte? protocol) => protocol switch
     {
         1 => "ICMP",
         6 => "TCP",
         17 => "UDP",
         0 => "Any",
-        _ => protocol.ToString()
+        null => "Any",
+        _ => protocol.Value.ToString()
     };
 }

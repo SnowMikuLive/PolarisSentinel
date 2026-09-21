@@ -21,7 +21,7 @@ namespace PolarisSentienlUnitTestProject
             var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
                 PolicyAction.Block, null, null, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual(6, rule.Protocol);
+            Assert.AreEqual((byte)6, rule.Protocol);
             Assert.AreEqual(44321, rule.SourcePort);
             Assert.AreEqual(80, rule.DestinationPort);
         }
@@ -35,7 +35,7 @@ namespace PolarisSentienlUnitTestProject
             var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 0,
                 PolicyAction.Block, null, null, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual(0, rule.Protocol);
+            Assert.AreEqual((byte)0, rule.Protocol);
             Assert.AreEqual("203.0.113.10", rule.SourceIp);
         }
 
