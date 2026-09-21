@@ -20,7 +20,7 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsTrue(enforcer.IsDryRun);
             Assert.AreEqual("R-1", rule.Id);
@@ -34,7 +34,7 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             var stored = enforcer.GetAllRules()[0];
             Assert.AreEqual("203.0.113.10", stored.SourceIp);
@@ -52,13 +52,13 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer(clock);
 
             var first = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
             var firstExpiry = first.ExpiresAt;
 
             clock.Advance(TimeSpan.FromMinutes(10));
 
             var second = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.HasCount(1, enforcer.GetAllRules());
             Assert.IsTrue(second.ExpiresAt > firstExpiry);
@@ -72,11 +72,11 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer(clock);
 
             var first = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
             var firstExpiry = first.ExpiresAt;
 
             var second = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(10));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(10));
 
             Assert.HasCount(1, enforcer.GetAllRules());
             Assert.AreEqual(firstExpiry, second.ExpiresAt);
@@ -88,7 +88,7 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.Zero);
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.Zero);
 
             Assert.IsEmpty(enforcer.GetAllRules());
         }
@@ -99,9 +99,9 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             var first = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
             var second = enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6,
-                PolicyAction.Block, "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
 
             Assert.AreEqual("R-1", first.Id);
             Assert.AreEqual("R-2", second.Id);
@@ -114,10 +114,10 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             var first = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
                 FirewallRuleScope.Any);
             var second = enforcer.Block("198.51.100.23", 2, "192.168.1.20", 22, 6,
-                PolicyAction.Block, "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60),
+                PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60),
                 FirewallRuleScope.Any);
 
             Assert.HasCount(1, enforcer.GetAllRules());
@@ -134,7 +134,7 @@ namespace PolarisSentienlUnitTestProject
             var (enforcer, _) = CreateEnforcer();
 
             var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
                 new FirewallRuleScope { SourceIp = "203.0.113.10", Protocol = 6 });
 
             Assert.AreEqual("203.0.113.10", rule.SourceIp);
@@ -154,7 +154,7 @@ namespace PolarisSentienlUnitTestProject
         {
             var (enforcer, _) = CreateEnforcer();
             var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             var updated = enforcer.Update(rule.Id, "198.51.100.23", 2, "192.168.1.20", 443, 17,
                 PolicyAction.Block, true, TimeSpan.FromMinutes(30));
@@ -179,7 +179,7 @@ namespace PolarisSentienlUnitTestProject
         {
             var (enforcer, _) = CreateEnforcer();
             var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsTrue(enforcer.Remove(rule.Id));
             Assert.IsEmpty(enforcer.GetAllRules());
@@ -196,8 +196,8 @@ namespace PolarisSentienlUnitTestProject
         public void FirewallEnforcer_RemoveAll_ShouldDeleteEveryRule()
         {
             var (enforcer, _) = CreateEnforcer();
-            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6, PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-            enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6, PolicyAction.Block, "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
+            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6, PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6, PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
 
             Assert.AreEqual(2, enforcer.RemoveAll());
             Assert.IsEmpty(enforcer.GetAllRules());
@@ -213,7 +213,7 @@ namespace PolarisSentienlUnitTestProject
             var clock = new FakeTimeProvider();
             var (enforcer, _) = CreateEnforcer(clock);
             enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             clock.Advance(TimeSpan.FromMinutes(30));
             Assert.AreEqual(0, enforcer.RemoveExpired());
@@ -226,7 +226,7 @@ namespace PolarisSentienlUnitTestProject
             var clock = new FakeTimeProvider();
             var (enforcer, _) = CreateEnforcer(clock);
             enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             clock.Advance(TimeSpan.FromMinutes(61));
             Assert.AreEqual(1, enforcer.RemoveExpired());
@@ -242,7 +242,7 @@ namespace PolarisSentienlUnitTestProject
         {
             var (enforcer, _) = CreateEnforcer();
             var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsNotNull(enforcer.GetById(rule.Id));
             Assert.IsNull(enforcer.GetById("R-99"));

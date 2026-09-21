@@ -11,17 +11,20 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly IInferenceEngine _inference;
     private readonly IPolicyEngine _policy;
     private readonly IFirewallEnforcer _firewall;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DetectionPipeline> _logger;
 
     public DetectionPipeline(
         IInferenceEngine inference,
         IPolicyEngine policy,
         IFirewallEnforcer firewall,
+        IUnitOfWork unitOfWork,
         ILogger<DetectionPipeline> logger)
     {
         _inference = inference;
         _policy = policy;
         _firewall = firewall;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
@@ -34,6 +37,11 @@ public class DetectionPipeline : IDetectionPipeline
             : _inference.Detect(flow);
 
         var decision = _policy.Evaluate(detection, policy);
+
+        // The alert must be committed before any rule can reference it,
+        // because Rule.AlertId is a foreign key into Alerts.
+        _unitOfWork.Alerts.Add(decision);
+        _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
         if (decision.Action == PolicyAction.Block)
         {
@@ -55,11 +63,16 @@ public class DetectionPipeline : IDetectionPipeline
                 decision.Protocol,
                 decision.Action,
                 decision.Id,
+                policy.Id,
                 decision.AttackType,
                 TimeSpan.FromMinutes(policy.BlockDurationMinutes),
                 scope);
 
             decision.RuleName = rule.Name;
+
+            // The rule is staged by the enforcer; commit it now that its alert exists.
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
             _logger.LogInformation(
                 "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType}, all traffic {AllTraffic})",
                 decision.SourceIp, policy.BlockDurationMinutes, decision.AttackType, scope.IsAny);

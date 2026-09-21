@@ -55,9 +55,6 @@ namespace PolarisSentinel.Web.Controllers
 
             var detection = _pipeline.ProcessFlow(flow, policy);
 
-            _unitOfWork.Alerts.Add(detection);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
             _logger.LogInformation(
                 "Demo injection: {AttackType} from {SourceIp} -> {Action} ({Reason}), rule {RuleName}",
                 detection.AttackType, detection.SourceIp, detection.Action, detection.Reason, detection.RuleName);

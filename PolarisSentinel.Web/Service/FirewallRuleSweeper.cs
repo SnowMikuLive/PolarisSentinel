@@ -20,11 +20,11 @@ namespace PolarisSentinel.Web.Service
             _interval = TimeSpan.FromSeconds(seconds > 0 ? seconds : 30);
         }
 
-        public override Task StartAsync(CancellationToken cancellationToken)
+        public override async Task StartAsync(CancellationToken cancellationToken)
         {
-            using var scope = _scopeFactory.CreateScope();
+            await using var scope = _scopeFactory.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<IFirewallEnforcer>().RemoveExpired();
-            return base.StartAsync(cancellationToken);
+            await base.StartAsync(cancellationToken);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -34,7 +34,7 @@ namespace PolarisSentinel.Web.Service
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await Task.Delay(_interval, _timeProvider, stoppingToken);
-                    using var scope = _scopeFactory.CreateScope();
+                    await using var scope = _scopeFactory.CreateAsyncScope();
                     scope.ServiceProvider.GetRequiredService<IFirewallEnforcer>().RemoveExpired();
                 }
             }

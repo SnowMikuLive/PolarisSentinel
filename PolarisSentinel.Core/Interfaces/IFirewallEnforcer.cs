@@ -8,6 +8,7 @@ public interface IFirewallEnforcer
 {
     // Create a rule for the supplied scope. Null scope means the exact 5-tuple.
     // A null alertId marks a manual rule with no originating alert.
+    // The rule is staged, not committed; the caller commits after the alert row exists.
     Rule Block(
         string sourceIp,
         int sourcePort,
@@ -16,6 +17,7 @@ public interface IFirewallEnforcer
         byte protocol,
         PolicyAction action,
         string? alertId,
+        string? policyId,
         string? attackType,
         TimeSpan duration,
         FirewallRuleScope? scope = null);

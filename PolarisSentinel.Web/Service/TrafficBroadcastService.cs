@@ -101,16 +101,6 @@ namespace PolarisSentinel.Web.Service
                 // Push results first so a database error does not stop live updates.
                 _state.Record(record);
                 await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
-
-                try
-                {
-                    unitOfWork.Alerts.Add(decision);
-                    await unitOfWork.SaveChangesAsync();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Cannot save detection {AlertId}", decision.Id);
-                }
             }
             catch (Exception ex)
             {

@@ -33,6 +33,39 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(rule.Enabled);
         }
 
+        // The rule must reference both the alert that triggered it and the policy that decided it.
+        [TestMethod]
+        public void Alert_RuleShouldLinkAlertIdAndPolicyId()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var pipeline = CreatePipeline(clock, firewall);
+            var policy = CreatePolicy();
+            policy.Id = "P-7";
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.55", AttackTypes.DoS), policy);
+
+            var rule = firewall.GetAllRules()[0];
+            Assert.AreEqual(decision.Id, rule.AlertId);
+            Assert.AreEqual("P-7", rule.PolicyId);
+        }
+
+        // The alert must be committed before the rule, because AlertId is a foreign key.
+        [TestMethod]
+        public void Alert_ShouldBePersistedBeforeRuleIsCreated()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var unitOfWork = new FakeUnitOfWork();
+            var pipeline = CreatePipeline(clock, firewall, unitOfWork);
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.56", AttackTypes.DoS), CreatePolicy());
+
+            var stored = unitOfWork.Alerts.GetByIdAsync(decision.Id).GetAwaiter().GetResult();
+            Assert.IsNotNull(stored);
+            Assert.HasCount(1, firewall.GetAllRules());
+        }
+
         [TestMethod]
         public void Alert_UnmatchedAttackType_ShouldNotCreateRule()
         {
@@ -171,8 +204,14 @@ namespace PolarisSentienlUnitTestProject
 
         private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall)
         {
+            return CreatePipeline(clock, firewall, new FakeUnitOfWork());
+        }
+
+        private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall,
+            FakeUnitOfWork unitOfWork)
+        {
             var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall,
+            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall, unitOfWork,
                 NullLogger<DetectionPipeline>.Instance);
         }
 

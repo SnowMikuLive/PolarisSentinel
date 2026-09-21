@@ -121,15 +121,13 @@ namespace PolarisSentinel
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<PolicyEngine>>()));
 
-            // Firewall enforcer persists rules through the rule repository.
-            // The alert repository lets it verify the FK parent exists before linking AlertId.
+            // Firewall enforcer stages rules; the pipeline commits them after the alert exists.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>
                 new WindowsFirewallEnforcer(
-                    new RuleRepository(sp.GetRequiredService<SentinelDbContext>()),
+                    sp.GetRequiredService<IUnitOfWork>().Rules,
                     sp.GetRequiredService<IOptions<FirewallOptions>>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>(),
-                    new AlertRepository(sp.GetRequiredService<SentinelDbContext>())));
+                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
 
             // Detection pipeline (capture verdict -> inference -> policy -> enforcement).
             builder.Services.AddScoped<IDetectionPipeline>(sp =>
@@ -137,6 +135,7 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IInferenceEngine>(),
                     sp.GetRequiredService<IPolicyEngine>(),
                     sp.GetRequiredService<IFirewallEnforcer>(),
+                    sp.GetRequiredService<IUnitOfWork>(),
                     sp.GetRequiredService<ILogger<DetectionPipeline>>()));
 
             // Detection persistence (single transaction boundary over SentinelDbContext)

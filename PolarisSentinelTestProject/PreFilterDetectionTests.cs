@@ -113,7 +113,7 @@ namespace PolarisSentienlUnitTestProject
         private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall)
         {
             var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall,
+            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall, new FakeUnitOfWork(),
                 NullLogger<DetectionPipeline>.Instance);
         }
 

@@ -12,10 +12,12 @@ namespace PolarisSentinel.Web.Controllers
     public class RulesController : Controller
     {
         private readonly IFirewallEnforcer _firewall;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public RulesController(IFirewallEnforcer firewall)
+        public RulesController(IFirewallEnforcer firewall, IUnitOfWork unitOfWork)
         {
             _firewall = firewall;
+            _unitOfWork = unitOfWork;
         }
 
         public IActionResult Index()
@@ -68,7 +70,10 @@ namespace PolarisSentinel.Web.Controllers
                 rule.Action,
                 null,
                 null,
+                null,
                 ResolveDuration(durationValue, durationUnit));
+
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
             TempData["success"] = "Rule created.";
             return RedirectToAction(nameof(Index));
@@ -120,6 +125,8 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
             TempData["success"] = "Rule updated.";
             return RedirectToAction(nameof(Index));
         }
@@ -140,6 +147,7 @@ namespace PolarisSentinel.Web.Controllers
         public IActionResult DeleteConfirmed(string id)
         {
             _firewall.Remove(id);
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
             TempData["success"] = "Rule removed.";
             return RedirectToAction(nameof(Index));
         }
@@ -149,6 +157,7 @@ namespace PolarisSentinel.Web.Controllers
         public IActionResult RemoveAll()
         {
             int removed = _firewall.RemoveAll();
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
             TempData["success"] = $"{removed} rule(s) removed.";
             return RedirectToAction(nameof(Index));
         }

@@ -25,7 +25,7 @@ namespace PolarisSentienlUnitTestProject
                 clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
             enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             var rules = enforcer.GetAllRules();
             Assert.HasCount(1, rules);
@@ -41,7 +41,7 @@ namespace PolarisSentienlUnitTestProject
                 clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
             enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.AreEqual(1, enforcer.RemoveAll());
             Assert.IsEmpty(enforcer.GetAllRules());
@@ -57,7 +57,7 @@ namespace PolarisSentienlUnitTestProject
                 clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
             enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
             clock.Advance(TimeSpan.FromMinutes(61));
 
             using var serviceProvider = new ServiceCollection()

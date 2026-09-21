@@ -15,7 +15,6 @@ namespace PolarisSentinel.FirewallEnforement
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
-        private readonly IAlertRepository? _alerts;
         private readonly WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
@@ -27,11 +26,9 @@ namespace PolarisSentinel.FirewallEnforement
             IRuleRepository rules,
             IOptions<FirewallOptions> options,
             TimeProvider timeProvider,
-            ILogger<WindowsFirewallEnforcer> logger,
-            IAlertRepository? alerts = null)
+            ILogger<WindowsFirewallEnforcer> logger)
         {
             _rules = rules;
-            _alerts = alerts;
             _timeProvider = timeProvider;
             _logger = logger;
 
@@ -66,6 +63,7 @@ namespace PolarisSentinel.FirewallEnforement
         }
 
         // Create a rule for the scope, or extend the expiry of an equivalent existing one.
+        // The rule is staged only; the caller commits once the alert row exists.
         public Rule Block(
             string sourceIp,
             int sourcePort,
@@ -74,6 +72,7 @@ namespace PolarisSentinel.FirewallEnforement
             byte protocol,
             PolicyAction action,
             string? alertId,
+            string? policyId,
             string? attackType,
             TimeSpan duration,
             FirewallRuleScope? scope = null)
@@ -118,9 +117,6 @@ namespace PolarisSentinel.FirewallEnforement
                         existing.ExpiresAt = expiresAt;
                         existing.UpdatedAt = now;
                         _rules.Update(existing);
-                        _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                        SaveToWindows(existing);
-                        _logger.LogInformation("Firewall extended for {RuleName}, expires {ExpiresAt}", ruleName, expiresAt);
                     }
                     return existing;
                 }
@@ -129,10 +125,8 @@ namespace PolarisSentinel.FirewallEnforement
                 {
                     Id = ruleId,
                     Name = ruleName,
-                    PolicyId = null,
-                    // AlertId is a foreign key into Alerts, and the caller may not have
-                    // persisted the alert yet, so only link it when the row exists.
-                    AlertId = AlertExists(alertId) ? alertId : null,
+                    PolicyId = string.IsNullOrEmpty(policyId) ? null : policyId,
+                    AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
                     Action = action,
                     Enabled = true,
                     AttackType = attackType,
@@ -143,9 +137,7 @@ namespace PolarisSentinel.FirewallEnforement
                 scope.ApplyTo(rule);
 
                 _rules.Add(rule);
-                _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                SaveToWindows(rule);
-                _logger.LogInformation("Firewall created {RuleName} for {SourceIp}, expires {ExpiresAt}, dry-run {DryRun}",
+                _logger.LogInformation("Firewall staged {RuleName} for {SourceIp}, expires {ExpiresAt}, dry-run {DryRun}",
                     ruleName, sourceIp, expiresAt, IsDryRun);
                 return rule;
             }
@@ -309,16 +301,6 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 _firewall.Remove(ruleName);
             }
-        }
-
-        private bool AlertExists(string? alertId)
-        {
-            if (string.IsNullOrEmpty(alertId) || _alerts == null)
-            {
-                return false;
-            }
-
-            return _alerts.GetByIdAsync(alertId).GetAwaiter().GetResult() != null;
         }
 
         // Next "R-n" id, scanned from the stored rules.

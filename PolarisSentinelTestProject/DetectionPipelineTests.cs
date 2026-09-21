@@ -121,7 +121,8 @@ namespace PolarisSentienlUnitTestProject
             WindowsFirewallEnforcer firewall)
         {
             var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(inference, policy, firewall, NullLogger<DetectionPipeline>.Instance);
+            return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),
+                NullLogger<DetectionPipeline>.Instance);
         }
 
         private static Policy CreatePolicy(DetectionSource source = DetectionSource.RandomForest) => new()
