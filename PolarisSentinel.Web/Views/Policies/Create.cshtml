@@ -1,7 +1,10 @@
 @model PolarisSentinel.Core.Models.Policy
 @{
     ViewData["Title"] = "Create Policy";
-    var actions = ViewBag.Actions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+    var detectionSources = ViewBag.DetectionSources as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+    var attackTypes = ViewBag.AttackTypes as Microsoft.AspNetCore.Mvc.Rendering.SelectList
+        ?? new Microsoft.AspNetCore.Mvc.Rendering.SelectList(Enumerable.Empty<string>());
+    var ruleActions = ViewBag.RuleActions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
 }
 
 <div class="container-fluid">
@@ -15,30 +18,76 @@
             <form asp-action="Create" method="post">
                 <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
+                <h6 class="text-secondary mb-3">Detection Thresholds</h6>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="DetectionSource" class="form-label">Detection Source</label>
+                        <select asp-for="DetectionSource" id="detectionSource" class="form-select" asp-items="detectionSources"></select>
+                    </div>
+                    <div class="col-md-4 mb-3 threshold-field" data-source="RandomForest">
+                        <label asp-for="RfConfidenceThreshold" class="form-label">Random Forest Threshold</label>
+                        <input asp-for="RfConfidenceThreshold" class="form-control" type="number" step="0.01" min="0" max="1" />
+                    </div>
+                    <div class="col-md-4 mb-3 threshold-field" data-source="IsolationForest">
+                        <label asp-for="IfConfidenceThreshold" class="form-label">Isolation Forest Threshold</label>
+                        <input asp-for="IfConfidenceThreshold" class="form-control" type="number" step="0.01" min="0" max="1" />
+                    </div>
+                </div>
+
+                <h6 class="text-secondary mb-3">Enforcement</h6>
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label asp-for="Name" class="form-label"></label>
-                        <input asp-for="Name" class="form-control" />
-                        <span asp-validation-for="Name" class="text-danger"></span>
+                        <label asp-for="BlockDurationMinutes" class="form-label">Block Duration (minutes)</label>
+                        <input asp-for="BlockDurationMinutes" class="form-control" type="number" min="1" />
                     </div>
-
-                    <div class="col-12 mb-3">
-                        <label asp-for="Description" class="form-label">Description (optional)</label>
-                        <textarea asp-for="Description" class="form-control" rows="2" placeholder="Optional notes about this policy"></textarea>
-                        <span asp-validation-for="Description" class="text-danger"></span>
-                    </div>
-
                     <div class="col-md-6 mb-3">
-                        <label asp-for="Action" class="form-label"></label>
-                        <select asp-for="Action" class="form-select" asp-items="actions"></select>
-                        <span asp-validation-for="Action" class="text-danger"></span>
+                        <label asp-for="DecisionCooldownSeconds" class="form-label">Decision Cooldown (seconds)</label>
+                        <input asp-for="DecisionCooldownSeconds" class="form-control" type="number" min="0" />
                     </div>
+                </div>
 
-                    <div class="col-md-6 mb-3 d-flex align-items-center">
-                        <div class="form-check mt-4">
-                            <input asp-for="IsActive" class="form-check-input" />
-                            <label asp-for="IsActive" class="form-check-label"></label>
-                        </div>
+                <h6 class="text-secondary mb-3">Alert Match Criteria</h6>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="MatchAttackTypes" class="form-label">Attack Type</label>
+                        <select asp-for="MatchAttackTypes" class="form-select">
+                            <option value="">Any</option>
+                            @foreach (var item in attackTypes)
+                            {
+                                <option value="@item.Value">@item.Text</option>
+                            }
+                        </select>
+                        <div class="text-muted small mt-1">Leave as Any to match every attack type.</div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label asp-for="MatchProtocol" class="form-label">Protocol</label>
+                        <select asp-for="MatchProtocol" class="form-select">
+                            <option value="0">Any</option>
+                            <option value="1">ICMP</option>
+                            <option value="6">TCP</option>
+                            <option value="17">UDP</option>
+                        </select>
+                        <div class="text-muted small mt-1">Leave as Any to match every protocol.</div>
+                    </div>
+                </div>
+
+                <h6 class="text-secondary mb-3">Firewall Rule</h6>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="RuleSourceIpAction" class="form-label">Source IP</label>
+                        <select asp-for="RuleSourceIpAction" class="form-select" asp-items="ruleActions"></select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="RuleSourcePortAction" class="form-label">Source Port</label>
+                        <select asp-for="RuleSourcePortAction" class="form-select" asp-items="ruleActions"></select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="RuleDestinationIpAction" class="form-label">Destination IP</label>
+                        <select asp-for="RuleDestinationIpAction" class="form-select" asp-items="ruleActions"></select>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="RuleDestinationPortAction" class="form-label">Destination Port</label>
+                        <select asp-for="RuleDestinationPortAction" class="form-select" asp-items="ruleActions"></select>
                     </div>
                 </div>
 
@@ -51,4 +100,20 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        // Only the threshold of the selected detection source is shown.
+        (function () {
+            var source = document.getElementById('detectionSource');
+            var fields = document.querySelectorAll('.threshold-field');
+            function sync() {
+                fields.forEach(function (f) {
+                    var match = f.getAttribute('data-source') === source.value;
+                    f.classList.toggle('d-none', !match);
+                    f.querySelectorAll('input').forEach(function (i) { i.disabled = !match; });
+                });
+            }
+            source.addEventListener('change', sync);
+            sync();
+        })();
+    </script>
 }

@@ -2,8 +2,8 @@ namespace PolarisSentinel.Core.Enums;
 
 public enum PolicyAction
 {
-    //No action required,traffic is treated as benign.
-    Ignore,
+    //No action required, traffic is treated as benign.
+    Allow,
 
     //Log and surface the event on the Dashboard
     Monitor,

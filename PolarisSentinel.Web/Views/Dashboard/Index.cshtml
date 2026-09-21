@@ -4,7 +4,6 @@
 
 <div class="container-fluid">
     <h2 class="text-primary">Dashboard</h2>
-    <p>System Overview & Real-time Status</p>
 
     @* Four cards on the top now show the overview of system, all driven by SignalR *@
     <div class="row g-3 mb-3">
@@ -197,7 +196,6 @@
                             (d.action==='Monitor' && d.attackType==='Unknown_Anomaly') ?
                             '<span class="badge bg-warning text-dark">IF</span>':
                             '<span class="badge bg-warning text-dark">RF</span>';
-
             row.innerHTML=
                     `<td>${d.decidedAt}</td>`+
                     `<td>${d.attackType}</td>`+

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Principal;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PolarisSentinel.Core.Constants;
@@ -11,29 +10,28 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Windows 防火墙执行器；DryRun 时仅维护内存规则
-    // Windows firewall enforcer; DryRun keeps rules in memory only
+    // Applies firewall rules to Windows Firewall and mirrors them into the rule repository.
+    // DryRun keeps the Windows side untouched; the repository is always written.
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
-        private readonly Dictionary<string, FirewallStoredRule> _rules = new Dictionary<string, FirewallStoredRule>();
+        private readonly IRuleRepository _rules;
         private readonly WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
         private readonly object _lock = new object();
-        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
 
-        public bool IsDryRun { get { return _firewall == null; } }
+        public bool IsDryRun => _firewall == null;
 
-        public WindowsFirewallEnforcer(IOptions<FirewallOptions> options, TimeProvider timeProvider,
+        public WindowsFirewallEnforcer(
+            IRuleRepository rules,
+            IOptions<FirewallOptions> options,
+            TimeProvider timeProvider,
             ILogger<WindowsFirewallEnforcer> logger)
         {
+            _rules = rules;
             _timeProvider = timeProvider;
             _logger = logger;
-            // 默认只使用内存规则
-            // Use in-memory rules by default
+
             if (options.Value.DryRun)
             {
                 _logger.LogInformation("Firewall dry-run enabled");
@@ -49,8 +47,7 @@ namespace PolarisSentinel.FirewallEnforement
                 }
                 using var identity = WindowsIdentity.GetCurrent();
                 var principal = new WindowsPrincipal(identity);
-                // 非管理员无法写系统防火墙，降级为内存模式
-                // Non-admin execution falls back to in-memory dry-run
+                // Writing the system firewall needs administrator rights.
                 if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
                 {
                     _logger.LogError("Administrator rights are required; using dry-run");
@@ -65,239 +62,274 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        public void BlockIp(Alert decision, TimeSpan duration)
+        // Create a rule for the scope, or extend the expiry of an equivalent existing one.
+        public Rule Block(
+            string sourceIp,
+            int sourcePort,
+            string destinationIp,
+            int destinationPort,
+            byte protocol,
+            PolicyAction action,
+            string? alertId,
+            string? attackType,
+            TimeSpan duration,
+            FirewallRuleScope? scope = null)
         {
-            if (decision == null || decision.Action != PolicyAction.Block)
+            if (duration <= TimeSpan.Zero)
+            {
+                _logger.LogWarning("Invalid block request for {Ip}", sourceIp);
+                return new Rule { Id = string.Empty, Name = string.Empty, SourceIp = sourceIp };
+            }
+
+            // Without an explicit scope the exact 5-tuple is used.
+            scope ??= new FirewallRuleScope
+            {
+                SourceIp = sourceIp ?? string.Empty,
+                SourcePort = sourcePort,
+                DestinationIp = destinationIp ?? string.Empty,
+                DestinationPort = destinationPort,
+                Protocol = protocol
+            };
+
+            lock (_lock)
+            {
+                var now = _timeProvider.GetLocalNow().DateTime;
+                var expiresAt = now.Add(duration);
+                var ruleId = EntityIds.Rule(NextRuleNumber());
+
+                // A rule that constrains nothing blocks every flow, so it must not be
+                // tied to a single alert id; one shared rule is reused instead.
+                // Manual rules have no alert at all, so they key off their own id.
+                string ruleName = scope.IsAny
+                    ? EntityIds.FirewallRule(EntityIds.AnyTrafficRuleName)
+                    : EntityIds.FirewallRule(string.IsNullOrEmpty(alertId) ? ruleId : alertId);
+
+                var existing = _rules.GetAllAsync().GetAwaiter().GetResult()
+                    .FirstOrDefault(r => r.Name == ruleName);
+
+                if (existing != null)
+                {
+                    // Same rule already present: only push the expiry out.
+                    if (expiresAt > existing.ExpiresAt)
+                    {
+                        existing.ExpiresAt = expiresAt;
+                        existing.UpdatedAt = now;
+                        _rules.Update(existing);
+                        _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                        SaveToWindows(existing);
+                        _logger.LogInformation("Firewall extended for {RuleName}, expires {ExpiresAt}", ruleName, expiresAt);
+                    }
+                    return existing;
+                }
+
+                var rule = new Rule
+                {
+                    Id = ruleId,
+                    Name = ruleName,
+                    PolicyId = null,
+                    // Null for manual rules: AlertId is a foreign key, so a synthetic
+                    // value that is not in the Alerts table would violate it.
+                    AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
+                    Action = action,
+                    Enabled = true,
+                    AttackType = attackType,
+                    CreatedAt = now,
+                    ExpiresAt = expiresAt
+                };
+                // Any field left empty/zero is a wildcard, not a constraint.
+                scope.ApplyTo(rule);
+
+                _rules.Add(rule);
+                _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                SaveToWindows(rule);
+                _logger.LogInformation("Firewall created {RuleName} for {SourceIp}, expires {ExpiresAt}, dry-run {DryRun}",
+                    ruleName, sourceIp, expiresAt, IsDryRun);
+                return rule;
+            }
+        }
+
+        // Update an existing rule's scope, action, enabled state and expiry.
+        public Rule? Update(
+            string ruleId,
+            string sourceIp,
+            int sourcePort,
+            string destinationIp,
+            int destinationPort,
+            byte protocol,
+            PolicyAction action,
+            bool enabled,
+            TimeSpan duration,
+            FirewallRuleScope? scope = null)
+        {
+            lock (_lock)
+            {
+                var rule = _rules.GetByIdAsync(ruleId).GetAwaiter().GetResult();
+                if (rule == null)
+                {
+                    return null;
+                }
+
+                var now = _timeProvider.GetLocalNow().DateTime;
+                RemoveFromWindows(rule.Name);
+
+                scope ??= new FirewallRuleScope
+                {
+                    SourceIp = sourceIp ?? string.Empty,
+                    SourcePort = sourcePort,
+                    DestinationIp = destinationIp ?? string.Empty,
+                    DestinationPort = destinationPort,
+                    Protocol = protocol
+                };
+                scope.ApplyTo(rule);
+                rule.Action = action;
+                rule.Enabled = enabled;
+                rule.ExpiresAt = now.Add(duration);
+                rule.UpdatedAt = now;
+
+                _rules.Update(rule);
+                _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                SaveToWindows(rule);
+                _logger.LogInformation("Firewall updated {RuleName}", rule.Name);
+                return rule;
+            }
+        }
+
+        public bool Remove(string ruleId)
+        {
+            lock (_lock)
+            {
+                var rule = _rules.GetByIdAsync(ruleId).GetAwaiter().GetResult();
+                if (rule == null)
+                {
+                    return false;
+                }
+
+                RemoveFromWindows(rule.Name);
+                _rules.Remove(rule);
+                _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                _logger.LogInformation("Firewall removed {RuleName}", rule.Name);
+                return true;
+            }
+        }
+
+        public int RemoveAll()
+        {
+            lock (_lock)
+            {
+                var all = _rules.GetAllAsync().GetAwaiter().GetResult();
+                foreach (var rule in all)
+                {
+                    RemoveFromWindows(rule.Name);
+                    _rules.Remove(rule);
+                }
+                _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                _logger.LogInformation("Removed {Count} managed firewall rule(s)", all.Count);
+                return all.Count;
+            }
+        }
+
+        public int RemoveExpired()
+        {
+            lock (_lock)
+            {
+                var now = _timeProvider.GetLocalNow().DateTime;
+                var expired = _rules.GetAllAsync().GetAwaiter().GetResult()
+                    .Where(r => r.ExpiresAt != null && r.ExpiresAt <= now)
+                    .ToList();
+
+                foreach (var rule in expired)
+                {
+                    RemoveFromWindows(rule.Name);
+                    _rules.Remove(rule);
+                }
+                if (expired.Count > 0)
+                {
+                    _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                    _logger.LogInformation("Removed {Count} expired firewall rule(s)", expired.Count);
+                }
+                return expired.Count;
+            }
+        }
+
+        public IReadOnlyList<Rule> GetAllRules()
+        {
+            lock (_lock)
+            {
+                return _rules.GetAllAsync().GetAwaiter().GetResult();
+            }
+        }
+
+        public Rule? GetById(string ruleId)
+        {
+            lock (_lock)
+            {
+                return _rules.GetByIdAsync(ruleId).GetAwaiter().GetResult();
+            }
+        }
+
+        // Push a rule to the Windows Firewall API (skipped in dry-run).
+        private void SaveToWindows(Rule rule)
+        {
+            if (_firewall == null || !OperatingSystem.IsWindows())
             {
                 return;
             }
-            string? ip = NormalizeIp(decision.SourceIp);
-            if (ip == null || duration <= TimeSpan.Zero || string.IsNullOrEmpty(decision.Id) ||
-                !float.IsFinite(decision.Confidence) || decision.Confidence < 0 || decision.Confidence > 1)
+
+            // Empty address means Any: Windows Firewall uses "*" for that.
+            bool anyAddress = string.IsNullOrWhiteSpace(rule.SourceIp);
+            string? ip = anyAddress ? "*" : NormalizeIp(rule.SourceIp);
+            if (ip == null)
             {
-                _logger.LogWarning("Invalid block request for {Ip}", decision.SourceIp);
+                _logger.LogWarning("Cannot apply rule {RuleName}: invalid source address {SourceIp}", rule.Name, rule.SourceIp);
                 return;
             }
 
-            lock (_lock)
+            // Port 0 and protocol 0 mean Any and are passed through as wildcards.
+            _firewall.Save(new FirewallStoredRule
             {
-                try
-                {
-                    var now = _timeProvider.GetUtcNow();
-                    var expiresAt = now.Add(duration);
-                    // 日志原因码：created / extended
-                    // Log reason codes: created / extended
-                    string reason = "created";
-                    var metadata = new FirewallRuleMetadata
-                    {
-                        AlertId = decision.Id,
-                        Ip = ip,
-                        AttackType = decision.AttackType,
-                        Action = decision.Action,
-                        Confidence = decision.Confidence,
-                        CreatedAt = now
-                    };
-                    var rule = new FirewallStoredRule { Name = EntityIds.FirewallRule(decision.Id) };
+                Name = rule.Name,
+                RemoteAddress = ip,
+                LocalPort = Math.Max(0, rule.DestinationPort),
+                RemotePort = Math.Max(0, rule.SourcePort),
+                Protocol = rule.Protocol,
+                Enabled = rule.Enabled,
+                IsBlockRule = rule.Action == PolicyAction.Block,
+                Direction = 1
+            });
+        }
 
-                    // 同一 IP 复用原规则，只延长有效期
-                    // Reuse the existing rule for the same IP; extend expiry only
-                    foreach (var existingRule in GetRules())
-                    {
-                        var existing = ReadMetadata(existingRule);
-                        if (existing == null || !existingRule.Enabled || !existingRule.IsBlockRule ||
-                            existingRule.Direction != 1 || NormalizeIp(existing.Ip) != ip || existing.ExpiresAt <= now)
-                        {
-                            continue;
-                        }
-                        if (expiresAt <= existing.ExpiresAt)
-                        {
-                            return;
-                        }
-                        rule = existingRule;
-                        metadata = existing;
-                        reason = "extended";
-                        break;
-                    }
-
-                    metadata.ExpiresAt = expiresAt;
-                    rule.RemoteAddress = ip;
-                    // Description 字段不接受竖线
-                    // Description field does not accept a literal pipe
-                    rule.Description = JsonSerializer.Serialize(metadata, JsonOptions).Replace("|", "\\u007C");
-                    if (_firewall != null && OperatingSystem.IsWindows())
-                    {
-                        _firewall.Save(rule);
-                    }
-                    else
-                    {
-                        _rules[rule.Name] = rule;
-                    }
-                    _logger.LogInformation("Firewall {Reason} for {Ip}, alert {AlertId}, expires {ExpiresAt}, dry-run {DryRun}",
-                        reason, ip, metadata.AlertId, expiresAt, IsDryRun);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Cannot block {Ip}", ip);
-                }
+        private void RemoveFromWindows(string ruleName)
+        {
+            if (_firewall != null && OperatingSystem.IsWindows() && !string.IsNullOrEmpty(ruleName))
+            {
+                _firewall.Remove(ruleName);
             }
         }
 
-        public IEnumerable<Rule> GetAllRules()
+        // Next "R-n" id, scanned from the stored rules.
+        private int NextRuleNumber()
         {
-            var result = new List<Rule>();
-            lock (_lock)
+            int max = 0;
+            foreach (var rule in _rules.GetAllAsync().GetAwaiter().GetResult())
             {
-                try
+                if (rule.Id.StartsWith(EntityIds.RulePrefix, StringComparison.Ordinal) &&
+                    int.TryParse(rule.Id.AsSpan(EntityIds.RulePrefix.Length), out int n) && n > max)
                 {
-                    foreach (var rule in GetRules())
-                    {
-                        var metadata = ReadMetadata(rule);
-                        result.Add(new Rule
-                        {
-                            Id = metadata?.AlertId ?? string.Empty,
-                            Name = rule.Name,
-                            // 去掉 Windows 返回的主机掩码，便于元数据比对与 API 展示
-                            // Strip host mask from Windows RemoteAddresses for metadata parity and API display
-                            RemoteAddress = NormalizeIp(rule.RemoteAddress, true) ?? rule.RemoteAddress,
-                            Enabled = rule.Enabled,
-                            Action = metadata?.Action ?? PolicyAction.Block,
-                            AlertId = metadata?.AlertId,
-                            CreatedAt = metadata?.CreatedAt.UtcDateTime ?? default,
-                            ExpiresAt = metadata?.ExpiresAt.UtcDateTime,
-                            AttackType = metadata?.AttackType
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Cannot list firewall rules");
+                    max = n;
                 }
             }
-            return result;
+            return max + 1;
         }
 
-        public void RemoveRule(string ruleName)
-        {
-            if (!string.IsNullOrEmpty(ruleName) && ruleName.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
-            {
-                RemoveRules(ruleName, "manual");
-            }
-        }
-
-        public int RemoveExpiredRules()
-        {
-            return RemoveRules(null, "expired");
-        }
-
-        // API 回滚时删除全部托管规则
-        // Remove all managed rules during API rollback
-        public int RemoveAllManagedRules()
-        {
-            return RemoveRules(null, "rollback");
-        }
-
-        // 删除原因码：manual / expired / rollback
-        // Removal reason codes: manual / expired / rollback
-        private int RemoveRules(string? ruleName, string reason)
-        {
-            int removed = 0;
-            lock (_lock)
-            {
-                try
-                {
-                    var now = _timeProvider.GetUtcNow();
-                    foreach (var rule in GetRules())
-                    {
-                        if (ruleName != null && rule.Name != ruleName)
-                        {
-                            continue;
-                        }
-                        var metadata = ReadMetadata(rule);
-                        if (reason == "expired" && (metadata == null || metadata.ExpiresAt > now))
-                        {
-                            continue;
-                        }
-                        if (_firewall != null && OperatingSystem.IsWindows())
-                        {
-                            _firewall.Remove(rule.Name);
-                        }
-                        else
-                        {
-                            _rules.Remove(rule.Name);
-                        }
-                        removed++;
-                        _logger.LogInformation("Removed rule {RuleName} for {Ip}, alert {AlertId}, reason {Reason}, dry-run {DryRun}",
-                            rule.Name, rule.RemoteAddress, metadata?.AlertId, reason, IsDryRun);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Cannot remove firewall rules");
-                }
-            }
-            return removed;
-        }
-
-        private List<FirewallStoredRule> GetRules()
-        {
-            if (_firewall != null && OperatingSystem.IsWindows())
-            {
-                return _firewall.List();
-            }
-            return _rules.Values.ToList();
-        }
-
-        private FirewallRuleMetadata? ReadMetadata(FirewallStoredRule rule)
-        {
-            try
-            {
-                var metadata = JsonSerializer.Deserialize<FirewallRuleMetadata>(rule.Description, JsonOptions);
-                if (metadata != null && !string.IsNullOrEmpty(metadata.AlertId) &&
-                    rule.Name == EntityIds.FirewallRule(metadata.AlertId) &&
-                    // Description 中的 IP 与 COM 返回地址需同一规范化口径
-                    // Compare Description IP against normalized COM RemoteAddresses
-                    NormalizeIp(metadata.Ip) != null && NormalizeIp(metadata.Ip) == NormalizeIp(rule.RemoteAddress, true) &&
-                    metadata.CreatedAt != default && metadata.ExpiresAt > metadata.CreatedAt &&
-                    float.IsFinite(metadata.Confidence) && metadata.Confidence >= 0 && metadata.Confidence <= 1)
-                {
-                    return metadata;
-                }
-            }
-            catch (JsonException)
-            {
-                // 无效元数据仍可手动删除
-                // Invalid metadata can still be removed manually
-            }
-            _logger.LogWarning("Cannot read expiry metadata for {RuleName}", rule.Name);
-            return null;
-        }
-
-        private static string? NormalizeIp(string value, bool fromRule = false)
+        private static string? NormalizeIp(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
                 return null;
             }
-            var parts = value.Split('/');
-            if (!IPAddress.TryParse(parts[0], out var address))
+            if (!IPAddress.TryParse(value.Split('/')[0], out var address))
             {
                 return null;
-            }
-            // Windows 规则地址可能带完整主机掩码
-            // Windows rule addresses may include a full host mask
-            if (parts.Length > 1)
-            {
-                if (!fromRule || parts.Length != 2)
-                {
-                    return null;
-                }
-                bool ipv4Host = address.AddressFamily == AddressFamily.InterNetwork &&
-                    (parts[1] == "32" || parts[1] == "255.255.255.255");
-                bool ipv6Host = address.AddressFamily == AddressFamily.InterNetworkV6 && parts[1] == "128";
-                if (!ipv4Host && !ipv6Host)
-                {
-                    return null;
-                }
             }
             if (address.IsIPv4MappedToIPv6)
             {
@@ -305,18 +337,5 @@ namespace PolarisSentinel.FirewallEnforement
             }
             return address.ToString();
         }
-    }
-
-    // 序列化到 Description 的审计信息
-    // Audit details serialized into Description
-    internal class FirewallRuleMetadata
-    {
-        public string AlertId { get; set; } = string.Empty;
-        public string Ip { get; set; } = string.Empty;
-        public string AttackType { get; set; } = string.Empty;
-        public PolicyAction Action { get; set; } = PolicyAction.Block;
-        public float Confidence { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTimeOffset ExpiresAt { get; set; }
     }
 }

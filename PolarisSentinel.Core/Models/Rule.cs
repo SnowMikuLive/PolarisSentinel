@@ -1,17 +1,15 @@
 using PolarisSentinel.Core.Enums;
-using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.Core.Models;
 
-// A firewall rule. Can be created manually (no policy/alert) or derived
-// from an alert under a policy (AI automation).
-// Merged with the former FirewallRuleInfo summary type.
+// A firewall rule created by the system or by hand.
+// The firewall module owns persistence; this is the shared shape.
 public class Rule
 {
     // Human-readable id, e.g. "R-1".
     public string Id { get; set; } = string.Empty;
 
-    // Firewall rule name (e.g. "PolarisSentinel_Block_...").
+    // Windows Firewall rule name (e.g. "PolarisSentinel_Block_A-RF-1").
     public string Name { get; set; } = string.Empty;
 
     public string? PolicyId { get; set; }
@@ -24,15 +22,24 @@ public class Rule
 
     public PolicyAction Action { get; set; }
 
-    // Single IP or CIDR range (e.g. "203.0.113.10" or "203.0.113.0/24").
-    public required string RemoteAddress { get; set; }
+    // 5-tuple the rule applies to.
+    public string? SourceIp { get; set; } = string.Empty;
 
-    // Whether the underlying firewall rule is enabled.
+    public int? SourcePort { get; set; }
+
+    public string? DestinationIp { get; set; } = string.Empty;
+
+    public int? DestinationPort { get; set; }
+
+    public byte? Protocol { get; set; }
+
     public bool Enabled { get; set; } = true;
 
     public string? AttackType { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
     public DateTime? ExpiresAt { get; set; }
 }

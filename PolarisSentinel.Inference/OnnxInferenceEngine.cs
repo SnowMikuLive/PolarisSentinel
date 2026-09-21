@@ -109,7 +109,15 @@ namespace PolarisSentinel.Inference
             string attackType = ClassNames[best];
             if (attackType != AttackTypes.Benign)
             {
-                return CreateAlert(flow, attackType, probabilities[0, best], DetectionSource.RandomForest);
+                // The model's class names are external labels; only the categories
+                // defined by the AttackType enum may enter the system.
+                if (!AttackTypes.TryParse(attackType, out string known))
+                {
+                    throw new InvalidOperationException(
+                        $"Model emitted unknown class '{attackType}'. Expected one of: {string.Join(", ", AttackTypes.All)}.");
+                }
+
+                return CreateAlert(flow, known, probabilities[0, best], DetectionSource.RandomForest);
             }
 
             if (_anomalyDetector != null)
@@ -129,8 +137,8 @@ namespace PolarisSentinel.Inference
             return CreateAlert(flow, AttackTypes.Benign, probabilities[0, best], DetectionSource.None);
         }
 
-        // 推理只填充检测字段；Id / 决策字段由调用方补全
-        // Inference fills detection fields only; Id / decision fields are set by the caller
+        // Inference fills the attack type, confidence and 5-tuple only;
+        // the policy engine adds the id and decision fields.
         private static Alert CreateAlert(FlowFeatureVector flow, string attackType, float confidence, DetectionSource source)
         {
             return new Alert
@@ -143,6 +151,7 @@ namespace PolarisSentinel.Inference
                 SourcePort = flow.SourcePort,
                 DestinationPort = flow.DestinationPort,
                 Protocol = flow.Protocol,
+                DetectedAt = flow.FlowEndTime,
                 Reason = string.Empty
             };
         }

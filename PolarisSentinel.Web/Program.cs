@@ -33,32 +33,20 @@ namespace PolarisSentinel
                     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
                 });
 
-            // 策略配置热重载（默认值来自 appsettings）
-            // Policy settings (defaults from appsettings)
-            builder.Services.Configure<UserSettings>(
-                builder.Configuration.GetSection("PolicySettings"));
-            // 防火墙配置（DryRun、封禁时长等）
-            // Firewall settings (DryRun, block duration, etc.)
+            // Firewall configuration (DryRun, sweep interval).
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
 
-            //Register the ITrafficCaptureService as a singleton service
-            //sp is the service provider that allows you to resolve other services from the DI container. In this case, we are resolving IConfiguration to read the configuration values for the TrafficCaptureService.
+            // Traffic capture runs on machine-wide defaults; per-user tuning is applied by the pipeline.
             builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
             {
-
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
-                var settings = sp.GetRequiredService<IOptionsMonitor<UserSettings>>().CurrentValue;
-                // 毫秒→秒
-                // ms to seconds
-                int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
-                int preFilterMinPackets = settings.PreFilterMinPackets;
 
-                // Use the null-coalescing operator to provide a default value of 5 if LiveSummaryIntervalSeconds is not set in the configuration
+                int flowIdleTimeoutSeconds = (section.GetValue<int?>("FlowIdleTimeoutMilliseconds") ?? 120000) / 1000;
+                int preFilterMinPackets = section.GetValue<int?>("PreFilterMinPackets") ?? 3;
                 int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
 
-                //return a concrete TrafficCaptureService instance
                 return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
             });
 
@@ -80,10 +68,6 @@ namespace PolarisSentinel
             builder.Services.AddDbContext<SentinelDbContext>(options =>
             options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            // 检测审计数据库上下文
-            // Detection/audit persistence context
-            builder.Services.AddDbContext<SentinelDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
             builder.Services.AddDefaultIdentity<IdentityUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
@@ -112,10 +96,9 @@ namespace PolarisSentinel
 
             builder.Services.AddSingleton<CaptureControlService>();
 
-            // 每用户设置（时区 + 阈值 + 防火墙），默认值来自 appsettings
-            // Per-user settings (thresholds + firewall); defaults from appsettings
+            // Per-user policy (thresholds + enforcement settings), resolved from the DB.
             builder.Services.AddHttpContextAccessor();
-            builder.Services.AddSingleton<SettingsService>();
+            builder.Services.AddSingleton<PolicyService>();
 
             // RF+IF 双模型
             // Dual-model inference
@@ -129,37 +112,30 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IInferenceEngine>(
                 sp => sp.GetRequiredService<OnnxInferenceEngine>());
 
-            // 冷却计时
-            // Cooldown timing
+            // Cooldown timing.
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-            // 策略引擎通过 Func 读取最新配置，支持热重载
-            // Policy engine reads latest settings via Func for hot-reload
+            // Policy engine evaluates alerts against the supplied policy.
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
-            {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<UserSettings>>();
-                return new PolicyEngine(
-                    () => monitor.CurrentValue,
+                new PolicyEngine(
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<PolicyEngine>>());
-            });
+                    sp.GetRequiredService<ILogger<PolicyEngine>>()));
 
-            // 防火墙执行器
-            // Firewall enforcer
-            builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
+            // Firewall enforcer persists rules through the rule repository.
+            builder.Services.AddScoped<IFirewallEnforcer>(sp =>
+                new WindowsFirewallEnforcer(
+                    new RuleRepository(sp.GetRequiredService<SentinelDbContext>()),
+                    sp.GetRequiredService<IOptions<FirewallOptions>>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
 
-            // Detection pipeline (inference -> policy -> enforcement), Application layer.
-            builder.Services.AddSingleton<IDetectionPipeline>(sp =>
-            {
-                var monitor = sp.GetRequiredService<IOptionsMonitor<UserSettings>>();
-                int blockMinutes = monitor.CurrentValue.BlockDurationMinutes;
-                return new DetectionPipeline(
+            // Detection pipeline (capture verdict -> inference -> policy -> enforcement).
+            builder.Services.AddScoped<IDetectionPipeline>(sp =>
+                new DetectionPipeline(
                     sp.GetRequiredService<IInferenceEngine>(),
                     sp.GetRequiredService<IPolicyEngine>(),
                     sp.GetRequiredService<IFirewallEnforcer>(),
-                    blockMinutes,
-                    sp.GetRequiredService<ILogger<DetectionPipeline>>());
-            });
+                    sp.GetRequiredService<ILogger<DetectionPipeline>>()));
 
             // Detection persistence (single transaction boundary over SentinelDbContext)
             builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

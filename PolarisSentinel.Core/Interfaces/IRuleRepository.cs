@@ -15,4 +15,7 @@ public interface IRuleRepository
     void Update(Rule rule);
 
     void Remove(Rule rule);
+
+    // Commit staged rule changes.
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

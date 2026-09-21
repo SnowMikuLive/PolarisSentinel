@@ -21,9 +21,10 @@ public class RuleRepository : IRuleRepository
 
     public async Task<IReadOnlyList<Rule>> GetActiveAsync(CancellationToken cancellationToken = default)
     {
+        var now = DateTime.Now;
         return await _context.Rules
             .AsNoTracking()
-            .Where(r => r.ExpiresAt == null || r.ExpiresAt > DateTime.UtcNow)
+            .Where(r => r.ExpiresAt == null || r.ExpiresAt > now)
             .ToListAsync(cancellationToken);
     }
 
@@ -49,5 +50,10 @@ public class RuleRepository : IRuleRepository
     public void Remove(Rule rule)
     {
         _context.Rules.Remove(rule);
+    }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return _context.SaveChangesAsync(cancellationToken);
     }
 }

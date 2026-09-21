@@ -8,13 +8,13 @@ namespace PolarisSentinel.Web.Service
     // Remove expired rules at startup and at regular intervals
     public class FirewallRuleSweeper : BackgroundService
     {
-        private readonly IFirewallEnforcer _firewall;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly TimeProvider _timeProvider;
         private readonly TimeSpan _interval;
 
-        public FirewallRuleSweeper(IFirewallEnforcer firewall, IOptions<FirewallOptions> options, TimeProvider timeProvider)
+        public FirewallRuleSweeper(IServiceScopeFactory scopeFactory, IOptions<FirewallOptions> options, TimeProvider timeProvider)
         {
-            _firewall = firewall;
+            _scopeFactory = scopeFactory;
             _timeProvider = timeProvider;
             int seconds = options.Value.SweepSeconds;
             _interval = TimeSpan.FromSeconds(seconds > 0 ? seconds : 30);
@@ -22,7 +22,8 @@ namespace PolarisSentinel.Web.Service
 
         public override Task StartAsync(CancellationToken cancellationToken)
         {
-            _firewall.RemoveExpiredRules();
+            using var scope = _scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IFirewallEnforcer>().RemoveExpired();
             return base.StartAsync(cancellationToken);
         }
 
@@ -33,7 +34,8 @@ namespace PolarisSentinel.Web.Service
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await Task.Delay(_interval, _timeProvider, stoppingToken);
-                    _firewall.RemoveExpiredRules();
+                    using var scope = _scopeFactory.CreateScope();
+                    scope.ServiceProvider.GetRequiredService<IFirewallEnforcer>().RemoveExpired();
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

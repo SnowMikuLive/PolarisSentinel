@@ -5,33 +5,33 @@
 namespace PolarisSentinel.DataAccess.Migrations
 {
     /// <inheritdoc />
-    public partial class RemoveUserFirewallSettings : Migration
+    public partial class RemoveCaptureTuningFromPolicy : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "FirewallDryRun",
-                table: "UserSettings");
+                name: "FlowIdleTimeoutMilliseconds",
+                table: "Policies");
 
             migrationBuilder.DropColumn(
-                name: "FirewallSweepSeconds",
-                table: "UserSettings");
+                name: "PreFilterMinPackets",
+                table: "Policies");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "FirewallDryRun",
-                table: "UserSettings",
-                type: "bit",
+            migrationBuilder.AddColumn<int>(
+                name: "FlowIdleTimeoutMilliseconds",
+                table: "Policies",
+                type: "int",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
-                name: "FirewallSweepSeconds",
-                table: "UserSettings",
+                name: "PreFilterMinPackets",
+                table: "Policies",
                 type: "int",
                 nullable: false,
                 defaultValue: 0);

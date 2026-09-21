@@ -12,8 +12,8 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
-    [Migration("20260920143921_UpdateRuleFields")]
-    partial class UpdateRuleFields
+    [Migration("20260921075414_PolicyRuleFiveTuple")]
+    partial class PolicyRuleFiveTuple
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -246,6 +246,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<float>("Confidence")
                         .HasColumnType("real");
 
+                    b.Property<DateTime>("DecidedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("DestinationIp")
                         .IsRequired()
                         .HasMaxLength(45)
@@ -269,10 +272,6 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
-                    b.Property<string>("Severity")
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
-
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -293,42 +292,6 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.HasIndex("SourceIp");
 
                     b.ToTable("Alerts", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "A-RF-1",
-                            Action = "Block",
-                            AttackType = "DoS",
-                            Confidence = 0.95f,
-                            DestinationIp = "192.168.1.10",
-                            DestinationPort = 80,
-                            DetectedAt = new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc),
-                            Protocol = (byte)6,
-                            Reason = "rf_block_confidence",
-                            RuleName = "PolarisSentinel_Block_A-RF-1",
-                            Severity = "High",
-                            Source = "RandomForest",
-                            SourceIp = "203.0.113.10",
-                            SourcePort = 44321
-                        },
-                        new
-                        {
-                            Id = "A-RF-2",
-                            Action = "Block",
-                            AttackType = "PortScan",
-                            Confidence = 0.88f,
-                            DestinationIp = "192.168.1.10",
-                            DestinationPort = 22,
-                            DetectedAt = new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Protocol = (byte)6,
-                            Reason = "rf_block_confidence",
-                            RuleName = "PolarisSentinel_Block_A-RF-2",
-                            Severity = "Medium",
-                            Source = "RandomForest",
-                            SourceIp = "198.51.100.23",
-                            SourcePort = 51234
-                        });
                 });
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Policy", b =>
@@ -342,8 +305,14 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
 
-                    b.Property<float>("AutoBlockConfidenceThreshold")
-                        .HasColumnType("real");
+                    b.Property<string>("Allowlist")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("AttackType")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("BlockDurationMinutes")
                         .HasColumnType("int");
@@ -354,25 +323,60 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<int>("DecisionCooldownSeconds")
                         .HasColumnType("int");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
                     b.Property<string>("DetectionSource")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<float>("RfConfidenceThreshold")
+                    b.Property<float?>("IfConfidenceThreshold")
                         .HasColumnType("real");
+
+                    b.Property<string>("MatchAttackTypes")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<byte>("MatchProtocol")
+                        .HasColumnType("tinyint");
+
+                    b.Property<float?>("RfConfidenceThreshold")
+                        .HasColumnType("real");
+
+                    b.Property<string>("RuleDestinationIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RuleDestinationIpAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("RuleDestinationPort")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RuleDestinationPortAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("RuleSourceIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RuleSourceIpAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("RuleSourcePort")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RuleSourcePortAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -382,36 +386,6 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Policies", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "P-1",
-                            Action = "Monitor",
-                            AutoBlockConfidenceThreshold = 0.8f,
-                            BlockDurationMinutes = 60,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DecisionCooldownSeconds = 60,
-                            DetectionSource = "RandomForest",
-                            IsActive = true,
-                            Name = "Default Monitor",
-                            RfConfidenceThreshold = 0.6f,
-                            UserId = ""
-                        },
-                        new
-                        {
-                            Id = "P-2",
-                            Action = "Block",
-                            AutoBlockConfidenceThreshold = 0.9f,
-                            BlockDurationMinutes = 120,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DecisionCooldownSeconds = 30,
-                            DetectionSource = "RandomForest",
-                            IsActive = true,
-                            Name = "Default Block",
-                            RfConfidenceThreshold = 0.7f,
-                            UserId = ""
-                        });
                 });
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
@@ -435,14 +409,19 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("DestinationIp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("DestinationPort")
+                        .HasColumnType("int");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsBlockRule")
-                        .HasColumnType("bit");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -452,15 +431,19 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<string>("PolicyId")
                         .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("RemoteAddress")
-                        .IsRequired()
-                        .HasMaxLength(45)
-                        .HasColumnType("nvarchar(45)");
+                    b.Property<byte>("Protocol")
+                        .HasColumnType("tinyint");
 
-                    b.Property<string>("Status")
+                    b.Property<string>("SourceIp")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)");
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("SourcePort")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -469,38 +452,6 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.HasIndex("PolicyId");
 
                     b.ToTable("Rules", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "R-1",
-                            Action = "Block",
-                            AlertId = "A-RF-1",
-                            AttackType = "DoS",
-                            CreatedAt = new DateTime(2026, 1, 2, 10, 0, 0, 0, DateTimeKind.Utc),
-                            Enabled = true,
-                            ExpiresAt = new DateTime(2026, 1, 2, 11, 0, 0, 0, DateTimeKind.Utc),
-                            IsBlockRule = true,
-                            Name = "PolarisSentinel_Block_A-RF-1",
-                            PolicyId = "P-2",
-                            RemoteAddress = "203.0.113.10",
-                            Status = "Active"
-                        },
-                        new
-                        {
-                            Id = "R-2",
-                            Action = "Block",
-                            AlertId = "A-RF-2",
-                            AttackType = "PortScan",
-                            CreatedAt = new DateTime(2026, 1, 2, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Enabled = true,
-                            ExpiresAt = new DateTime(2026, 1, 2, 13, 0, 0, 0, DateTimeKind.Utc),
-                            IsBlockRule = true,
-                            Name = "PolarisSentinel_Block_A-RF-2",
-                            PolicyId = "P-2",
-                            RemoteAddress = "198.51.100.23",
-                            Status = "Active"
-                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

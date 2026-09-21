@@ -1,20 +1,49 @@
+using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-// 策略 Block 决策的防火墙执行接口
-// Firewall execution contract for Block policy decisions
+// Firewall rule CRUD, driven by the 5-tuple plus a per-field scope.
 public interface IFirewallEnforcer
 {
-    // 按决策封禁，duration 指定规则有效期
-    // Block from a decision for the supplied duration
-    void BlockIp(Alert decision, TimeSpan duration);
+    // Create a rule for the supplied scope. Null scope means the exact 5-tuple.
+    // A null alertId marks a manual rule with no originating alert.
+    Rule Block(
+        string sourceIp,
+        int sourcePort,
+        string destinationIp,
+        int destinationPort,
+        byte protocol,
+        PolicyAction action,
+        string? alertId,
+        string? attackType,
+        TimeSpan duration,
+        FirewallRuleScope? scope = null);
 
-    void RemoveRule(string ruleName);
+    // Update the scope / action / enabled state of an existing rule.
+    Rule? Update(
+        string ruleId,
+        string sourceIp,
+        int sourcePort,
+        string destinationIp,
+        int destinationPort,
+        byte protocol,
+        PolicyAction action,
+        bool enabled,
+        TimeSpan duration,
+        FirewallRuleScope? scope = null);
 
-    IEnumerable<Rule> GetAllRules();
+    // Remove one rule by its id.
+    bool Remove(string ruleId);
 
-    int RemoveExpiredRules();
+    // Remove every rule this application created.
+    int RemoveAll();
 
-    int RemoveAllManagedRules();
+    // Remove rules whose expiry has passed.
+    int RemoveExpired();
+
+    // Every rule this application created.
+    IReadOnlyList<Rule> GetAllRules();
+
+    Rule? GetById(string ruleId);
 }

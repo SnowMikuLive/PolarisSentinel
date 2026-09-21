@@ -7,175 +7,86 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.PolicyDecision
 {
-    // 推理结果 → Ignore / Monitor / Block；Unknown 仅 Monitor
-    // Maps detections to Ignore / Monitor / Block; unknown anomalies Monitor-only
+    // Maps a detection onto Allow / Monitor / Block using the owner's policy thresholds.
     public class PolicyEngine : IPolicyEngine
     {
-        private readonly Func<UserSettings> _settingsProvider;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<PolicyEngine> _logger;
         private readonly object _lock = new object();
-        private readonly Dictionary<string, DateTimeOffset> _lastBlockTimes = new Dictionary<string, DateTimeOffset>();
+        private readonly Dictionary<string, DateTime> _lastBlockTimes = new Dictionary<string, DateTime>();
         private string[] _allowlistEntries = Array.Empty<string>();
         private AddressAllowlist? _allowlist;
-
-        // 全局告警计数器（RF / IF 共用）
-        // Global alert counter shared by RF and IF
         private int _alertCounter;
 
-        public PolicyEngine(Func<UserSettings> settingsProvider, TimeProvider timeProvider, ILogger<PolicyEngine> logger)
+        public PolicyEngine(TimeProvider timeProvider, ILogger<PolicyEngine> logger)
         {
-            _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
             _timeProvider = timeProvider;
             _logger = logger;
         }
 
-        public Alert Evaluate(Alert result)
+        // Evaluates a detection and writes the decision back onto the alert.
+        public Alert Evaluate(Alert alert, Policy policy)
         {
-            if (result == null)
+            if (alert == null)
             {
-                throw new ArgumentNullException(nameof(result));
+                throw new ArgumentNullException(nameof(alert));
+            }
+            if (policy == null)
+            {
+                throw new ArgumentNullException(nameof(policy));
             }
 
-            // 串行评估，避免同 IP 并发重复 Block
-            // Evaluate serially to avoid concurrent duplicate Blocks per IP
+            // Evaluate serially to avoid concurrent duplicate Blocks per IP.
             lock (_lock)
             {
-                var settings = _settingsProvider();
-                var cooldown = TimeSpan.FromSeconds(Math.Max(0, settings.DecisionCooldownSeconds));
-                RemoveExpiredCooldowns(_timeProvider.GetUtcNow(), cooldown);
+                var now = _timeProvider.GetLocalNow().DateTime;
+                var cooldown = TimeSpan.FromSeconds(Math.Max(0, policy.DecisionCooldownSeconds));
+                RemoveExpiredCooldowns(now, cooldown);
 
-                if (result.Source == DetectionSource.None || result.AttackType == AttackTypes.Benign)
+                // Benign traffic is never acted on.
+                if (alert.Source == DetectionSource.None || alert.AttackType == AttackTypes.Benign)
                 {
-                    return CreateDecision(result, PolicyAction.Ignore, "benign_or_no_detection");
+                    return CreateDecision(alert, policy, PolicyAction.Monitor, "benign", now);
                 }
 
-                // Rule-based pre-filter verdicts are trusted: block without a confidence check.
-                if (result.Source == DetectionSource.PreFilter)
+                // The alert must match the policy's attack type + protocol criteria.
+                if (!MatchesCriteria(alert, policy))
                 {
-                    if (GetAllowlist(settings).Contains(result.SourceIp))
-                    {
-                        return CreateDecision(result, PolicyAction.Monitor, "allowlist: Block downgraded to Monitor");
-                    }
-
-                    if (!TryRecordBlock(result.SourceIp, cooldown))
-                    {
-                        return CreateDecision(result, PolicyAction.Ignore, "cooldown");
-                    }
-
-                    return CreateDecision(result, PolicyAction.Block, "prefilter_block");
+                    return CreateDecision(alert, policy, PolicyAction.Monitor, "no_match", now);
                 }
 
-                if (!float.IsFinite(result.Confidence) || result.Confidence < 0 || result.Confidence > 1)
+                // Pre-filter verdicts are rule-based and carry confidence 1, so they always pass.
+                float? threshold = alert.Source switch
                 {
-                    _logger.LogWarning("Ignoring invalid confidence {Confidence} from {SourceIp}",
-                        result.Confidence, result.SourceIp);
-                    return CreateDecision(result, PolicyAction.Ignore, "invalid_confidence");
+                    DetectionSource.RandomForest => policy.RfConfidenceThreshold,
+                    DetectionSource.IsolationForest => policy.IfConfidenceThreshold,
+                    DetectionSource.PreFilter => 1f,
+                    _ => null
+                };
+
+                // Confidence below the threshold: keep monitoring.
+                if (threshold is null || alert.Confidence < threshold)
+                {
+                    return CreateDecision(alert, policy, PolicyAction.Monitor, "confidence_below_threshold", now);
                 }
 
-                // 阈值使用与置信度相同的 float 精度。
-                // Use the same float precision as the confidence value.
-                float alertThreshold = (float)settings.RfConfidenceThreshold;
-                float blockThreshold = (float)settings.AutoBlockConfidenceThreshold;
-
-                // 未知异常只告警，不自动封禁。
-                // Unknown anomalies only raise alerts, never automatic blocks.
-                if (result.AttackType == AttackTypes.UnknownAnomaly)
+                // Allowlisted addresses are never blocked.
+                if (GetAllowlist(policy).Contains(alert.SourceIp))
                 {
-                    if (result.Confidence >= alertThreshold)
-                    {
-                        return CreateDecision(result, PolicyAction.Monitor, "unknown_anomaly_monitor_only");
-                    }
-                    return CreateDecision(result, PolicyAction.Ignore, "confidence_below_alert_threshold");
+                    return CreateDecision(alert, policy, PolicyAction.Monitor, "allowlisted", now);
                 }
 
-                if (result.Source != DetectionSource.RandomForest)
+                // Same address already blocked within the cooldown window.
+                if (!TryRecordBlock(alert.SourceIp, cooldown, now))
                 {
-                    return CreateDecision(result, PolicyAction.Ignore, "unsupported_detection_source");
+                    return CreateDecision(alert, policy, PolicyAction.Monitor, "cooldown", now);
                 }
 
-                if (result.Confidence < alertThreshold)
-                {
-                    return CreateDecision(result, PolicyAction.Ignore, "confidence_below_alert_threshold");
-                }
-
-                if (result.Confidence < blockThreshold)
-                {
-                    return CreateDecision(result, PolicyAction.Monitor, "rf_monitor_confidence");
-                }
-
-                if (GetAllowlist(settings).Contains(result.SourceIp))
-                {
-                    return CreateDecision(result, PolicyAction.Monitor, "allowlist: Block downgraded to Monitor");
-                }
-
-                if (!TryRecordBlock(result.SourceIp, cooldown))
-                {
-                    return CreateDecision(result, PolicyAction.Ignore, "cooldown");
-                }
-
-                return CreateDecision(result, PolicyAction.Block, "rf_block_confidence");
+                return CreateDecision(alert, policy, PolicyAction.Block, "confidence_threshold_met", now);
             }
         }
 
-        private void RemoveExpiredCooldowns(DateTimeOffset now, TimeSpan cooldown)
-        {
-            var expiredIps = new List<string>();
-            foreach (var entry in _lastBlockTimes)
-            {
-                if (now - entry.Value >= cooldown)
-                {
-                    expiredIps.Add(entry.Key);
-                }
-            }
-
-            foreach (string ip in expiredIps)
-            {
-                _lastBlockTimes.Remove(ip);
-            }
-        }
-
-        private bool TryRecordBlock(string sourceIp, TimeSpan cooldown)
-        {
-            if (cooldown <= TimeSpan.Zero)
-            {
-                return true;
-            }
-
-            // 同一 IP 的不同写法使用同一个冷却记录。
-            // Different forms of the same IP use one cooldown record.
-            string key = sourceIp ?? string.Empty;
-            if (IPAddress.TryParse(sourceIp, out var address))
-            {
-                if (address.IsIPv4MappedToIPv6)
-                {
-                    address = address.MapToIPv4();
-                }
-                key = address.ToString();
-            }
-
-            var now = _timeProvider.GetUtcNow();
-            if (_lastBlockTimes.TryGetValue(key, out var lastBlock) && now - lastBlock < cooldown)
-            {
-                return false;
-            }
-
-            _lastBlockTimes[key] = now;
-            return true;
-        }
-
-        public Task RefreshSettingsAsync()
-        {
-            lock (_lock)
-            {
-                GetAllowlist(_settingsProvider());
-            }
-            _logger.LogInformation("Policy settings refreshed");
-            return Task.CompletedTask;
-        }
-
-        // 用已有告警的最大编号初始化计数器
-        // Seed the alert counter from the highest existing alert number
+        // Seed the alert counter from the highest existing alert number.
         public void InitializeAlertCounter(int maxExistingNumber)
         {
             lock (_lock)
@@ -188,11 +99,73 @@ namespace PolarisSentinel.PolicyDecision
             _logger.LogInformation("Alert counter initialised at {Counter}", _alertCounter);
         }
 
-        private AddressAllowlist GetAllowlist(UserSettings settings)
+        private void RemoveExpiredCooldowns(DateTime now, TimeSpan cooldown)
         {
-            var entries = string.IsNullOrWhiteSpace(settings.Allowlist)
+            var expired = _lastBlockTimes.Where(e => now - e.Value >= cooldown).Select(e => e.Key).ToList();
+            foreach (string ip in expired)
+            {
+                _lastBlockTimes.Remove(ip);
+            }
+        }
+
+        private bool TryRecordBlock(string sourceIp, TimeSpan cooldown, DateTime now)
+        {
+            if (cooldown <= TimeSpan.Zero)
+            {
+                return true;
+            }
+
+            string key = sourceIp ?? string.Empty;
+            if (IPAddress.TryParse(sourceIp, out var address))
+            {
+                if (address.IsIPv4MappedToIPv6)
+                {
+                    address = address.MapToIPv4();
+                }
+                key = address.ToString();
+            }
+
+            if (_lastBlockTimes.TryGetValue(key, out var lastBlock) && now - lastBlock < cooldown)
+            {
+                return false;
+            }
+
+            _lastBlockTimes[key] = now;
+            return true;
+        }
+
+        // An alert must match every configured criterion; an empty/zero criterion means Any.
+        private static bool MatchesCriteria(Alert alert, Policy policy)
+        {
+            if (!MatchesAttackType(alert.AttackType, policy.MatchAttackTypes))
+            {
+                return false;
+            }
+
+            if (policy.MatchProtocol != 0 && alert.Protocol != policy.MatchProtocol)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        // Empty configured list = any attack type.
+        private static bool MatchesAttackType(string? attackType, string? configured)
+        {
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                return true;
+            }
+
+            var entries = configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return entries.Any(e => string.Equals(e, attackType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private AddressAllowlist GetAllowlist(Policy policy)
+        {            var entries = string.IsNullOrWhiteSpace(policy.Allowlist)
                 ? Array.Empty<string>()
-                : settings.Allowlist.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                : policy.Allowlist.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (_allowlist == null || !entries.SequenceEqual(_allowlistEntries))
             {
                 _allowlistEntries = entries.ToArray();
@@ -201,21 +174,19 @@ namespace PolarisSentinel.PolicyDecision
             return _allowlist;
         }
 
-        // 将决策写回告警并返回
-        // Write the decision onto the alert and return it
-        private Alert CreateDecision(Alert result, PolicyAction action, string reason)
+        // Write the decision onto the alert and return it.
+        private Alert CreateDecision(Alert alert, Policy policy, PolicyAction action, string reason, DateTime now)
         {
-            result.Id = EntityIds.Alert(result.Source, ++_alertCounter);
-            result.Action = action;
-            result.DecidedAt = _timeProvider.GetUtcNow().UtcDateTime;
-            result.Reason = reason;
+            alert.Id = EntityIds.Alert(alert.Source, ++_alertCounter);
+            alert.Action = action;
+            alert.DecidedAt = now;
+            alert.Reason = reason;
 
             _logger.LogDebug(
                 "Policy decision {AlertId}: {Action} for {SourceIp}, attack {AttackType}, confidence {Confidence}, reason {Reason}",
-                result.Id, result.Action, result.SourceIp,
-                result.AttackType, result.Confidence, result.Reason);
+                alert.Id, alert.Action, alert.SourceIp, alert.AttackType, alert.Confidence, alert.Reason);
 
-            return result;
+            return alert;
         }
     }
 }

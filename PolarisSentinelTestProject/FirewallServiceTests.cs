@@ -1,13 +1,13 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Extensions.DependencyInjection;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
+using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.FirewallEnforement;
-using PolarisSentinel.Web.Controllers;
 using PolarisSentinel.Web.Service;
 
 namespace PolarisSentienlUnitTestProject
@@ -15,103 +15,62 @@ namespace PolarisSentienlUnitTestProject
     [TestClass]
     public class FirewallServiceUnitTest
     {
-        #region Rules Page Backing Tests
-
-        // Rules 页面读取实时规则（仅托管规则）
-        // Rules page reads live managed rules
+        // The rules page reads every rule the application created.
         [TestMethod]
         public void FirewallRulesPage_GetAllRules_ShouldReturnCreatedRule()
         {
-            // Arrange
-            var engine = CreateEngine(new FakeTimeProvider());
-            engine.BlockIp(CreateDecision(), TimeSpan.FromMinutes(60));
+            var repository = new FakeRuleRepository();
+            var clock = new FakeTimeProvider();
+            var enforcer = new WindowsFirewallEnforcer(repository, Options.Create(new FirewallOptions()),
+                clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
-            // Act
-            var rules = engine.GetAllRules().ToList();
+            enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
+                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            // Assert
+            var rules = enforcer.GetAllRules();
             Assert.HasCount(1, rules);
-            Assert.AreEqual("203.0.113.66", rules.Single().RemoteAddress);
+            Assert.AreEqual("203.0.113.10", rules[0].SourceIp);
         }
 
-        // Rules 页面的 Remove All 删除全部托管规则
-        // Rules page Remove All clears every managed rule
         [TestMethod]
         public void FirewallRulesPage_RemoveAll_ShouldRemoveCreatedRules()
         {
-            // Arrange
-            var engine = CreateEngine(new FakeTimeProvider());
-            engine.BlockIp(CreateDecision(), TimeSpan.FromMinutes(60));
-
-            // Act
-            int removed = engine.RemoveAllManagedRules();
-
-            // Assert
-            Assert.AreEqual(1, removed);
-            Assert.IsEmpty(engine.GetAllRules());
-        }
-
-        #endregion
-
-        #region Sweeper Tests
-
-        // 启动清扫服务时删除已过期规则
-        // Remove expired rules when the sweeper starts
-        [TestMethod]
-        public async Task FirewallRuleSweeper_Start_ShouldRemoveExpiredRule()
-        {
-            // Arrange
+            var repository = new FakeRuleRepository();
             var clock = new FakeTimeProvider();
-            var engine = CreateEngine(clock);
-            engine.BlockIp(CreateDecision(), TimeSpan.FromMinutes(1));
-            clock.Advance(TimeSpan.FromMinutes(2));
-            using var sweeper = new FirewallRuleSweeper(
-                engine, Options.Create(new FirewallOptions()), clock);
+            var enforcer = new WindowsFirewallEnforcer(repository, Options.Create(new FirewallOptions()),
+                clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
-            // Act
-            await sweeper.StartAsync(CancellationToken.None);
-            try
-            {
-                // Assert
-                Assert.IsEmpty(engine.GetAllRules());
-            }
-            finally
-            {
-                await sweeper.StopAsync(CancellationToken.None);
-            }
+            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
+                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+
+            Assert.AreEqual(1, enforcer.RemoveAll());
+            Assert.IsEmpty(enforcer.GetAllRules());
         }
 
-        #endregion
-
-        #region Helper Methods
-
-        // 默认 DryRun，测试只操作内存规则
-        // Default DryRun keeps test rules in memory
-        private WindowsFirewallEnforcer CreateEngine(FakeTimeProvider clock)
+        // The sweeper removes rules whose expiry has passed.
+        [TestMethod]
+        public void FirewallRuleSweeper_Start_ShouldRemoveExpiredRule()
         {
-            return new WindowsFirewallEnforcer(
-                Options.Create(new FirewallOptions()), clock,
-                NullLogger<WindowsFirewallEnforcer>.Instance);
-        }
+            var repository = new FakeRuleRepository();
+            var clock = new FakeTimeProvider();
+            var enforcer = new WindowsFirewallEnforcer(repository, Options.Create(new FirewallOptions()),
+                clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
-        // 默认使用 RFC 5737 文档地址
-        // Default uses RFC 5737 documentation addresses
-        private Alert CreateDecision()
-        {
-            return new Alert
-            {
-                Id = EntityIds.Alert(DetectionSource.RandomForest, 1),
-                Action = PolicyAction.Block,
-                SourceIp = "203.0.113.66",
-                DestinationIp = "192.168.1.10",
-                AttackType = AttackTypes.DoS,
-                Confidence = 0.95f,
-                Source = DetectionSource.RandomForest,
-                DecidedAt = DateTime.UtcNow,
-                Reason = "test"
-            };
-        }
+            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
+                PolicyAction.Block, "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            clock.Advance(TimeSpan.FromMinutes(61));
 
-        #endregion
+            using var serviceProvider = new ServiceCollection()
+                .AddScoped<IFirewallEnforcer>(_ => enforcer)
+                .BuildServiceProvider();
+            var sweeper = new FirewallRuleSweeper(
+                serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new FirewallOptions()),
+                clock);
+            sweeper.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.IsEmpty(enforcer.GetAllRules());
+            sweeper.StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        }
     }
 }

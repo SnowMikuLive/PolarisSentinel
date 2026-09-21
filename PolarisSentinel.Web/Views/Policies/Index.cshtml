@@ -5,24 +5,32 @@
 }
 
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="text-primary">Policies</h2>
+    <h2 class="text-primary">Policies</h2>
+    <p class="text-muted">Detection thresholds and enforcement settings.</p>
+
+    @if (TempData["success"] != null)
+    {
+        <div class="alert alert-success">@TempData["success"]</div>
+    }
+
+    <div class="mb-3">
         <a asp-action="Create" class="btn btn-primary">Create New</a>
     </div>
 
     <div class="card shadow-sm border-primary">
-        <div class="card-header bg-primary text-white">
-            Policy List
-        </div>
         <div class="card-body p-0">
             <table class="table table-striped table-hover mb-0 align-middle">
                 <thead>
                     <tr>
-                        <th style="width: 140px;">ID</th>
-                        <th>Name</th>
-                        <th>Action</th>
-                        <th>Active</th>
+                        <th>Policy ID</th>
+                        <th>Detection Source</th>
+                        <th>Match</th>
+                        <th>RF Threshold</th>
+                        <th>IF Threshold</th>
+                        <th>Block Duration</th>
+                        <th>Cooldown</th>
                         <th>Created</th>
+                        <th>Updated</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -30,37 +38,66 @@
                     @if (Model.Count == 0)
                     {
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">No policies yet.</td>
+                            <td colspan="10" class="text-center text-muted py-3">No policies.</td>
                         </tr>
                     }
-                    @foreach (var item in Model)
+                    else
                     {
-                        <tr>
-                            <td class="fw-bold">@item.Id</td>
-                            <td>@item.Name</td>
-                            <td>
-                                <span class="badge bg-secondary">@item.Action</span>
-                            </td>
-                            <td>
-                                @if (item.IsActive)
-                                {
-                                    <span class="badge bg-success">Yes</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">No</span>
-                                }
-                            </td>
-                            <td>@SettingsService.Format(item.CreatedAt)</td>
-                            <td class="text-end">
-                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
-                                <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
-                                <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Delete</a>
-                            </td>
-                        </tr>
+                        foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="fw-bold">@item.Id</td>
+                                <td><span class="badge bg-primary">@item.DetectionSource</span></td>
+                                <td class="small">@DescribeMatch(item)</td>
+                                <td>@(item.RfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
+                                <td>@(item.IfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
+                                <td>@item.BlockDurationMinutes min</td>
+                                <td>@item.DecisionCooldownSeconds s</td>
+                                <td>@TimeFormat.Format(item.CreatedAt)</td>
+                                <td>@TimeFormat.Format(item.UpdatedAt)</td>
+                                <td class="text-end text-nowrap">
+                                    <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
+                                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
+                                    <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                                </td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
         </div>
+        <div class="card-footer small text-muted">
+            Total: @Model.Count policy(ies)
+        </div>
     </div>
 </div>
+
+@functions {
+    // One-line summary of the alert match criteria; "Any" when nothing is constrained.
+    static string DescribeMatch(PolarisSentinel.Core.Models.Policy policy)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
+        {
+            parts.Add(policy.MatchAttackTypes);
+        }
+
+        if (policy.MatchProtocol != 0)
+        {
+            parts.Add(ProtocolName(policy.MatchProtocol));
+        }
+
+        return parts.Count == 0 ? "Any" : string.Join(" / ", parts);
+    }
+
+    // Map an IP protocol number to a readable name.
+    static string ProtocolName(byte protocol) => protocol switch
+    {
+        1 => "ICMP",
+        6 => "TCP",
+        17 => "UDP",
+        0 => "Any",
+        _ => protocol.ToString()
+    };
+}

@@ -1,4 +1,4 @@
-﻿@model IReadOnlyList<PolarisSentinel.Core.Models.Alert>
+@model IReadOnlyList<PolarisSentinel.Core.Models.Alert>
 @using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Inference Results";
@@ -75,7 +75,7 @@
                         {
                             <tr>
                                 <td class="fw-bold">@item.Id</td>
-                                <td>@SettingsService.Format(item.DetectedAt)</td>
+                                <td>@TimeFormat.Format(item.DetectedAt)</td>
                                 <td>@item.SourceIp:@item.SourcePort</td>
                                 <td>@item.DestinationIp:@item.DestinationPort</td>
                                 <td class="fw-bold">@item.AttackType</td>

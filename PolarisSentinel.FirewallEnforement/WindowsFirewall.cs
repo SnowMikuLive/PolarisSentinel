@@ -25,7 +25,18 @@ namespace PolarisSentinel.FirewallEnforement
         public void Save(FirewallStoredRule rule)
         {
             CheckName(rule.Name);
-            if (!IPAddress.TryParse(rule.RemoteAddress, out var address))
+
+            // "*" means Any; otherwise a single remote IP is required.
+            string remoteAddresses;
+            if (rule.RemoteAddress == "*")
+            {
+                remoteAddresses = "*";
+            }
+            else if (IPAddress.TryParse(rule.RemoteAddress, out var address))
+            {
+                remoteAddresses = address.ToString();
+            }
+            else
             {
                 throw new ArgumentException("A single remote IP address is required.");
             }
@@ -52,48 +63,37 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             target.Name = rule.Name;
-            target.Protocol = 256;
-            target.RemoteAddresses = address.ToString();
+            // 256 = any protocol; 0 is not a valid Windows Firewall protocol value.
+            target.Protocol = rule.Protocol == 0 ? 256 : rule.Protocol;
+            target.RemoteAddresses = remoteAddresses;
             target.Direction = 1;
             target.Action = 0;
             target.Profiles = int.MaxValue;
-            target.Description = rule.Description;
-            target.Enabled = true;
+            target.Enabled = rule.Enabled;
 
-            // 续期时更新已有规则，不重复 Add
-            // Update the existing rule when extending; do not Add again
+            // A port of 0 (or a protocol of Any) cannot be expressed, so the port
+            // filter is left unset and the rule matches every port.
+            SetPorts(target, rule);
+
+            // Update the existing rule when extending; do not Add again.
             if (existing == null)
             {
                 _rules.Add(target);
             }
         }
 
+        // Windows Firewall uses "*" for every port; 0 means "not specified".
+        private static void SetPorts(dynamic target, FirewallStoredRule rule)
+        {
+            bool anyProtocol = rule.Protocol == 0;
+            target.LocalPorts = anyProtocol || rule.LocalPort == 0 ? "*" : rule.LocalPort.ToString();
+            target.RemotePorts = anyProtocol || rule.RemotePort == 0 ? "*" : rule.RemotePort.ToString();
+        }
+
         public void Remove(string ruleName)
         {
             CheckName(ruleName);
             _rules.Remove(ruleName);
-        }
-
-        public List<FirewallStoredRule> List()
-        {
-            var result = new List<FirewallStoredRule>();
-            foreach (dynamic rule in _rules)
-            {
-                string name = rule.Name;
-                if (name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
-                {
-                    result.Add(new FirewallStoredRule
-                    {
-                        Name = name,
-                        RemoteAddress = rule.RemoteAddresses,
-                        Description = rule.Description,
-                        Enabled = rule.Enabled,
-                        IsBlockRule = rule.Action == 0,
-                        Direction = rule.Direction
-                    });
-                }
-            }
-            return result;
         }
 
         private static void CheckName(string name)
@@ -109,7 +109,9 @@ namespace PolarisSentinel.FirewallEnforement
     {
         public string Name { get; set; } = string.Empty;
         public string RemoteAddress { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
+        public int LocalPort { get; set; }
+        public int RemotePort { get; set; }
+        public byte Protocol { get; set; }
         public bool Enabled { get; set; } = true;
         public bool IsBlockRule { get; set; } = true;
         public int Direction { get; set; } = 1;

@@ -55,7 +55,7 @@ internal sealed class PreFilter
         if (isOrdinaryTwoWayTraffic)
             return null;
 
-        // Nothing matched: hand it to the AI engine.
+        // Every rule has been evaluated and nothing matched: hand it to the AI engine.
         suspicious = true;
         return null;
     }
@@ -73,7 +73,7 @@ internal sealed class PreFilter
             flow.FwdPackets > flow.BwdPackets * 2;
 
         if (isSynFlood)
-            return Verdict(AttackTypes.SynFlood, "prefilter_syn_flood");
+            return Verdict(AttackTypes.DoS, "prefilter_syn_flood");
 
         // UDP flood: high one-way UDP packet rate, no reply traffic.
         bool isUdpFlood =
@@ -83,7 +83,7 @@ internal sealed class PreFilter
             flow.FwdPacketsPerSecond > 100;
 
         if (isUdpFlood)
-            return Verdict(AttackTypes.UdpFlood, "prefilter_udp_flood");
+            return Verdict(AttackTypes.DoS, "prefilter_udp_flood");
 
         // ACK flood: many ACKs with no SYN and no payload-carrying handshake.
         bool isAckFlood =
@@ -92,7 +92,7 @@ internal sealed class PreFilter
             flow.FwdPackets > flow.BwdPackets * 2;
 
         if (isAckFlood)
-            return Verdict(AttackTypes.AckFlood, "prefilter_ack_flood");
+            return Verdict(AttackTypes.DoS, "prefilter_ack_flood");
 
         // ICMP flood: high one-way ICMP packet rate.
         bool isIcmpFlood =
@@ -102,7 +102,7 @@ internal sealed class PreFilter
             flow.FwdPacketsPerSecond > 100;
 
         if (isIcmpFlood)
-            return Verdict(AttackTypes.IcmpFlood, "prefilter_icmp_flood");
+            return Verdict(AttackTypes.DoS, "prefilter_icmp_flood");
 
         return null;
     }
@@ -121,7 +121,7 @@ internal sealed class PreFilter
             mostlyOutbound;
 
         if (isSynScan)
-            return Verdict(AttackTypes.SynScan, "prefilter_syn_scan");
+            return Verdict(AttackTypes.PortScan, "prefilter_syn_scan");
 
         // Connect scan: full handshakes (SYN+ACK) that are reset immediately.
         bool isConnectScan =
@@ -132,7 +132,7 @@ internal sealed class PreFilter
             mostlyOutbound;
 
         if (isConnectScan)
-            return Verdict(AttackTypes.ConnectScan, "prefilter_connect_scan");
+            return Verdict(AttackTypes.PortScan, "prefilter_connect_scan");
 
         // FIN/NULL/Xmas scan: no SYN at all, only FIN or RST probes.
         bool isFinNullXmasScan =
@@ -143,7 +143,7 @@ internal sealed class PreFilter
             mostlyOutbound;
 
         if (isFinNullXmasScan)
-            return Verdict(AttackTypes.FinNullXmasScan, "prefilter_fin_null_xmas_scan");
+            return Verdict(AttackTypes.PortScan, "prefilter_fin_null_xmas_scan");
 
         // UDP scan: many small one-way UDP packets to a single port, no replies.
         bool isUdpScan =
@@ -154,7 +154,7 @@ internal sealed class PreFilter
             shortLived;
 
         if (isUdpScan)
-            return Verdict(AttackTypes.UdpScan, "prefilter_udp_scan");
+            return Verdict(AttackTypes.PortScan, "prefilter_udp_scan");
 
         // ICMP sweep: several one-way echo requests probing hosts.
         bool isIcmpSweep =
@@ -165,7 +165,7 @@ internal sealed class PreFilter
             shortLived;
 
         if (isIcmpSweep)
-            return Verdict(AttackTypes.IcmpSweep, "prefilter_icmp_sweep");
+            return Verdict(AttackTypes.PortScan, "prefilter_icmp_sweep");
 
         return null;
     }
@@ -191,8 +191,8 @@ internal sealed class PreFilter
             return null;
 
         return flow.DestinationPort == 22
-            ? Verdict(AttackTypes.SshBruteForce, "prefilter_ssh_brute_force")
-            : Verdict(AttackTypes.FtpBruteForce, "prefilter_ftp_brute_force");
+            ? Verdict(AttackTypes.BruteForce, "prefilter_ssh_brute_force")
+            : Verdict(AttackTypes.BruteForce, "prefilter_ftp_brute_force");
     }
 
     private static PreFilterResult Verdict(string attackType, string reason) =>
