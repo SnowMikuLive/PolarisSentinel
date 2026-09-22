@@ -12,8 +12,13 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
+<<<<<<<< HEAD:PolarisSentinel.Data/Migrations/20260921075414_PolicyRuleFiveTuple.Designer.cs
+    [Migration("20260921075414_PolicyRuleFiveTuple")]
+    partial class PolicyRuleFiveTuple
+========
     [Migration("20260921072905_AddPolicyMatchCriteria")]
     partial class AddPolicyMatchCriteria
+>>>>>>>> origin/master:PolarisSentinel.Data/Migrations/20260921072905_AddPolicyMatchCriteria.Designer.cs
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -332,6 +337,50 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasColumnType("real");
 
                     b.Property<string>("MatchAttackTypes")
+<<<<<<<< HEAD:PolarisSentinel.Data/Migrations/20260921075414_PolicyRuleFiveTuple.Designer.cs
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<byte>("MatchProtocol")
+                        .HasColumnType("tinyint");
+
+                    b.Property<float?>("RfConfidenceThreshold")
+                        .HasColumnType("real");
+
+                    b.Property<string>("RuleDestinationIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RuleDestinationIpAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("RuleDestinationPort")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RuleDestinationPortAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("RuleSourceIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RuleSourceIpAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<int>("RuleSourcePort")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RuleSourcePortAction")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+========
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
@@ -357,6 +406,7 @@ namespace PolarisSentinel.DataAccess.Migrations
 
                     b.Property<float?>("RfConfidenceThreshold")
                         .HasColumnType("real");
+>>>>>>>> origin/master:PolarisSentinel.Data/Migrations/20260921072905_AddPolicyMatchCriteria.Designer.cs
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
