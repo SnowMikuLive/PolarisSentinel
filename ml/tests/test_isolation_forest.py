@@ -24,7 +24,7 @@ needs_artifacts = pytest.mark.skipif(
 )
 
 def test_novelty_groups_are_disjoint_from_known_labels():
-    # Arrange
+    #Arrange
     novelty_labels = ("DDoS", "Bot", "Infiltration", "Heartbleed")
     web_labels = (
         "Web Attack \ufffd Brute Force",
@@ -32,7 +32,7 @@ def test_novelty_groups_are_disjoint_from_known_labels():
         "Web Attack \ufffd Sql Injection",
     )
 
-    # Act
+    #Act
     known_results = []
     for label in LABEL_MAPPING:
         known_results.append(classify(label))
@@ -43,7 +43,7 @@ def test_novelty_groups_are_disjoint_from_known_labels():
     for label in web_labels:
         web_results.append(classify(label))
   
-    # Assert
+    #Assert
     for group in known_results:
         assert group is None
     for label in novelty_labels:
@@ -53,11 +53,11 @@ def test_novelty_groups_are_disjoint_from_known_labels():
 
 @needs_novelty
 def test_novelty_arrays_share_the_feature_contract():
-    # Arrange
+    #Arrange
     novelty = np.load(NOVELTY_PATH, allow_pickle=False)
     expected_groups = {"DDoS", "Bot", "WebAttack", "Infiltration", "Heartbleed"}
 
-    # Act
+    #Act
     X = novelty["X_novelty"]
     feature_names = novelty["feature_names"].tolist()
     groups = novelty["groups"]
@@ -65,7 +65,7 @@ def test_novelty_arrays_share_the_feature_contract():
     unique_groups = set(group_names)
     finite_values = np.isfinite(X)
 
-    # Assert
+    #Assert
     assert feature_names == FEATURE_NAMES
     assert X.dtype == np.float32
     assert X.shape[1] == len(FEATURE_NAMES)
@@ -76,7 +76,7 @@ def test_novelty_arrays_share_the_feature_contract():
 
 @needs_artifacts
 def test_if_onnx_agrees_with_sklearn_on_anomaly_decisions():
-    # Arrange
+    #Arrange
     model = joblib.load(WINNER_PATH)
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
     model_meta = session.get_modelmeta()
@@ -97,7 +97,7 @@ def test_if_onnx_agrees_with_sklearn_on_anomaly_decisions():
     novelty_sample = novelty[novelty_indices]
     sample = np.concatenate([benign_sample, novelty_sample])
 
-    # Act
+    #Act
     output_indices = {}
     for index, output in enumerate(session.get_outputs()):
         output_indices[output.name] = index
@@ -114,7 +114,7 @@ def test_if_onnx_agrees_with_sklearn_on_anomaly_decisions():
     matching_decisions = ort_anomalies == skl_anomalies
     agreement = matching_decisions.mean()
 
-    # Assert
+    #Assert
     assert median_diff < 1e-6
     #float32切分阈值偏差
     #float32 split threshold drift
@@ -128,7 +128,7 @@ def test_if_onnx_metadata_matches_tuning_result():
     system_text = SYSTEM_METRICS_PATH.read_text(encoding="utf-8")
     system = json.loads(system_text)
 
-    # Act
+    #Act
     model_meta = session.get_modelmeta()
     meta = model_meta.custom_metadata_map
     feature_names = json.loads(meta["feature_names"])
@@ -140,7 +140,7 @@ def test_if_onnx_metadata_matches_tuning_result():
     for output in session.get_outputs():
         output_names.add(output.name)
 
-    # Assert
+    #Assert
     assert feature_names == FEATURE_NAMES
     assert meta["model_type"] == "IsolationForest"
     assert threshold == pytest.approx(system["selected_threshold"])

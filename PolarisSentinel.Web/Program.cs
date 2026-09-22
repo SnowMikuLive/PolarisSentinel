@@ -33,9 +33,15 @@ namespace PolarisSentinel
                     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
                 });
 
+<<<<<<< HEAD
+            //策略配置热重载
+            //Policy settings hot-reload
+            builder.Services.Configure<Policy>(
+=======
             // 策略配置热重载（默认值来自 appsettings）
             // Policy settings (defaults from appsettings)
             builder.Services.Configure<UserSettings>(
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
                 builder.Configuration.GetSection("PolicySettings"));
             //防火墙配置（DryRun、封禁时长等）
             //Firewall settings (DryRun,block duration,etc.)
@@ -49,9 +55,15 @@ namespace PolarisSentinel
 
                 var config = sp.GetRequiredService<IConfiguration>();
                 var section = config.GetSection("PolicySettings");
+<<<<<<< HEAD
+                var settings = sp.GetRequiredService<IOptionsMonitor<Policy>>().CurrentValue;
+                //毫秒→秒
+                //ms to seconds
+=======
                 var settings = sp.GetRequiredService<IOptionsMonitor<UserSettings>>().CurrentValue;
                 // 毫秒→秒
                 // ms to seconds
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
                 int flowIdleTimeoutSeconds = settings.FlowIdleTimeoutMilliseconds / 1000;
                 int preFilterMinPackets = settings.PreFilterMinPackets;
 
@@ -77,6 +89,9 @@ namespace PolarisSentinel
                 builder.Services.AddHostedService<TrayIconService>();
             }
 
+            builder.Services.AddDbContext<SentinelDbContext>(options =>
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
             //检测审计数据库上下文
             //Detection/audit persistence context
             builder.Services.AddDbContext<SentinelDbContext>(options =>
@@ -88,12 +103,23 @@ namespace PolarisSentinel
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
+<<<<<<< HEAD
+
+            //初始管理员账号配置（密码来自user-secrets /环境变量，不硬编码）
+            //Initial admin account configuration (password from user-secrets / env var)
+            builder.Services.Configure<AdminSeedOptions>(
+                builder.Configuration.GetSection(AdminSeedOptions.SectionName));
+
+            //数据库迁移+初始管理员创建
+            //Migrations + initial admin provisioning
+=======
             //   dotnet user-secrets set "AdminSeed:Password" "..." --project PolarisSentinel.Web
             // 初始管理员账号配置（密码来自 user-secrets / 环境变量，不硬编码）
             // Initial admin account configuration (password from user-secrets / env var)
             builder.Services.Configure<AdminSeedOptions>(
                 builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             builder.Services.AddScoped<SentinelDbInitializer>();
 
             //Configure Login path and Access Denied path for the application cookie
@@ -103,8 +129,12 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             });
 
+<<<<<<< HEAD
             //检测状态服务（累计计数+最近决策）
             //Detection state service (counters and recent decisions)
+=======
+
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             builder.Services.AddSingleton<DetectionStateService>();
 
 
@@ -146,8 +176,12 @@ namespace PolarisSentinel
             //Firewall enforcer
             builder.Services.AddSingleton<IFirewallEnforcer, WindowsFirewallEnforcer>();
 
+<<<<<<< HEAD
             //检测管线（推理→策略→封禁）
             //Detection pipeline (inference → policy → enforcement)
+=======
+            // Detection pipeline (inference -> policy -> enforcement), Application layer.
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             builder.Services.AddSingleton<IDetectionPipeline>(sp =>
             {
                 var monitor = sp.GetRequiredService<IOptionsMonitor<UserSettings>>();
@@ -206,9 +240,15 @@ namespace PolarisSentinel
                 anomalyThreshold = engine.AnomalyThreshold,
             }));
 
+<<<<<<< HEAD
             //应用迁移并创建初始管理员（逻辑在SentinelDbInitializer中）
             //Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
+            using (var scope = app.Services.CreateScope())
+=======
+            // 应用迁移并创建初始管理员（逻辑在 SentinelDbInitializer 中）
+            // Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
             await using (var scope = app.Services.CreateAsyncScope())
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             {
                 try
                 {

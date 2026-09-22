@@ -162,10 +162,18 @@ namespace PolarisSentienlUnitTestProject
         public void PolicyEngineEvaluateAfterCooldownShouldBlockAgain()
         {
             var clock = new FakeTimeProvider();
+<<<<<<< HEAD
+            var engine = CreateEngine(new Policy { Name = string.Empty }, clock);
+            var detection = CreateDetectionResult();
+            var first = engine.Evaluate(detection);
+            //冷却期满（60s）后可再次Block
+            //Block allowed again after cooldown expires
+=======
             var engine = CreateEngine(new UserSettings(), clock);
             var first = engine.Evaluate(CreateDetectionResult());
             // 冷却期满（60s）后可再次 Block
             // Block allowed again after cooldown expires
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             clock.Advance(TimeSpan.FromSeconds(60));
             var second = engine.Evaluate(CreateDetectionResult());
             Assert.AreEqual(PolicyAction.Block, first.Action);

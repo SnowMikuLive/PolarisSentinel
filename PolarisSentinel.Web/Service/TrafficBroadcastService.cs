@@ -85,7 +85,12 @@ namespace PolarisSentinel.Web.Service
         {
             try
             {
+<<<<<<< HEAD
+                //抓包特征已对齐模型契约，保留流地址和时间
+                //Capture features already match the model contract; keep the flow addresses and times
+=======
                 // Capture features already match the model contract; keep the flow addresses and times.
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
                 var modelFlow = new FlowFeatureVector
                 {
                     Features = flow.Features,

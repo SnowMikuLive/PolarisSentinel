@@ -94,9 +94,15 @@ namespace PolarisSentienlUnitTestProject
                 NullLogger<WindowsFirewallEnforcer>.Instance);
         }
 
+<<<<<<< HEAD
+        //默认使用RFC 5737文档地址
+        //Default uses RFC 5737 documentation addresses
+        private Policy CreateDecision()
+=======
         // 默认使用 RFC 5737 文档地址
         // Default uses RFC 5737 documentation addresses
         private Alert CreateDecision()
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
         {
             return new Alert
             {

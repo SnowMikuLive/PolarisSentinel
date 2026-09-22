@@ -6,7 +6,12 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
+<<<<<<< HEAD
+//检测用例编排：推理→策略→防火墙执行
+//Orchestrates inference,policy decision,and firewall enforcement
+=======
 // Application use case: pre-filter verdict -> inference -> policy -> firewall enforcement.
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
 public class DetectionPipeline : IDetectionPipeline
 {
     private readonly IInferenceEngine _inference;
@@ -39,7 +44,12 @@ public class DetectionPipeline : IDetectionPipeline
         {
             var duration = TimeSpan.FromMinutes(_blockDurationMinutes);
             _firewall.BlockIp(decision, duration);
+<<<<<<< HEAD
+            //同一IP可能复用已有规则
+            //The same IP may reuse an existing rule
+=======
             // The same IP may reuse an existing rule.
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
             decision.RuleName = _firewall.GetAllRules().FirstOrDefault(rule =>
                 rule.RemoteAddress == decision.SourceIp && rule.Enabled &&
                 rule.ExpiresAt > new DateTimeOffset(decision.DecidedAt))?.Name;

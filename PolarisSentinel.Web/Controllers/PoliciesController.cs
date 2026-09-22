@@ -30,10 +30,15 @@ namespace PolarisSentinel.Web.Controllers
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
             return View(policies);
+<<<<<<< HEAD
         }
 
         //详情
         //Details
+=======
+        }        // 详情
+        // Details
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
             if (id == null)

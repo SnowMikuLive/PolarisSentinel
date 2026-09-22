@@ -6,9 +6,15 @@ namespace PolarisSentinel.Core.Interfaces;
 //Firewall execution contract for Block policy decisions
 public interface IFirewallEnforcer
 {
+<<<<<<< HEAD
+    //按决策封禁，duration指定规则有效期
+    //Block from a decision for the supplied duration
+    void BlockIp(Policy decision, TimeSpan duration);
+=======
     // 按决策封禁，duration 指定规则有效期
     // Block from a decision for the supplied duration
     void BlockIp(Alert decision, TimeSpan duration);
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
 
     void RemoveRule(string ruleName);
 

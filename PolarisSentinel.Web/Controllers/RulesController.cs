@@ -96,6 +96,10 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+<<<<<<< HEAD
+        //移除全部托管规则（回滚）
+        //Remove all managed rules (rollback)
+=======
         // 手动创建规则表单
         // Manual rule creation form
         public IActionResult Create()
@@ -308,6 +312,7 @@ namespace PolarisSentinel.Web.Controllers
 
         // 移除全部托管规则（回滚）
         // Remove all managed rules (rollback)
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)

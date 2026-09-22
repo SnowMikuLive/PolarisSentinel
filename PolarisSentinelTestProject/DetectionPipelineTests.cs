@@ -146,10 +146,15 @@ namespace PolarisSentienlUnitTestProject
             };
         }
 
+<<<<<<< HEAD
+        //固定推理结果，用来检查后续策略和防火墙流程
+        //Fixed inference result for testing policy and firewall together
+=======
         // 固定推理结果，用来检查后续策略和防火墙流程
         // 每次返回新实例，因为策略引擎会就地写入决策字段
         // Fixed inference result for testing policy and firewall together.
         // Returns a fresh instance each call because the policy engine mutates in place.
+>>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
         private class TestInferenceEngine : IInferenceEngine
         {
             private readonly Alert _result;
