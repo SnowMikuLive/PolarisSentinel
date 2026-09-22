@@ -2,9 +2,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-//应用层检测管线接口
-//Application-layer detection pipeline contract
+// Application-layer detection pipeline contract.
 public interface IDetectionPipeline
 {
-    Alert ProcessFlow(FlowFeatureVector flow);
+    Alert ProcessFlow(FlowFeatureVector flow, Policy policy);
 }

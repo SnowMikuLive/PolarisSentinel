@@ -21,7 +21,7 @@ namespace PolarisSentienlUnitTestProject
             flow.BwdPackets = 0;
             flow.SynCount = 200;
 
-            AssertVerdict(flow, AttackTypes.SynFlood);
+            AssertVerdict(flow, AttackTypes.DoS, "prefilter_syn_flood");
         }
 
         [TestMethod]
@@ -31,7 +31,7 @@ namespace PolarisSentienlUnitTestProject
             flow.FwdPackets = 500;
             flow.BwdPackets = 0;
 
-            AssertVerdict(flow, AttackTypes.UdpFlood);
+            AssertVerdict(flow, AttackTypes.DoS, "prefilter_udp_flood");
         }
 
         [TestMethod]
@@ -42,7 +42,7 @@ namespace PolarisSentienlUnitTestProject
             flow.BwdPackets = 0;
             flow.AckCount = 200;
 
-            AssertVerdict(flow, AttackTypes.AckFlood);
+            AssertVerdict(flow, AttackTypes.DoS, "prefilter_ack_flood");
         }
 
         [TestMethod]
@@ -52,7 +52,7 @@ namespace PolarisSentienlUnitTestProject
             flow.FwdPackets = 500;
             flow.BwdPackets = 0;
 
-            AssertVerdict(flow, AttackTypes.IcmpFlood);
+            AssertVerdict(flow, AttackTypes.DoS, "prefilter_icmp_flood");
         }
 
         #endregion
@@ -68,7 +68,7 @@ namespace PolarisSentienlUnitTestProject
             flow.SynCount = 20;
             flow.RstCount = 20;
 
-            AssertVerdict(flow, AttackTypes.SynScan);
+            AssertVerdict(flow, AttackTypes.PortScan, "prefilter_syn_scan");
         }
 
         [TestMethod]
@@ -81,7 +81,7 @@ namespace PolarisSentienlUnitTestProject
             flow.AckCount = 15;
             flow.RstCount = 5;
 
-            AssertVerdict(flow, AttackTypes.ConnectScan);
+            AssertVerdict(flow, AttackTypes.PortScan, "prefilter_connect_scan");
         }
 
         [TestMethod]
@@ -92,7 +92,7 @@ namespace PolarisSentienlUnitTestProject
             flow.BwdPackets = 0;
             flow.FinCount = 20;
 
-            AssertVerdict(flow, AttackTypes.FinNullXmasScan);
+            AssertVerdict(flow, AttackTypes.PortScan, "prefilter_fin_null_xmas_scan");
         }
 
         [TestMethod]
@@ -102,7 +102,7 @@ namespace PolarisSentienlUnitTestProject
             flow.FwdPackets = 20;
             flow.BwdPackets = 0;
 
-            AssertVerdict(flow, AttackTypes.UdpScan);
+            AssertVerdict(flow, AttackTypes.PortScan, "prefilter_udp_scan");
         }
 
         [TestMethod]
@@ -112,7 +112,7 @@ namespace PolarisSentienlUnitTestProject
             flow.FwdPackets = 10;
             flow.BwdPackets = 0;
 
-            AssertVerdict(flow, AttackTypes.IcmpSweep);
+            AssertVerdict(flow, AttackTypes.PortScan, "prefilter_icmp_sweep");
         }
 
         #endregion
@@ -128,7 +128,7 @@ namespace PolarisSentienlUnitTestProject
             flow.SynCount = 8;
             AddFlatSizes(flow, 60, 40);
 
-            AssertVerdict(flow, AttackTypes.SshBruteForce);
+            AssertVerdict(flow, AttackTypes.BruteForce, "prefilter_ssh_brute_force");
         }
 
         [TestMethod]
@@ -140,7 +140,7 @@ namespace PolarisSentienlUnitTestProject
             flow.SynCount = 8;
             AddFlatSizes(flow, 60, 40);
 
-            AssertVerdict(flow, AttackTypes.FtpBruteForce);
+            AssertVerdict(flow, AttackTypes.BruteForce, "prefilter_ftp_brute_force");
         }
 
         #endregion
@@ -181,12 +181,14 @@ namespace PolarisSentienlUnitTestProject
 
         #region Helper Methods
 
-        private static void AssertVerdict(FlowRecord flow, string expectedAttackType)
+        // The category is asserted on AttackType; the sub-type detail lives in Reason.
+        private static void AssertVerdict(FlowRecord flow, string expectedAttackType, string expectedReason)
         {
             var verdict = new PreFilter(3).Classify(flow, out bool suspicious);
 
             Assert.IsNotNull(verdict, $"Expected {expectedAttackType} verdict.");
             Assert.AreEqual(expectedAttackType, verdict.AttackType);
+            Assert.AreEqual(expectedReason, verdict.Reason);
             Assert.IsFalse(suspicious);
         }
 

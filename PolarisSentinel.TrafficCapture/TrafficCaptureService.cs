@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using PacketDotNet;
 using SharpPcap;
 using SharpPcap.LibPcap;
@@ -25,7 +25,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private long _tcpSinceLastTick;
     private long _udpSinceLastTick;
     private long _icmpSinceLastTick;
-    private DateTime _lastTickTime = DateTime.UtcNow;
+    private DateTime _lastTickTime = DateTime.Now;
 
     private const int MaxFlowCount = 100000;
 
@@ -116,7 +116,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         ushort dstPort = tcpPacket?.DestinationPort ?? udpPacket?.DestinationPort ?? 0;
         byte protocol = (byte)ipPacket.Protocol;
         int packetSize = ipPacket.TotalLength;
-        DateTime now = DateTime.UtcNow;
+        DateTime now = DateTime.Now;
 
         UpdateFastPathCounters(packetSize, protocol);
 
@@ -181,7 +181,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private void ExpireIdleFlows()
     {
         
-        DateTime now = DateTime.UtcNow;
+        DateTime now = DateTime.Now;
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
 
 
@@ -193,7 +193,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            // Rule-based pre-filter: null verdict + not suspicious means the flow is dropped as benign.
+            // Rule-based pre-filter runs first: attack verdicts are emitted, benign flows are dropped,
+            // and only flows that no rule could classify are exported for AI inference.
             var verdict = _preFilter.Classify(flow, out bool suspicious);
             if (verdict is null && !suspicious) continue;
 
@@ -222,7 +223,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private void EmitLiveSummary()
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = DateTime.Now;
         double elapsedSeconds = Math.Max((now - _lastTickTime).TotalSeconds, 0.001);
 
         long packets = Interlocked.Exchange(ref _packetsSinceLastTick, 0);

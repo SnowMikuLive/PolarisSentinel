@@ -1,32 +1,50 @@
 namespace PolarisSentinel.Core.Constants;
 
+using PolarisSentinel.Core.Enums;
+
+// The four attack categories. Sub-type detail lives in the alert's Reason string.
+// Every value here MUST be a member of the AttackType enum: the enum is the
+// single source of truth for what the system can report.
 public static class AttackTypes
 {
-    public const string Benign = "Benign";
-    public const string DoS = "DoS";
-    public const string PortScan = "PortScan";
-    public const string BruteForce = "BruteForce";
+    public const string Benign = nameof(AttackType.Benign);
+    public const string DoS = nameof(AttackType.DoS);
+    public const string PortScan = nameof(AttackType.PortScan);
+    public const string BruteForce = nameof(AttackType.BruteForce);
 
-    //For Isolation Forest
-    public const string UnknownAnomaly = "Unknown_Anomaly";
+    // Isolation Forest anomaly with no known category.
+    public const string UnknownAnomaly = nameof(AttackType.Unknown_Anomaly);
 
-    //For the rule-based pre-filter
-    public const string SynFlood = "SynFlood";
-    public const string SuspiciousTcpFlags = "SuspiciousTcpFlags";
+    // Every attack category the system can produce, for UI dropdowns.
+    public static readonly string[] All = Enum.GetNames<AttackType>();
 
-    // DoS family
-    public const string UdpFlood = "UdpFlood";
-    public const string AckFlood = "AckFlood";
-    public const string IcmpFlood = "IcmpFlood";
+    // Categories a policy can match on (Benign is never an attack).
+    public static readonly string[] Selectable =
+        Enum.GetNames<AttackType>().Where(n => n != Benign).ToArray();
 
-    // Port scanning family
-    public const string SynScan = "SynScan";
-    public const string ConnectScan = "ConnectScan";
-    public const string FinNullXmasScan = "FinNullXmasScan";
-    public const string UdpScan = "UdpScan";
-    public const string IcmpSweep = "IcmpSweep";
+    // True when the value is one of the AttackType enum members.
+    public static bool IsDefined(string? attackType) =>
+        !string.IsNullOrEmpty(attackType) && Enum.IsDefined(typeof(AttackType), attackType);
 
-    // Brute force family
-    public const string SshBruteForce = "SshBruteForce";
-    public const string FtpBruteForce = "FtpBruteForce";
+    // Normalises an external label (e.g. an ONNX class name) onto an enum member.
+    // Returns false when the label is not one of the five categories.
+    public static bool TryParse(string? attackType, out string result)
+    {
+        result = string.Empty;
+        if (string.IsNullOrWhiteSpace(attackType))
+        {
+            return false;
+        }
+
+        foreach (string name in All)
+        {
+            if (string.Equals(name, attackType, StringComparison.OrdinalIgnoreCase))
+            {
+                result = name;
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

@@ -1,0 +1,106 @@
+@model PolarisSentinel.Core.Models.Rule
+@using PolarisSentinel.Web.Service
+@{
+    ViewData["Title"] = "Rule Details";
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary mb-3">Rule Details</h2>
+
+    <div class="card shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            @Model.Id
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Rule Name</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">Source IP</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.SourceIp) ? "Any" : Model.SourceIp)</dd>
+
+                <dt class="col-sm-3">Source Port</dt>
+                <dd class="col-sm-9">@(Model.SourcePort == 0 ? "Any" : Model.SourcePort.ToString())</dd>
+
+                <dt class="col-sm-3">Destination IP</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.DestinationIp) ? "Any" : Model.DestinationIp)</dd>
+
+                <dt class="col-sm-3">Destination Port</dt>
+                <dd class="col-sm-9">@(Model.DestinationPort == 0 ? "Any" : Model.DestinationPort.ToString())</dd>
+
+                <dt class="col-sm-3">Protocol</dt>
+                <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
+
+                <dt class="col-sm-3">Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
+
+                <dt class="col-sm-3">Attack Type</dt>
+                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.AttackType) ? "-" : Model.AttackType)</dd>
+
+                <dt class="col-sm-3">Enabled</dt>
+                <dd class="col-sm-9">
+                    @if (Model.Enabled)
+                    {
+                        <span class="badge bg-success">Enabled</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Disabled</span>
+                    }
+                </dd>
+
+                <dt class="col-sm-3">Policy ID</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(Model.PolicyId))
+                    {
+                        <a asp-controller="Policies" asp-action="Details" asp-route-id="@Model.PolicyId">@Model.PolicyId</a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </dd>
+
+                <dt class="col-sm-3">Alert ID</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(Model.AlertId))
+                    {
+                        <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@Model.AlertId">@Model.AlertId</a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </dd>
+
+                <dt class="col-sm-3">Created</dt>
+                <dd class="col-sm-9">@TimeFormat.Format(Model.CreatedAt)</dd>
+
+                <dt class="col-sm-3">Updated</dt>
+                <dd class="col-sm-9">@TimeFormat.Format(Model.UpdatedAt)</dd>
+
+                <dt class="col-sm-3">Expires</dt>
+                <dd class="col-sm-9">@(Model.ExpiresAt != null ? TimeFormat.Format(Model.ExpiresAt.Value) : "-")</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Edit</a>
+        <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-outline-danger">Delete</a>
+        <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
+    </div>
+</div>
+
+@functions {
+    // Map an IP protocol number to a readable name.
+    static string ProtocolName(byte? protocol) => protocol switch
+    {
+        1 => "ICMP",
+        6 => "TCP",
+        17 => "UDP",
+        0 => "Any",
+        null => "Any",
+        _ => protocol.Value.ToString()
+    };
+}

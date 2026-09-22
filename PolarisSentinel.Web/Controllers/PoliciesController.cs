@@ -1,52 +1,33 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    //策略CRUD界面
-    //Policy CRUD pages
+    // Policy CRUD. Every property is editable except UserId, which follows the signed-in user.
     [Authorize]
     public class PoliciesController : Controller
     {
         private readonly IUnitOfWork _uow;
-        private readonly UserManager<IdentityUser> _userManager;
 
-        public PoliciesController(IUnitOfWork uow, UserManager<IdentityUser> userManager)
+        public PoliciesController(IUnitOfWork uow)
         {
             _uow = uow;
-            _userManager = userManager;
         }
 
-        //列表
-        //List
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
             return View(policies);
-<<<<<<< HEAD
         }
 
-        //详情
-        //Details
-=======
-        }        // 详情
-        // Details
->>>>>>> d47e7ec0c32803f010bc8a3c97a4dc42d392cd92
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
+            var policy = await FindAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
@@ -55,18 +36,16 @@ namespace PolarisSentinel.Web.Controllers
             return View(policy);
         }
 
-        //新建表单
-        //Create form
         public IActionResult Create()
         {
             PopulateLists();
-            return View(new Policy { Name = string.Empty });
+            return View(new Policy());
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("Name,Description,Action,IsActive")]
+            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -76,26 +55,21 @@ namespace PolarisSentinel.Web.Controllers
                 return View(policy);
             }
 
-            //所有者固定为当前登录用户
-            //Owner is always the signed-in user
-            policy.UserId = _userManager.GetUserName(User) ?? string.Empty;
             policy.Id = await NextPolicyIdAsync(cancellationToken);
+            policy.UserId = User.Identity?.Name ?? string.Empty;
+            policy.CreatedAt = DateTime.Now;
+            policy.UpdatedAt = DateTime.Now;
+
             _uow.Policies.Add(policy);
             await _uow.SaveChangesAsync(cancellationToken);
+
             TempData["success"] = "Policy created.";
             return RedirectToAction(nameof(Index));
         }
 
-        //编辑表单
-        //Edit form
         public async Task<IActionResult> Edit(string? id, CancellationToken cancellationToken)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
+            var policy = await FindAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
@@ -109,42 +83,45 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             string id,
-            [Bind("Id,Name,Description,Action,IsActive")]
+            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
             Policy policy,
             CancellationToken cancellationToken)
         {
-            if (id != policy.Id)
+            var existing = await FindAsync(id, cancellationToken);
+            if (existing == null)
             {
                 return NotFound();
             }
 
             if (!ModelState.IsValid)
             {
+                policy.Id = existing.Id;
                 PopulateLists();
                 return View(policy);
             }
 
-            //所有者不可编辑，保留原值
-            //Owner is not editable; keep the stored value
-            var existing = await _uow.Policies.GetByIdAsync(id, cancellationToken);
-            policy.UserId = existing?.UserId ?? string.Empty;
+            existing.DetectionSource = policy.DetectionSource;
+            existing.RfConfidenceThreshold = policy.RfConfidenceThreshold;
+            existing.IfConfidenceThreshold = policy.IfConfidenceThreshold;
+            existing.BlockDurationMinutes = policy.BlockDurationMinutes;
+            existing.MatchAttackTypes = policy.MatchAttackTypes;
+            existing.MatchProtocol = policy.MatchProtocol;
+            existing.RuleSourceIpAction = policy.RuleSourceIpAction;
+            existing.RuleSourcePortAction = policy.RuleSourcePortAction;
+            existing.RuleDestinationIpAction = policy.RuleDestinationIpAction;
+            existing.RuleDestinationPortAction = policy.RuleDestinationPortAction;
+            existing.UpdatedAt = DateTime.Now;
 
-            _uow.Policies.Update(policy);
+            _uow.Policies.Update(existing);
             await _uow.SaveChangesAsync(cancellationToken);
+
             TempData["success"] = "Policy updated.";
             return RedirectToAction(nameof(Index));
         }
 
-        //删除确认
-        //Delete confirmation
         public async Task<IActionResult> Delete(string? id, CancellationToken cancellationToken)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
+            var policy = await FindAsync(id, cancellationToken);
             if (policy == null)
             {
                 return NotFound();
@@ -157,37 +134,48 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(string id, CancellationToken cancellationToken)
         {
-            var policy = await _uow.Policies.GetByIdAsync(id, cancellationToken);
-            if (policy != null)
+            var policy = await FindAsync(id, cancellationToken);
+            if (policy == null)
             {
-                _uow.Policies.Remove(policy);
-                await _uow.SaveChangesAsync(cancellationToken);
-                TempData["success"] = "Policy deleted.";
+                return NotFound();
             }
 
+            _uow.Policies.Remove(policy);
+            await _uow.SaveChangesAsync(cancellationToken);
+
+            TempData["success"] = "Policy deleted.";
             return RedirectToAction(nameof(Index));
         }
 
-        //生成下一个P-n形式的策略ID
-        //Build the next "P-n" policy id
+        private async Task<Policy?> FindAsync(string? id, CancellationToken cancellationToken)
+        {
+            return string.IsNullOrEmpty(id) ? null : await _uow.Policies.GetByIdAsync(id, cancellationToken);
+        }
+
+        private void PopulateLists()
+        {
+            // Firewall rule actions are Allow or Block only; Monitor is a detection outcome.
+            ViewBag.RuleActions = new SelectList(new[] { PolicyAction.Allow, PolicyAction.Block });
+            // None is not a selectable detector.
+            ViewBag.DetectionSources = new SelectList(
+                Enum.GetValues<DetectionSource>().Where(s => s != DetectionSource.None));
+            ViewBag.AttackTypes = new SelectList(AttackTypes.Selectable);
+        }
+
+        // Next "P-n" id, scanned from the stored policies.
         private async Task<string> NextPolicyIdAsync(CancellationToken cancellationToken)
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
             int max = 0;
             foreach (var p in policies)
             {
-                if (p.Id.StartsWith(EntityIds.PolicyPrefix, StringComparison.Ordinal) &&
-                    int.TryParse(p.Id.AsSpan(EntityIds.PolicyPrefix.Length), out int n) && n > max)
+                if (p.Id.StartsWith("P-", StringComparison.Ordinal) &&
+                    int.TryParse(p.Id.AsSpan(2), out int n) && n > max)
                 {
                     max = n;
                 }
             }
-            return EntityIds.Policy(max + 1);
-        }
-
-        private void PopulateLists()
-        {
-            ViewBag.Actions = new SelectList(Enum.GetValues<PolicyAction>());
+            return $"P-{max + 1}";
         }
     }
 }

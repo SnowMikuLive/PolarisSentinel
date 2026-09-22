@@ -21,19 +21,18 @@ public class PolicyRepository : IPolicyRepository
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Policy>> GetByUserAsync(string userId, CancellationToken cancellationToken = default)
+    // The single policy owned by a user; null when none exists yet.
+    public async Task<Policy?> GetByUserAsync(string userId, CancellationToken cancellationToken = default)
     {
         return await _context.Policies
-            .AsNoTracking()
-            .Where(p => p.UserId == userId)
-            .ToListAsync(cancellationToken);
+            .FirstOrDefaultAsync(p => p.UserId == userId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Policy>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Policies
             .AsNoTracking()
-            .OrderBy(p => p.Name)
+            .OrderBy(p => p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 

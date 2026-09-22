@@ -15,6 +15,25 @@
         <span class="me-3">Bytes/s:<span id="liveBytesPerSecond">0</span></span>
     </div>
 
+    @* Capture device selector: switching restarts capture on the chosen NIC. *@
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+            Network Interface
+        </div>
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label for="deviceSelect" class="form-label">Capture Device</label>
+                    <select id="deviceSelect" class="form-select"></select>
+                </div>
+                <div class="col-md-6">
+                    <button type="button" id="refreshDevices" class="btn btn-outline-primary">Refresh</button>
+                    <span id="deviceStatus" class="ms-2 small"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <div class="row">
     <div class="col-md-6">
         <div class="card shadow-sm border-primary h-100">
@@ -165,5 +184,63 @@
         });
             //Start connection
             connection.start().catch(err=>console.error(err.toString()));
+
+        // ---- Network interface selector ----
+        const deviceSelect=document.getElementById('deviceSelect');
+        const deviceStatus=document.getElementById('deviceStatus');
+
+        function setDeviceStatus(text,isError)
+        {
+            deviceStatus.textContent=text;
+            deviceStatus.className='ms-2 small '+(isError?'text-danger':'text-success');
+        }
+
+        // Load devices and mark the one currently capturing.
+        function loadDevices()
+        {
+            setDeviceStatus('Loading...',false);
+            fetch('/api/capture/devices')
+                .then(r=>r.json())
+                .then(data=>{
+                    deviceSelect.innerHTML='';
+                    (data.devices||[]).forEach(d=>{
+                        const option=document.createElement('option');
+                        option.value=d.deviceName;
+                        // Tag Wi-Fi so the auto-selected default is obvious.
+                        option.textContent=d.displayName+(d.isWifi?' [Wi-Fi]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
+                        option.selected=d.isCurrent;
+                        deviceSelect.appendChild(option);
+                    });
+                    setDeviceStatus(data.devices&&data.devices.length?'':'No capture devices found.',!(data.devices&&data.devices.length));
+                })
+                .catch(err=>{
+                    console.error('Failed to load devices',err);
+                    setDeviceStatus('Failed to load devices.',true);
+                });
+        }
+
+        // Switching restarts capture on the new NIC.
+        deviceSelect.addEventListener('change',function(){
+            const name=deviceSelect.value;
+            if(!name)return;
+            setDeviceStatus('Switching...',false);
+            fetch('/api/capture/select',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({deviceName:name})
+            })
+                .then(r=>{
+                    if(!r.ok)throw new Error('switch failed');
+                    return r.json();
+                })
+                .then(()=>setDeviceStatus('Capturing on '+name,false))
+                .catch(err=>{
+                    console.error('Failed to switch device',err);
+                    setDeviceStatus('Failed to switch device.',true);
+                });
+        });
+
+        document.getElementById('refreshDevices').addEventListener('click',loadDevices);
+        loadDevices();
     </script>
 }

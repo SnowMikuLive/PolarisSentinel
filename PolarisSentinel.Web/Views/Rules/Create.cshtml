@@ -2,8 +2,6 @@
 @{
     ViewData["Title"] = "Create Rule";
     var actions = ViewBag.Actions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
-    var attackTypes = ViewBag.AttackTypes as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
-    var enabledOptions = ViewBag.EnabledOptions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
 }
 
 <div class="container-fluid">
@@ -17,40 +15,67 @@
             <form asp-action="Create" method="post">
                 <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
+                <h6 class="text-secondary mb-3">Traffic 5-tuple</h6>
                 <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Address Type</label>
-                        <select id="cidrMode" name="cidrMode" class="form-select" onchange="toggleCidr()">
-                            <option value="single">Single IP</option>
-                            <option value="cidr">CIDR range</option>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="SourceIp" class="form-label">Source IP</label>
+                        <div class="input-group">
+                            <select class="form-select ip-mode" data-target="SourceIp" style="max-width: 6rem;">
+                                <option value="any">Any</option>
+                                <option value="manual" selected>Manual</option>
+                            </select>
+                            <input asp-for="SourceIp" class="form-control" placeholder="0.0.0.0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="SourcePort" class="form-label">Source Port</label>
+                        <div class="input-group">
+                            <select class="form-select port-mode" data-target="SourcePort" style="max-width: 6rem;">
+                                <option value="any">Any</option>
+                                <option value="manual" selected>Manual</option>
+                            </select>
+                            <input asp-for="SourcePort" class="form-control" type="number" min="0" max="65535" placeholder="0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="DestinationIp" class="form-label">Destination IP</label>
+                        <div class="input-group">
+                            <select class="form-select ip-mode" data-target="DestinationIp" style="max-width: 6rem;">
+                                <option value="any">Any</option>
+                                <option value="manual" selected>Manual</option>
+                            </select>
+                            <input asp-for="DestinationIp" class="form-control" placeholder="0.0.0.0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="DestinationPort" class="form-label">Destination Port</label>
+                        <div class="input-group">
+                            <select class="form-select port-mode" data-target="DestinationPort" style="max-width: 6rem;">
+                                <option value="any">Any</option>
+                                <option value="manual" selected>Manual</option>
+                            </select>
+                            <input asp-for="DestinationPort" class="form-control" type="number" min="0" max="65535" placeholder="0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="Protocol" class="form-label">Protocol</label>
+                        <select asp-for="Protocol" class="form-select">
+                            <option value="0">Any</option>
+                            <option value="1">ICMP</option>
+                            <option value="6">TCP</option>
+                            <option value="17">UDP</option>
                         </select>
                     </div>
+                </div>
 
+                <h6 class="text-secondary mb-3">Rule</h6>
+                <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label asp-for="RemoteAddress" class="form-label">Remote Address</label>
-                        <input asp-for="RemoteAddress" class="form-control" placeholder="e.g. 203.0.113.10" />
-                        <span asp-validation-for="RemoteAddress" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-4 mb-3" id="cidrPrefixGroup" style="display:none;">
-                        <label class="form-label">Prefix Length</label>
-                        <input type="number" name="cidrPrefix" class="form-control" min="0" max="128" value="24" />
-                        <div class="text-muted small mt-1">e.g. 24 for a /24 range.</div>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
                         <label asp-for="Action" class="form-label"></label>
                         <select asp-for="Action" class="form-select" asp-items="actions"></select>
-                        <span asp-validation-for="Action" class="text-danger"></span>
                     </div>
 
-                    <div class="col-md-6 mb-3">
-                        <label asp-for="AttackType" class="form-label">Attack Type</label>
-                        <select asp-for="AttackType" class="form-select" asp-items="attackTypes"></select>
-                        <span asp-validation-for="AttackType" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">Expires In</label>
                         <div class="input-group">
                             <input type="number" name="durationValue" class="form-control" min="1" value="60" />
@@ -63,10 +88,12 @@
                         <div class="text-muted small mt-1">Rule expires this long after creation.</div>
                     </div>
 
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label asp-for="Enabled" class="form-label"></label>
-                        <select asp-for="Enabled" class="form-select" asp-items="enabledOptions"></select>
-                        <span asp-validation-for="Enabled" class="text-danger"></span>
+                        <select asp-for="Enabled" class="form-select">
+                            <option value="true">Enabled</option>
+                            <option value="false">Disabled</option>
+                        </select>
                     </div>
                 </div>
 
@@ -78,12 +105,20 @@
 </div>
 
 @section Scripts {
-    <partial name="_ValidationScriptsPartial" />
     <script>
-        function toggleCidr() {
-            const mode = document.getElementById('cidrMode').value;
-            document.getElementById('cidrPrefixGroup').style.display = mode === 'cidr' ? '' : 'none';
-        }
-        toggleCidr();
+        // "Any" clears the paired input (empty IP / 0 port); "Manual" restores editing.
+        document.querySelectorAll('.ip-mode, .port-mode').forEach(function (mode) {
+            var input = document.getElementById(mode.dataset.target);
+            function sync() {
+                var any = mode.value === 'any';
+                input.readOnly = any;
+                input.classList.toggle('bg-light', any);
+                if (any) {
+                    input.value = '';
+                }
+            }
+            mode.addEventListener('change', sync);
+            sync();
+        });
     </script>
 }

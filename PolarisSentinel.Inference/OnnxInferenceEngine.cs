@@ -9,8 +9,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference
 {
-    //RF分类，IF检查良性流
-    //RF classifies traffic; IF checks benign flows
+    // RF 分类，IF 检查良性流
+    // RF classifies traffic; IF checks benign flows
     public class OnnxInferenceEngine : IInferenceEngine, IDisposable
     {
         private const double AlertConfidence = 0.60;
@@ -48,8 +48,8 @@ namespace PolarisSentinel.Inference
             _classifier = new InferenceSession(classifierPath);
             _classifierInput = _classifier.InputMetadata.Keys.First();
 
-            //从模型读取特征和阈值
-            //Read features and thresholds from the model
+            // 从模型读取特征和阈值
+            // Read features and thresholds from the model
             var metadata = _classifier.ModelMetadata.CustomMetadataMap;
             ClassNames = JsonSerializer.Deserialize<string[]>(metadata["class_names"])!;
             FeatureNames = JsonSerializer.Deserialize<string[]>(metadata["feature_names"])!;
@@ -58,8 +58,8 @@ namespace PolarisSentinel.Inference
 
             if (anomalyDetectorPath == null)
             {
-                //未提供IF路径时只使用RF
-                //Use RF only when no IF path is provided
+                // 未提供 IF 路径时只使用 RF
+                // Use RF only when no IF path is provided
                 return;
             }
             if (!File.Exists(anomalyDetectorPath))
@@ -109,15 +109,23 @@ namespace PolarisSentinel.Inference
             string attackType = ClassNames[best];
             if (attackType != AttackTypes.Benign)
             {
-                return CreateAlert(flow, attackType, probabilities[0, best], DetectionSource.RandomForest);
+                // The model's class names are external labels; only the categories
+                // defined by the AttackType enum may enter the system.
+                if (!AttackTypes.TryParse(attackType, out string known))
+                {
+                    throw new InvalidOperationException(
+                        $"Model emitted unknown class '{attackType}'. Expected one of: {string.Join(", ", AttackTypes.All)}.");
+                }
+
+                return CreateAlert(flow, known, probabilities[0, best], DetectionSource.RandomForest);
             }
 
             if (_anomalyDetector != null)
             {
                 using var scored = _anomalyDetector.Run(
                     new NamedOnnxValue[] { NamedOnnxValue.CreateFromTensor(_anomalyInput!, input) });
-                //decision_function分数越低越异常
-                //Lower decision_function scores mean more anomalous traffic
+                // decision_function 分数越低越异常
+                // Lower decision_function scores mean more anomalous traffic
                 double score = scored.First(r => r.Name == "scores").AsEnumerable<float>().First();
 
                 if (score < AnomalyThreshold!.Value)
@@ -129,8 +137,8 @@ namespace PolarisSentinel.Inference
             return CreateAlert(flow, AttackTypes.Benign, probabilities[0, best], DetectionSource.None);
         }
 
-        //推理只填充检测字段；Id /决策字段由调用方补全
-        //Inference fills detection fields only; Id / decision fields are set by the caller
+        // Inference fills the attack type, confidence and 5-tuple only;
+        // the policy engine adds the id and decision fields.
         private static Alert CreateAlert(FlowFeatureVector flow, string attackType, float confidence, DetectionSource source)
         {
             return new Alert
@@ -143,12 +151,13 @@ namespace PolarisSentinel.Inference
                 SourcePort = flow.SourcePort,
                 DestinationPort = flow.DestinationPort,
                 Protocol = flow.Protocol,
+                DetectedAt = flow.FlowEndTime,
                 Reason = string.Empty
             };
         }
 
-        //用模型中的两个分数点计算置信度
-        //Calculate confidence using the two score points from the model
+        // 用模型中的两个分数点计算置信度
+        // Calculate confidence using the two score points from the model
         private float CalibrateConfidence(double score)
         {
             double span = _scoreAtAlertConfidence - _scoreAtHighConfidence;

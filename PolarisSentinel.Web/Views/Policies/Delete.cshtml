@@ -4,31 +4,28 @@
 }
 
 <div class="container-fluid">
-    <h2 class="text-danger mb-3">Delete Policy</h2>
+    <h2 class="text-primary">Delete Policy</h2>
 
     <div class="card shadow-sm border-danger">
         <div class="card-header bg-danger text-white">
-            Confirm Deletion
+            Confirm deletion
         </div>
         <div class="card-body">
-            <p class="mb-3">Are you sure you want to delete this policy?</p>
+            <p>Are you sure you want to delete this policy?</p>
 
             <dl class="row">
-                <dt class="col-sm-3">ID</dt>
+                <dt class="col-sm-3">Policy ID</dt>
                 <dd class="col-sm-9">@Model.Id</dd>
 
-                <dt class="col-sm-3">Name</dt>
-                <dd class="col-sm-9">@Model.Name</dd>
+                <dt class="col-sm-3">Random Forest Threshold</dt>
+                <dd class="col-sm-9">@(Model.RfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
 
-                <dt class="col-sm-3">Action</dt>
-                <dd class="col-sm-9">@Model.Action</dd>
-
-                <dt class="col-sm-3">Active</dt>
-                <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+                <dt class="col-sm-3">Isolation Forest Threshold</dt>
+                <dd class="col-sm-9">@(Model.IfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
             </dl>
 
             <form asp-action="Delete" method="post">
-                <input type="hidden" asp-for="Id" />
+                <input type="hidden" name="id" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Delete</button>
                 <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
             </form>

@@ -13,6 +13,9 @@ public static class EntityIds
     // Windows Firewall rule name prefix, used to identify managed rules.
     public const string FirewallRulePrefix = "PolarisSentinel_";
 
+    // Alert-id stand-in for a rule that constrains nothing and blocks all traffic.
+    public const string AnyTrafficRuleName = "ANY";
+
     public static string Policy(int number) => $"{PolicyPrefix}{number}";
 
     public static string Rule(int number) => $"{RulePrefix}{number}";

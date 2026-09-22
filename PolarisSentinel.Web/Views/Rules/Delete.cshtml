@@ -4,28 +4,31 @@
 }
 
 <div class="container-fluid">
-    <h2 class="text-danger mb-3">Delete Rule</h2>
+    <h2 class="text-primary">Delete Rule</h2>
 
     <div class="card shadow-sm border-danger">
         <div class="card-header bg-danger text-white">
-            Confirm Deletion
+            Confirm deletion
         </div>
         <div class="card-body">
-            <p class="mb-3">Are you sure you want to delete this rule?</p>
+            <p>Are you sure you want to remove this firewall rule?</p>
 
             <dl class="row">
-                <dt class="col-sm-3">Remote Address</dt>
-                <dd class="col-sm-9">@Model.RemoteAddress</dd>
+                <dt class="col-sm-3">Rule ID</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">Source</dt>
+                <dd class="col-sm-9">@Model.SourceIp</dd>
 
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9">@Model.Action</dd>
 
-                <dt class="col-sm-3">Enabled</dt>
-                <dd class="col-sm-9">@(Model.Enabled ? "Yes" : "No")</dd>
+                <dt class="col-sm-3">Rule Name</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
             </dl>
 
             <form asp-action="Delete" method="post">
-                <input type="hidden" name="name" value="@Model.Name" />
+                <input type="hidden" name="id" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Delete</button>
                 <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
             </form>

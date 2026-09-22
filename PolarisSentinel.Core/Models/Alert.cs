@@ -2,11 +2,11 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// Stores an AI inference result with the 5-tuple that produced it.
-// Also serves as the inference engine output (merged from DetectionResult).
+// The 5-tuple plus detection outcome produced by the capture layer or the AI engine,
+// and enriched by the policy engine with the action it decided on.
 public class Alert
 {
-    // Human-readable id, e.g. "A-RF-1" / "A-IF-2".
+    // Human-readable id, e.g. "A-RF-1" / "A-IF-2" / "A-PF-3".
     public string Id { get; set; } = string.Empty;
 
     // 5-tuple
@@ -20,23 +20,21 @@ public class Alert
 
     public byte Protocol { get; set; }
 
-    // Inference result
+    // Detection outcome
     public required string AttackType { get; set; }
 
     public float Confidence { get; set; }
 
     public DetectionSource Source { get; set; }
 
-    public DateTime DetectedAt { get; set; } = DateTime.UtcNow;
+    public DateTime DetectedAt { get; set; } = DateTime.Now;
 
-    // Policy decision applied to this alert
-    //该告警对应的策略决策
+    // Policy decision applied to this alert.
     public PolicyAction Action { get; set; } = PolicyAction.Monitor;
 
     public string? RuleName { get; set; }
 
     public required string Reason { get; set; }
 
-    // When the policy engine made the decision (may differ from DetectedAt).
-    public DateTime DecidedAt { get; set; } = DateTime.UtcNow;
+    public DateTime DecidedAt { get; set; } = DateTime.Now;
 }

@@ -7,36 +7,69 @@
 <div class="container-fluid">
     <h2 class="text-primary mb-3">Policy Details</h2>
 
-    <div class="card shadow-sm border-primary mb-3">
+    <div class="card shadow-sm border-primary">
         <div class="card-header bg-primary text-white">
-            @Model.Name
+            @Model.Id
         </div>
         <div class="card-body">
             <dl class="row mb-0">
-                <dt class="col-sm-3">ID</dt>
-                <dd class="col-sm-9">@Model.Id</dd>
-
-                <dt class="col-sm-3">Name</dt>
-                <dd class="col-sm-9">@Model.Name</dd>
-
-                <dt class="col-sm-3">Description</dt>
-                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.Description) ? "-" : Model.Description)</dd>
-
-                <dt class="col-sm-3">Owner (UserId)</dt>
+                <dt class="col-sm-3">Owner</dt>
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.UserId) ? "-" : Model.UserId)</dd>
 
-                <dt class="col-sm-3">Action</dt>
-                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
+                <dt class="col-sm-3">Detection Source</dt>
+                <dd class="col-sm-9"><span class="badge bg-primary">@Model.DetectionSource</span></dd>
 
-                <dt class="col-sm-3">Active</dt>
-                <dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+                <dt class="col-sm-3">Random Forest Threshold</dt>
+                <dd class="col-sm-9">@(Model.RfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
 
-                <dt class="col-sm-3">Created At</dt>
-                <dd class="col-sm-9">@SettingsService.Format(Model.CreatedAt)</dd>
+                <dt class="col-sm-3">Isolation Forest Threshold</dt>
+                <dd class="col-sm-9">@(Model.IfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
+
+                <dt class="col-sm-3">Block Duration</dt>
+                <dd class="col-sm-9">@Model.BlockDurationMinutes minute(s)</dd>
+
+                <dt class="col-sm-3">Match Attack Types</dt>
+                <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(Model.MatchAttackTypes) ? "Any" : Model.MatchAttackTypes)</dd>
+
+                <dt class="col-sm-3">Match Protocol</dt>
+                <dd class="col-sm-9">@ProtocolName(Model.MatchProtocol)</dd>
+
+                <dt class="col-sm-3">Rule Source IP Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.RuleSourceIpAction</span></dd>
+
+                <dt class="col-sm-3">Rule Source Port Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.RuleSourcePortAction</span></dd>
+
+                <dt class="col-sm-3">Rule Destination IP Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.RuleDestinationIpAction</span></dd>
+
+                <dt class="col-sm-3">Rule Destination Port Action</dt>
+                <dd class="col-sm-9"><span class="badge bg-secondary">@Model.RuleDestinationPortAction</span></dd>
+
+                <dt class="col-sm-3">Created</dt>
+                <dd class="col-sm-9">@TimeFormat.Format(Model.CreatedAt)</dd>
+
+                <dt class="col-sm-3">Updated</dt>
+                <dd class="col-sm-9">@TimeFormat.Format(Model.UpdatedAt)</dd>
             </dl>
         </div>
     </div>
 
-    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Edit</a>
-    <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
+    <div class="mt-3">
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">Edit</a>
+        <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-outline-danger">Delete</a>
+        <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
+    </div>
 </div>
+
+@functions {
+    // Map an IP protocol number to a readable name.
+    static string ProtocolName(byte protocol) => protocol switch
+    {
+        1 => "ICMP",
+        6 => "TCP",
+        17 => "UDP",
+        0 => "Any",
+        _ => protocol.ToString()
+    };
+}

@@ -2,13 +2,6 @@
 @{
     ViewData["Title"] = "Edit Rule";
     var actions = ViewBag.Actions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
-    var attackTypes = ViewBag.AttackTypes as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
-    var enabledOptions = ViewBag.EnabledOptions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
-    // 已是 CIDR 时预填前缀
-    // Prefill the prefix when the address is already a CIDR
-    var isCidr = Model.RemoteAddress.Contains('/');
-    var addressPart = isCidr ? Model.RemoteAddress.Split('/')[0] : Model.RemoteAddress;
-    var prefixPart = isCidr ? Model.RemoteAddress.Split('/')[1] : "24";
 }
 
 <div class="container-fluid">
@@ -16,47 +9,74 @@
 
     <div class="card shadow-sm border-primary">
         <div class="card-header bg-primary text-white">
-            @Model.RemoteAddress
+            @Model.Id
         </div>
         <div class="card-body">
             <form asp-action="Edit" method="post">
                 <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-                <input type="hidden" name="name" value="@Model.Name" />
+                <input type="hidden" name="id" value="@Model.Id" />
 
+                <h6 class="text-secondary mb-3">Traffic 5-tuple</h6>
                 <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Address Type</label>
-                        <select id="cidrMode" name="cidrMode" class="form-select" onchange="toggleCidr()">
-                            <option value="single" selected="@(!isCidr)">Single IP</option>
-                            <option value="cidr" selected="@isCidr">CIDR range</option>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="SourceIp" class="form-label">Source IP</label>
+                        <div class="input-group">
+                            <select class="form-select ip-mode" data-target="SourceIp" style="max-width: 6rem;">
+                                <option value="any" selected="@(string.IsNullOrEmpty(Model.SourceIp))">Any</option>
+                                <option value="manual" selected="@(!string.IsNullOrEmpty(Model.SourceIp))">Manual</option>
+                            </select>
+                            <input asp-for="SourceIp" class="form-control" placeholder="0.0.0.0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="SourcePort" class="form-label">Source Port</label>
+                        <div class="input-group">
+                            <select class="form-select port-mode" data-target="SourcePort" style="max-width: 6rem;">
+                                <option value="any" selected="@(Model.SourcePort == 0)">Any</option>
+                                <option value="manual" selected="@(Model.SourcePort != 0)">Manual</option>
+                            </select>
+                            <input asp-for="SourcePort" class="form-control" type="number" min="0" max="65535" placeholder="0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="DestinationIp" class="form-label">Destination IP</label>
+                        <div class="input-group">
+                            <select class="form-select ip-mode" data-target="DestinationIp" style="max-width: 6rem;">
+                                <option value="any" selected="@(string.IsNullOrEmpty(Model.DestinationIp))">Any</option>
+                                <option value="manual" selected="@(!string.IsNullOrEmpty(Model.DestinationIp))">Manual</option>
+                            </select>
+                            <input asp-for="DestinationIp" class="form-control" placeholder="0.0.0.0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="DestinationPort" class="form-label">Destination Port</label>
+                        <div class="input-group">
+                            <select class="form-select port-mode" data-target="DestinationPort" style="max-width: 6rem;">
+                                <option value="any" selected="@(Model.DestinationPort == 0)">Any</option>
+                                <option value="manual" selected="@(Model.DestinationPort != 0)">Manual</option>
+                            </select>
+                            <input asp-for="DestinationPort" class="form-control" type="number" min="0" max="65535" placeholder="0" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label asp-for="Protocol" class="form-label">Protocol</label>
+                        <select asp-for="Protocol" class="form-select">
+                            <option value="0">Any</option>
+                            <option value="1">ICMP</option>
+                            <option value="6">TCP</option>
+                            <option value="17">UDP</option>
                         </select>
                     </div>
+                </div>
 
+                <h6 class="text-secondary mb-3">Rule</h6>
+                <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label asp-for="RemoteAddress" class="form-label">Remote Address</label>
-                        <input asp-for="RemoteAddress" class="form-control" value="@addressPart" />
-                        <span asp-validation-for="RemoteAddress" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-4 mb-3" id="cidrPrefixGroup">
-                        <label class="form-label">Prefix Length</label>
-                        <input type="number" name="cidrPrefix" class="form-control" min="0" max="128" value="@prefixPart" />
-                        <div class="text-muted small mt-1">e.g. 24 for a /24 range.</div>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
                         <label asp-for="Action" class="form-label"></label>
                         <select asp-for="Action" class="form-select" asp-items="actions"></select>
-                        <span asp-validation-for="Action" class="text-danger"></span>
                     </div>
 
-                    <div class="col-md-6 mb-3">
-                        <label asp-for="AttackType" class="form-label">Attack Type</label>
-                        <select asp-for="AttackType" class="form-select" asp-items="attackTypes"></select>
-                        <span asp-validation-for="AttackType" class="text-danger"></span>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">Extend Expiry By</label>
                         <div class="input-group">
                             <input type="number" name="durationValue" class="form-control" min="1" value="60" />
@@ -69,20 +89,21 @@
                         <div class="text-muted small mt-1">New expiry is set to now + this duration.</div>
                     </div>
 
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label asp-for="Enabled" class="form-label"></label>
-                        <select asp-for="Enabled" class="form-select" asp-items="enabledOptions"></select>
-                        <span asp-validation-for="Enabled" class="text-danger"></span>
+                        <select asp-for="Enabled" class="form-select">
+                            <option value="true" selected="@Model.Enabled">Enabled</option>
+                            <option value="false" selected="@(!Model.Enabled)">Disabled</option>
+                        </select>
                     </div>
 
-                    @* 关联信息只读：由系统生成，不可编辑 *@
-                    @* Association ids are read-only: generated by the system *@
-                    <div class="col-md-6 mb-3">
+                    @* Association ids are read-only: generated by the system. *@
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">Policy ID</label>
                         <input class="form-control" value="@(string.IsNullOrEmpty(Model.PolicyId) ? "-" : Model.PolicyId)" readonly />
                     </div>
 
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">Alert ID</label>
                         <input class="form-control" value="@(string.IsNullOrEmpty(Model.AlertId) ? "-" : Model.AlertId)" readonly />
                     </div>
@@ -96,16 +117,20 @@
 </div>
 
 @section Scripts {
-    <partial name="_ValidationScriptsPartial" />
     <script>
-        function toggleCidr() {
-            const mode = document.getElementById('cidrMode').value;
-            document.getElementById('cidrPrefixGroup').style.display = mode === 'cidr' ? '' : 'none';
-        }
-        toggleCidr();
+        // "Any" clears the paired input (empty IP / 0 port); "Manual" restores editing.
+        document.querySelectorAll('.ip-mode, .port-mode').forEach(function (mode) {
+            var input = document.getElementById(mode.dataset.target);
+            function sync() {
+                var any = mode.value === 'any';
+                input.readOnly = any;
+                input.classList.toggle('bg-light', any);
+                if (any) {
+                    input.value = '';
+                }
+            }
+            mode.addEventListener('change', sync);
+            sync();
+        });
     </script>
-}
-
-@section Scripts {
-    <partial name="_ValidationScriptsPartial" />
 }
