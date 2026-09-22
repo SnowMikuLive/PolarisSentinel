@@ -50,7 +50,7 @@ namespace PolarisSentienlUnitTestProject
 
             Assert.IsNull(rule.AlertId);
             // The name falls back to the generated rule id.
-            Assert.AreEqual("PolarisSentinel_Block_R-1", rule.Name);
+            Assert.AreEqual(EntityIds.FirewallRule(rule.Id), rule.Name);
         }
 
         // A detector rule keeps its alert id in the name and links both ids.

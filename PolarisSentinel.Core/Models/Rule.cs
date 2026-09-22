@@ -6,7 +6,8 @@ namespace PolarisSentinel.Core.Models;
 // The firewall module owns persistence; this is the shared shape.
 public class Rule
 {
-    // Human-readable id, e.g. "R-1".
+    // 新记录使用 GUID，旧编号保持不变。
+    // New records use GUIDs; existing IDs remain unchanged.
     public string Id { get; set; } = string.Empty;
 
     // Windows Firewall rule name (e.g. "PolarisSentinel_Block_A-RF-1").

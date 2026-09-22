@@ -33,7 +33,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(rule.Enabled);
         }
 
-        // The rule must reference both the alert that triggered it and the policy that decided it.
+        //规则须关联触发告警与决策策略。
+        //The rule must reference both the triggering alert and deciding policy.
         [TestMethod]
         public void Alert_RuleShouldLinkAlertIdAndPolicyId()
         {
@@ -50,7 +51,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("P-7", rule.PolicyId);
         }
 
-        // The alert must be committed before the rule, because AlertId is a foreign key.
+        //告警须先于规则提交（AlertId外键）。
+        //The alert must be committed before the rule (AlertId FK).
         [TestMethod]
         public void Alert_ShouldBePersistedBeforeRuleIsCreated()
         {
@@ -148,8 +150,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
+        //PreFilter路径：告警ID为32位GUID，规则名PolarisSentinel_Block_{id}。
+        //PreFilter path:alert id is 32-char GUID;rule name PolarisSentinel_Block_{id}.
         [TestMethod]
-        public void Alert_RuleShouldCarryPfAlertIdForPreFilter()
+        public void Alert_RuleShouldCarryAlertIdForPreFilter()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -157,7 +161,8 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.80", AttackTypes.DoS), CreatePolicy());
 
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
+            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
             Assert.AreEqual($"PolarisSentinel_Block_{decision.Id}", decision.RuleName);
             Assert.AreEqual(decision.RuleName, firewall.GetAllRules()[0].Name);
         }
@@ -178,6 +183,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, rule.SourcePort);
         }
 
+        //同源两次检测各自GUID，不再复用递增序号。
+        //Two hits on the same source get distinct GUIDs,not a shared counter.
         [TestMethod]
         public void Alert_SameSourceTwiceShouldCreateRulePerAlert()
         {

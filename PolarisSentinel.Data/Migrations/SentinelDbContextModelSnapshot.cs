@@ -464,6 +464,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsBlockRule")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -480,6 +483,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<int?>("SourcePort")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")

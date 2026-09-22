@@ -23,7 +23,7 @@ namespace PolarisSentienlUnitTestProject
                 PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsTrue(enforcer.IsDryRun);
-            Assert.AreEqual("R-1", rule.Id);
+            Assert.IsTrue(Guid.TryParseExact(rule.Id, "N", out _));
             Assert.AreEqual("PolarisSentinel_Block_A-RF-1", rule.Name);
             Assert.HasCount(1, enforcer.GetAllRules());
         }
@@ -94,7 +94,7 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
-        public void FirewallEnforcer_Block_ShouldIncrementRuleIds()
+        public void FirewallEnforcer_Block_ShouldCreateDifferentRuleIds()
         {
             var (enforcer, _) = CreateEnforcer();
 
@@ -103,8 +103,7 @@ namespace PolarisSentienlUnitTestProject
             var second = enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6,
                 PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual("R-1", first.Id);
-            Assert.AreEqual("R-2", second.Id);
+            Assert.AreNotEqual(first.Id, second.Id);
         }
 
         // A scope that constrains nothing becomes a single shared all-traffic rule.

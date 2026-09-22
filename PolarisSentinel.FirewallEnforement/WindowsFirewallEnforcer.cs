@@ -97,7 +97,9 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
-                var ruleId = EntityIds.Rule(NextRuleNumber());
+                //规则行主键独立GUID；防火墙规则名仍绑定alertId（或ANY共享名）。
+                //Rule row id is its own GUID;firewall name still keys off alertId (or shared ANY).
+                var ruleId = EntityIds.NewId();
 
                 // A rule that constrains nothing blocks every flow, so it must not be
                 // tied to a single alert id; one shared rule is reused instead.
@@ -301,21 +303,6 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 _firewall.Remove(ruleName);
             }
-        }
-
-        // Next "R-n" id, scanned from the stored rules.
-        private int NextRuleNumber()
-        {
-            int max = 0;
-            foreach (var rule in _rules.GetAllAsync().GetAwaiter().GetResult())
-            {
-                if (rule.Id.StartsWith(EntityIds.RulePrefix, StringComparison.Ordinal) &&
-                    int.TryParse(rule.Id.AsSpan(EntityIds.RulePrefix.Length), out int n) && n > max)
-                {
-                    max = n;
-                }
-            }
-            return max + 1;
         }
 
         private static string? NormalizeIp(string value)

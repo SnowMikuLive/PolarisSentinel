@@ -6,12 +6,13 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.PolicyDecision
 {
+    //按策略匹配结果写回Block/Monitor，并为告警分配NewId主键。
+    //Apply Block/Monitor from policy match criteria;assign NewId on the alert.
     public class PolicyEngine : IPolicyEngine
     {
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<PolicyEngine> _logger;
         private readonly object _lock = new object();
-        private int _alertCounter;
 
         public PolicyEngine(TimeProvider timeProvider, ILogger<PolicyEngine> logger)
         {
@@ -48,18 +49,6 @@ namespace PolarisSentinel.PolicyDecision
             }
         }
 
-        public void InitializeAlertCounter(int maxExistingNumber)
-        {
-            lock (_lock)
-            {
-                if (maxExistingNumber > _alertCounter)
-                {
-                    _alertCounter = maxExistingNumber;
-                }
-            }
-            _logger.LogInformation("Alert counter initialised at {Counter}", _alertCounter);
-        }
-
         private static bool MatchesCriteria(Alert alert, Policy policy)
         {
             if (!MatchesAttackType(alert.AttackType, policy.MatchAttackTypes))
@@ -88,7 +77,9 @@ namespace PolarisSentinel.PolicyDecision
 
         private Alert CreateDecision(Alert alert, PolicyAction action, string reason, DateTime now)
         {
-            alert.Id = EntityIds.Alert(alert.Source, ++_alertCounter);
+            //决策落库前生成GUID，旧A-RF-n等历史行不受影响。
+            //Assign a GUID before persistence;legacy A-RF-n rows stay as-is.
+            alert.Id = EntityIds.NewId();
             alert.Action = action;
             alert.DecidedAt = now;
             alert.Reason = reason;

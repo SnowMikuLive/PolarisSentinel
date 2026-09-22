@@ -5,7 +5,7 @@
 namespace PolarisSentinel.DataAccess.Migrations
 {
     /// <inheritdoc />
-    public partial class AddRuleStatusAndIsBlockRule : Migration
+    public partial class RestoreRuleStatus : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -24,19 +24,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                 nullable: false,
                 defaultValue: 0);
 
-            migrationBuilder.UpdateData(
-                table: "Rules",
-                keyColumn: "Id",
-                keyValue: "R-1",
-                columns: new[] { "IsBlockRule", "Status" },
-                values: new object[] { true, 0 });
-
-            migrationBuilder.UpdateData(
-                table: "Rules",
-                keyColumn: "Id",
-                keyValue: "R-2",
-                columns: new[] { "IsBlockRule", "Status" },
-                values: new object[] { true, 0 });
+            //补齐IsBlockRule/Status后，用Action回填封禁标记。
+            //Backfill IsBlockRule from Action after adding IsBlockRule/Status columns.
+            migrationBuilder.Sql("UPDATE [Rules] SET [IsBlockRule] = 1 WHERE [Action] = 'Block'");
         }
 
         /// <inheritdoc />

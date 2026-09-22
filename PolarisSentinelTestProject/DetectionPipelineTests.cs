@@ -30,7 +30,7 @@ namespace PolarisSentienlUnitTestProject
 
             Assert.AreEqual(PolicyAction.Block, decision.Action);
             Assert.AreEqual(DetectionSource.RandomForest, decision.Source);
-            Assert.AreEqual("PolarisSentinel_Block_A-RF-1", decision.RuleName);
+            Assert.AreEqual(EntityIds.FirewallRule(decision.Id), decision.RuleName);
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
@@ -67,7 +67,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, inference.CallCount);
             Assert.AreEqual(PolicyAction.Block, decision.Action);
             Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
         }
 
         // An Isolation Forest anomaly with high confidence blocks like any other detection.
