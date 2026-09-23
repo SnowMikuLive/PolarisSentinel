@@ -70,9 +70,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
         }
 
-        // An Isolation Forest anomaly with high confidence blocks like any other detection.
+        // 未知异常即使高置信度也不封禁。
+        // Unknown anomalies never create automatic firewall rules.
         [TestMethod]
-        public void DetectionPipeline_UnknownAnomaly_ShouldBlockAndCreateRule()
+        public void DetectionPipeline_UnknownAnomaly_ShouldMonitorWithoutRule()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -81,8 +82,9 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.66"), CreatePolicy(DetectionSource.IsolationForest));
 
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.HasCount(1, firewall.GetAllRules());
+            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.IsEmpty(firewall.GetAllRules());
+            Assert.IsNull(decision.RuleName);
         }
 
         // Private addresses are blocked too: there is no allowlist any more.

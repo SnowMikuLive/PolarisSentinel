@@ -9,6 +9,7 @@ import numpy as np
 import onnxruntime as ort
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
+from evaluate_inference import rf_alert_mask
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -16,13 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "prepared.npz"
 NOVELTY_PATH = ROOT / "data" / "novelty.npz"
 WINNER_PATH = ROOT / "data" / "if_winner.joblib"
-RF_PATH = ROOT / "data" / "rf_final.joblib"
+RF_PATH = ROOT / "artifacts" / "rf_model.onnx"
 SYSTEM_METRICS_PATH = ROOT / "artifacts" / "metrics_if_system.json"
 ONNX_PATH = ROOT / "artifacts" / "if_model.onnx"
 METRICS_PATH = ROOT / "artifacts" / "metrics_if_final.json"
 
 BENIGN = 0
-RF_CONFIDENCE_THRESHOLD = 0.60
 
 #float32分数可能有偏差，检查异常判定是否一致
 #float32 scores may differ; check whether anomaly decisions agree
@@ -35,12 +35,10 @@ TARGET_OPSET = {"": 18, "ai.onnx.ml": 3}
 #RF判为攻击且达到告警阈值的样本
 #RF attack predictions that meet the confidence threshold.
 def rf_alerts(rf, X):
-    proba = rf.predict_proba(X)
-    predicted_class = proba.argmax(axis=1)
-    confidence = proba.max(axis=1)
-    is_attack = predicted_class != BENIGN
-    meets_threshold = confidence >= RF_CONFIDENCE_THRESHOLD
-    return is_attack & meets_threshold
+    meta = rf.get_modelmeta().custom_metadata_map
+    classes = json.loads(meta["class_names"])
+    proba = rf.run(["probabilities"], {rf.get_inputs()[0].name: X})[0]
+    return rf_alert_mask(proba, classes.index("Benign"), float(meta["rf_confidence_threshold"]))
 
 def main():
     model = joblib.load(WINNER_PATH)
@@ -92,7 +90,7 @@ def main():
     def onnx_scores(X):
         results = session.run(None, {"input": X})
         scores = results[outputs["scores"]]
-        return np.asarray(scores).ravel()
+        return np.asarray(scores, dtype=np.float64).ravel()
 
     start = time.perf_counter()
     benign_scores = onnx_scores(benign_test)
@@ -119,13 +117,13 @@ def main():
     assert diff.max() <= SCORE_DIFF_SANITY, "ONNX scores diverge far beyond float32 rounding"
     assert flag_match >= THRESHOLD_AGREEMENT_MIN, "ONNX and sklearn disagree on anomalous flows"
 
-    rf = joblib.load(RF_PATH)
+    rf = ort.InferenceSession(str(RF_PATH), providers=["CPUExecutionProvider"])
     benign_rf = rf_alerts(rf, benign_test)
     novelty_rf = rf_alerts(rf, X_novelty)
 
     rf_fpr = float(benign_rf.mean())
-    #并联评估：IF仅看RF未达告警阈值的流；C#对RF攻击类直接返回，口径不同
-    #Parallel eval:IF scores flows RF did not alert on; C# returns RF attacks directly
+    # 与 C# 一致：IF 检查 RF 未告警的流，包含低置信度攻击类。
+    # Match C#: IF checks flows RF did not alert on, including low-confidence attacks.
     benign_if_alerts = ~benign_rf & (benign_scores < threshold)
     if_extra = float(benign_if_alerts.mean())
     if_catch = ~novelty_rf & (novelty_scores < threshold)

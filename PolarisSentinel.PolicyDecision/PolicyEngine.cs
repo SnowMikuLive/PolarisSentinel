@@ -40,6 +40,13 @@ namespace PolarisSentinel.PolicyDecision
                     return CreateDecision(alert, PolicyAction.Monitor, "benign", now);
                 }
 
+                // 未知异常只告警，不自动封禁。
+                // Unknown anomalies are Monitor-only.
+                if (alert.AttackType == AttackTypes.UnknownAnomaly)
+                {
+                    return CreateDecision(alert, PolicyAction.Monitor, "unknown_anomaly_monitor_only", now);
+                }
+
                 if (!MatchesCriteria(alert, policy))
                 {
                     return CreateDecision(alert, PolicyAction.Monitor, "no_match", now);

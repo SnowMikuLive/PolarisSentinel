@@ -9,8 +9,8 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference
 {
-    // RF 分类，IF 检查良性流
-    // RF classifies traffic; IF checks benign flows
+    // RF 达到告警阈值才返回攻击，其余流交给 IF。
+    // RF alerts above its threshold; IF checks the remaining flows.
     public class OnnxInferenceEngine : IInferenceEngine, IDisposable
     {
         private const double AlertConfidence = 0.60;
@@ -19,6 +19,7 @@ namespace PolarisSentinel.Inference
 
         private readonly InferenceSession _classifier;
         private readonly string _classifierInput;
+        private readonly int _benignIndex;
         private readonly InferenceSession? _anomalyDetector;
         private readonly string? _anomalyInput;
         private readonly double _scoreAtAlertConfidence;
@@ -52,6 +53,7 @@ namespace PolarisSentinel.Inference
             // Read features and thresholds from the model
             var metadata = _classifier.ModelMetadata.CustomMetadataMap;
             ClassNames = JsonSerializer.Deserialize<string[]>(metadata["class_names"])!;
+            _benignIndex = Array.IndexOf(ClassNames.ToArray(), AttackTypes.Benign);
             FeatureNames = JsonSerializer.Deserialize<string[]>(metadata["feature_names"])!;
             RfConfidenceThreshold = ParseDouble(metadata["rf_confidence_threshold"]);
             AutoBlockConfidenceThreshold = ParseDouble(metadata["auto_block_confidence_threshold"]);
@@ -107,7 +109,7 @@ namespace PolarisSentinel.Inference
             }
 
             string attackType = ClassNames[best];
-            if (attackType != AttackTypes.Benign)
+            if (attackType != AttackTypes.Benign && probabilities[0, best] >= (float)RfConfidenceThreshold)
             {
                 // The model's class names are external labels; only the categories
                 // defined by the AttackType enum may enter the system.
@@ -134,7 +136,7 @@ namespace PolarisSentinel.Inference
                 }
             }
 
-            return CreateAlert(flow, AttackTypes.Benign, probabilities[0, best], DetectionSource.None);
+            return CreateAlert(flow, AttackTypes.Benign, probabilities[0, _benignIndex], DetectionSource.None);
         }
 
         // Inference fills the attack type, confidence and 5-tuple only;
