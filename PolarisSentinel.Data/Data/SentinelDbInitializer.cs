@@ -5,13 +5,14 @@ using Microsoft.Extensions.Options;
 
 namespace PolarisSentinel.DataAccess.Data;
 
-// Applies pending migrations and provisions the initial administrator account.
+//应用EF迁移并可选创建初始管理员；失败时由宿主中止启动。
+//Apply EF migrations and optionally seed admin;host aborts startup on failure.
 //
-// Why this lives here instead of Program.cs:
-// - The Web project only needs to call one method; schema and identity
-//   bootstrap logic stays next to the DbContext that owns it.
-// - The password is supplied through AdminSeedOptions (config / env var /
-//   user-secrets), so no credential is hardcoded in source.
+//Why this lives here instead of Program.cs:
+//-The Web project only needs to call one method;schema and identity
+//  bootstrap logic stays next to the DbContext that owns it.
+//-The password is supplied through AdminSeedOptions (config/env var/
+//  user-secrets),so no credential is hardcoded in source.
 public sealed class SentinelDbInitializer
 {
     private readonly SentinelDbContext _db;
@@ -36,7 +37,7 @@ public sealed class SentinelDbInitializer
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await _db.Database.MigrateAsync(cancellationToken);
+        await MigrateDatabaseAsync(_db, cancellationToken);
 
         if (!_options.Enabled)
         {
@@ -86,5 +87,22 @@ public sealed class SentinelDbInitializer
         {
             await _userManager.AddToRoleAsync(admin, role);
         }
+    }
+
+    //先校验__EFMigrationsHistory；未知迁移ID则抛错，不自动删库。
+    //Validate __EFMigrationsHistory first;unknown ids throw without dropping data.
+    public static async Task MigrateDatabaseAsync(SentinelDbContext db, CancellationToken cancellationToken = default)
+    {
+        var known = db.Database.GetMigrations().ToHashSet();
+        var applied = await db.Database.GetAppliedMigrationsAsync(cancellationToken);
+        var unknown = applied.Where(id => !known.Contains(id)).ToArray();
+        if (unknown.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Database uses a different migration history: " + string.Join(", ", unknown) +
+                ". Keep a backup and use a separate database for this version, or migrate the old data explicitly.");
+        }
+
+        await db.Database.MigrateAsync(cancellationToken);
     }
 }

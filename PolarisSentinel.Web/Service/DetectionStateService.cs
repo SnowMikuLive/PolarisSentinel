@@ -2,8 +2,8 @@
 
 namespace PolarisSentinel.Web.Service
 {
-    // 推送给 SignalR 和状态 API 的统一记录
-    // Unified record for SignalR push and state API
+    //推送给SignalR和状态API的统一记录
+    //Unified record for SignalR push and state API
     public record DetectionRecord(
         string AlertId,
         string SourceIp,
@@ -17,8 +17,8 @@ namespace PolarisSentinel.Web.Service
         string Source,
         string? RuleName);
 
-    // 检测状态服务（单例），维护累计计数和最近决策
-    // Singleton detection state service with counters and recent decisions
+    //检测状态服务（单例），维护累计计数和最近决策
+    //Singleton detection state service with counters and recent decisions
     public class DetectionStateService
     {
         private const int MaxHistory = 50;
@@ -49,8 +49,8 @@ namespace PolarisSentinel.Web.Service
 
                 _recent.Insert(0, record);
 
-                // 只保留最近 N 条
-                // Keep only the most recent N records
+                //只保留最近N条
+                //Keep only the most recent N records
                 if (_recent.Count > MaxHistory)
                 {
                     _recent.RemoveAt(_recent.Count - 1);

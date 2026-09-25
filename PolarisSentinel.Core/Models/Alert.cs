@@ -6,7 +6,8 @@ namespace PolarisSentinel.Core.Models;
 // and enriched by the policy engine with the action it decided on.
 public class Alert
 {
-    // Human-readable id, e.g. "A-RF-1" / "A-IF-2" / "A-PF-3".
+    // 新记录使用 GUID，旧编号保持不变。
+    // New records use GUIDs; existing IDs remain unchanged.
     public string Id { get; set; } = string.Empty;
 
     // 5-tuple

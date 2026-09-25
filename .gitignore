@@ -67,6 +67,8 @@ ml/artifacts/*
 !ml/artifacts/rf_model.onnx
 !ml/artifacts/if_model.onnx
 !ml/artifacts/metrics_if_final.json
+!ml/artifacts/metrics_inference.json
+!ml/artifacts/inference_cases.json
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 

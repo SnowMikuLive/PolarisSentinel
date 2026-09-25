@@ -119,17 +119,16 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
                 new PolicyEngine(
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<PolicyEngine>>()));
+                    sp.GetRequiredService<ILogger<PolicyEngine>>(),
+                    builder.Configuration.GetSection("PolicySettings:Allowlist").Get<string[]>()));
 
-            // Firewall enforcer persists rules through the rule repository.
-            // The alert repository lets it verify the FK parent exists before linking AlertId.
+            // Firewall enforcer stages rules; the pipeline commits them after the alert exists.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>
                 new WindowsFirewallEnforcer(
-                    new RuleRepository(sp.GetRequiredService<SentinelDbContext>()),
+                    sp.GetRequiredService<IUnitOfWork>().Rules,
                     sp.GetRequiredService<IOptions<FirewallOptions>>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>(),
-                    new AlertRepository(sp.GetRequiredService<SentinelDbContext>())));
+                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
 
             // Detection pipeline (capture verdict -> inference -> policy -> enforcement).
             builder.Services.AddScoped<IDetectionPipeline>(sp =>
@@ -137,6 +136,7 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IInferenceEngine>(),
                     sp.GetRequiredService<IPolicyEngine>(),
                     sp.GetRequiredService<IFirewallEnforcer>(),
+                    sp.GetRequiredService<IUnitOfWork>(),
                     sp.GetRequiredService<ILogger<DetectionPipeline>>()));
 
             // Detection persistence (single transaction boundary over SentinelDbContext)
@@ -185,8 +185,8 @@ namespace PolarisSentinel
                 anomalyThreshold = engine.AnomalyThreshold,
             }));
 
-            // 应用迁移并创建初始管理员（逻辑在 SentinelDbInitializer 中）
-            // Apply migrations and provision the initial admin (logic lives in SentinelDbInitializer)
+            //应用迁移并创建初始管理员（实现见SentinelDbInitializer）。
+            //Apply migrations and provision admin (see SentinelDbInitializer).
             await using (var scope = app.Services.CreateAsyncScope())
             {
                 try
@@ -194,25 +194,14 @@ namespace PolarisSentinel
                     var initializer = scope.ServiceProvider.GetRequiredService<SentinelDbInitializer>();
                     await initializer.InitializeAsync();
 
-                    // 用已有告警初始化 ID 计数器，避免重启后主键冲突
-                    // Seed the alert id counter from existing alerts to avoid PK collisions after restart
-                    var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                    var alerts = await uow.Alerts.GetAllAsync();
-                    int maxAlert = 0;
-                    foreach (var alert in alerts)
-                    {
-                        int dash = alert.Id.LastIndexOf('-');
-                        if (dash >= 0 && int.TryParse(alert.Id.AsSpan(dash + 1), out int n) && n > maxAlert)
-                        {
-                            maxAlert = n;
-                        }
-                    }
-                    scope.ServiceProvider.GetRequiredService<IPolicyEngine>().InitializeAlertCounter(maxAlert);
                 }
                 catch (Exception ex)
                 {
                     app.Logger.LogError(ex,
                         "Database initialisation failed; check the connection and migrations.");
+                    //迁移或种子失败时中止启动，避免无库状态下跑抓包/检测。
+                    //Abort startup on migration/seed failure so capture does not run without DB.
+                    throw;
                 }
             }
 

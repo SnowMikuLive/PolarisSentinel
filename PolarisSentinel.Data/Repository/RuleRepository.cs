@@ -32,6 +32,9 @@ public class RuleRepository : IRuleRepository
     {
         return await _context.Rules
             .AsNoTracking()
+            //Load the Policy and Alert navigation; otherwise, policyName will always be null.
+            .Include(r => r.Policy)
+            .Include(r => r.Alert)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
     }

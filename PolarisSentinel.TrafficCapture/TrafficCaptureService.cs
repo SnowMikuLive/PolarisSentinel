@@ -45,7 +45,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         // Both timers are created suspended (Timeout.Infinite due time) and
         // only actually start ticking once Start(deviceName) is called.
-        _expiryTimer = new System.Threading.Timer(_ => ExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
+        _expiryTimer = new System.Threading.Timer(_ => ExpireIdleFlows(DateTime.Now), null, Timeout.Infinite, Timeout.Infinite);
         _liveSummaryTimer = new System.Threading.Timer(_ => EmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -103,7 +103,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     {
         RawCapture rawPacket = e.GetPacket();
         Packet parsed = Packet.ParsePacket(rawPacket.LinkLayerType, rawPacket.Data);
+        ProcessPacket(parsed, rawPacket.Timeval.Date.ToLocalTime());
+    }
 
+    // 实时抓包和样本测试使用同一段聚合代码。
+    // Live capture and packet tests share this aggregation code.
+    internal void ProcessPacket(Packet parsed, DateTime now)
+    {
         IPPacket? ipPacket = parsed.Extract<IPPacket>();
         if (ipPacket is null) return; // not IPv4/IPv6, nothing we track
 
@@ -116,7 +122,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         ushort dstPort = tcpPacket?.DestinationPort ?? udpPacket?.DestinationPort ?? 0;
         byte protocol = (byte)ipPacket.Protocol;
         int packetSize = ipPacket.TotalLength;
-        DateTime now = DateTime.Now;
 
         UpdateFastPathCounters(packetSize, protocol);
 
@@ -125,11 +130,14 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             StartTime = now,
             LastSeenTime = now,
+            SourceIp = srcIp,
+            SourcePort = srcPort,
+            DestinationIp = dstIp,
             Protocol = protocol,
             DestinationPort = dstPort
         });
 
-        bool isForward = srcIp == key.IpA && srcPort == key.PortA;
+        bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
 
         lock (flow) // packets for the same flow can arrive back-to-back on the capture thread
         {
@@ -178,10 +186,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    private void ExpireIdleFlows()
+    internal void ExpireIdleFlows(DateTime now)
     {
-        
-        DateTime now = DateTime.Now;
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
 
 
@@ -193,15 +199,15 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            // Rule-based pre-filter runs first: attack verdicts are emitted, benign flows are dropped,
-            // and only flows that no rule could classify are exported for AI inference.
+            // 规则命中时携带结果，其余非空流交给模型。
+            // Emit rule verdicts; send other nonempty flows to the model.
             var verdict = _preFilter.Classify(flow, out bool suspicious);
             if (verdict is null && !suspicious) continue;
 
             var featureVector = Internal.FeatureExporter.Export(
                 flow, key,
-                sourceIp: key.IpA, sourcePort: key.PortA,
-                destinationIp: key.IpB, destinationPort: key.PortB,
+                sourceIp: flow.SourceIp, sourcePort: flow.SourcePort,
+                destinationIp: flow.DestinationIp, destinationPort: (ushort)flow.DestinationPort,
                 protocol: key.Protocol);
 
             OnFlowCompleted?.Invoke(this, new FlowFeatureVector

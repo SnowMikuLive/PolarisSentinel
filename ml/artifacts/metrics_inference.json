@@ -1,0 +1,108 @@
+{
+  "routing": "RF non-Benign and confidence >= RF threshold; otherwise IF; IF score < threshold is Unknown_Anomaly; otherwise Benign",
+  "scope": "Offline model detection only; excludes capture, PreFilter, policy matching and firewall execution.",
+  "novelty_note": "Full novelty.npz was reused during IF selection; this is not an independent novelty test set.",
+  "rf_threshold": 0.6,
+  "if_threshold": -0.15080632694939178,
+  "model_sha256": {
+    "rf_model.onnx": "35269a65f688242f16ca541241c806a39df18f06224a4e4d71d9d401361738be",
+    "if_model.onnx": "187b4a87e366cb17f4760ce09eec99f043607a35cd8e980cbc2c01659d49b55a"
+  },
+  "populations": {
+    "test": {
+      "Benign": {
+        "rows": 342307,
+        "rf_alerts": 746,
+        "if_added": 372,
+        "combined_detected": 1118,
+        "rf_rate": 0.0021793302503308434,
+        "combined_rate": 0.0032660740212733016,
+        "previous_engine_rate": 0.003377085481745918
+      },
+      "BruteForce": {
+        "rows": 2100,
+        "rf_alerts": 1716,
+        "if_added": 0,
+        "combined_detected": 1716,
+        "rf_rate": 0.8171428571428572,
+        "combined_rate": 0.8171428571428572,
+        "previous_engine_rate": 0.8185714285714286
+      },
+      "DoS": {
+        "rows": 31178,
+        "rf_alerts": 29936,
+        "if_added": 1,
+        "combined_detected": 29937,
+        "rf_rate": 0.9601642183590994,
+        "combined_rate": 0.9601962922573609,
+        "previous_engine_rate": 0.9621528000513182
+      },
+      "PortScan": {
+        "rows": 26380,
+        "rf_alerts": 26362,
+        "if_added": 1,
+        "combined_detected": 26363,
+        "rf_rate": 0.9993176648976497,
+        "combined_rate": 0.9993555724033358,
+        "previous_engine_rate": 0.999696739954511
+      },
+      "total": {
+        "rows": 401965,
+        "rf_rate": 0.14618188150709638,
+        "combined_rate": 0.14711231077332604
+      }
+    },
+    "novelty": {
+      "Bot": {
+        "rows": 1966,
+        "rf_alerts": 0,
+        "if_added": 16,
+        "combined_detected": 16,
+        "rf_rate": 0.0,
+        "combined_rate": 0.008138351983723296,
+        "previous_engine_rate": 0.008138351983723296
+      },
+      "DDoS": {
+        "rows": 128027,
+        "rf_alerts": 30434,
+        "if_added": 28635,
+        "combined_detected": 59069,
+        "rf_rate": 0.2377154818905387,
+        "combined_rate": 0.46137924031649574,
+        "previous_engine_rate": 0.6349363806072157
+      },
+      "Heartbleed": {
+        "rows": 11,
+        "rf_alerts": 0,
+        "if_added": 0,
+        "combined_detected": 0,
+        "rf_rate": 0.0,
+        "combined_rate": 0.0,
+        "previous_engine_rate": 0.0
+      },
+      "Infiltration": {
+        "rows": 36,
+        "rf_alerts": 0,
+        "if_added": 1,
+        "combined_detected": 1,
+        "rf_rate": 0.0,
+        "combined_rate": 0.027777777777777776,
+        "previous_engine_rate": 0.027777777777777776
+      },
+      "WebAttack": {
+        "rows": 2180,
+        "rf_alerts": 1,
+        "if_added": 0,
+        "combined_detected": 1,
+        "rf_rate": 0.00045871559633027525,
+        "combined_rate": 0.00045871559633027525,
+        "previous_engine_rate": 0.007798165137614679
+      },
+      "total": {
+        "rows": 132220,
+        "rf_rate": 0.23018454091665405,
+        "combined_rate": 0.44688398124338224
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
-# RF ONNX 一致性测试。需先运行 prepare_dataset.py 和 export_onnx.py
-# RF ONNX parity tests. Requires prepare_dataset.py and export_onnx.py first.
+#RF ONNX一致性测试。需先运行prepare_dataset.py和export_onnx.py
+#RF ONNX parity tests. Requires prepare_dataset.py and export_onnx.py first.
 import json
 from pathlib import Path
 import joblib
@@ -18,10 +18,9 @@ needs_artifacts = pytest.mark.skipif(
     reason="run prepare_dataset.py and export_onnx.py first",
 )
 
-
 @needs_artifacts
 def test_onnx_parity_with_sklearn():
-    # Arrange
+    #Arrange
     model = joblib.load(MODEL_PATH)
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
     data = np.load(DATA_PATH)
@@ -31,24 +30,23 @@ def test_onnx_parity_with_sklearn():
     sample_indices = rng.choice(len(X_test), size=50_000, replace=False)
     sample = X_test[sample_indices]
 
-    # Act
+    #Act
     skl_proba = model.predict_proba(sample)
     ort_labels, ort_proba = session.run(None, {"input": sample})
     skl_labels = np.argmax(skl_proba, axis=1)
     matching_labels = ort_labels == skl_labels
     probability_diff = np.abs(ort_proba - skl_proba)
 
-    # Assert
+    #Assert
     assert matching_labels.all()
     assert probability_diff.max() <= 1e-5
 
-
 @needs_artifacts
 def test_onnx_metadata_matches_schema():
-    # Arrange
+    #Arrange
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])
 
-    # Act
+    #Act
     model_meta = session.get_modelmeta()
     meta = model_meta.custom_metadata_map
     feature_names = json.loads(meta["feature_names"])
@@ -57,7 +55,7 @@ def test_onnx_metadata_matches_schema():
     block_threshold = float(meta["auto_block_confidence_threshold"])
     inputs = session.get_inputs()
 
-    # Assert
+    #Assert
     assert feature_names == FEATURE_NAMES
     assert class_names == CLASS_NAMES
     assert alert_threshold == pytest.approx(0.60)

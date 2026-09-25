@@ -308,6 +308,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
                     b.Property<float?>("IfConfidenceThreshold")
                         .HasColumnType("real");
 
@@ -360,6 +363,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 10,
                             CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             DetectionSource = "PreFilter",
+                            Enabled = true,
                             MatchProtocol = (byte)0,
                             RuleDestinationIpAction = "Allow",
                             RuleDestinationPortAction = "Allow",
@@ -374,6 +378,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 10,
                             CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             DetectionSource = "PreFilter",
+                            Enabled = true,
                             MatchAttackTypes = "DoS",
                             MatchProtocol = (byte)0,
                             RuleDestinationIpAction = "Allow",
@@ -389,6 +394,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 10,
                             CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             DetectionSource = "PreFilter",
+                            Enabled = true,
                             MatchAttackTypes = "DoS",
                             MatchProtocol = (byte)1,
                             RuleDestinationIpAction = "Allow",
@@ -404,6 +410,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 10,
                             CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             DetectionSource = "PreFilter",
+                            Enabled = true,
                             MatchAttackTypes = "DoS",
                             MatchProtocol = (byte)17,
                             RuleDestinationIpAction = "Allow",
@@ -419,6 +426,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 10,
                             CreatedAt = new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             DetectionSource = "RandomForest",
+                            Enabled = true,
                             MatchProtocol = (byte)0,
                             RfConfidenceThreshold = 0.6f,
                             RuleDestinationIpAction = "Allow",
@@ -464,6 +472,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsBlockRule")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -480,6 +491,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<int?>("SourcePort")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")

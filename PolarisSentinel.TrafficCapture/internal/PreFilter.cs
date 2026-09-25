@@ -3,7 +3,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.TrafficCapture.Internal;
 
-// Rule-based pre-filter: detects known attack signatures, drops obvious noise, and forwards the rest to the AI engine.
+// Rule-based pre-filter: detects attack signatures and forwards other flows to AI.
 internal sealed class PreFilter
 {
     private readonly int _minPacketsForAnalysis;
@@ -13,82 +13,23 @@ internal sealed class PreFilter
         _minPacketsForAnalysis = minPacketsForAnalysis;
     }
 
-    // Classifies a finished flow: verdict = attack, null + suspicious = send to AI, null + !suspicious = benign.
+    // 规则只确认攻击，未命中的非空流交给 AI。
+    // Rules confirm attacks; other nonempty flows go to AI.
     public PreFilterResult? Classify(FlowRecord flow, out bool suspicious)
     {
         suspicious = false;
-
-        // Too few packets to compute meaningful statistics.
-        if (flow.TotalPackets < _minPacketsForAnalysis)
+        if (flow.TotalPackets == 0)
             return null;
 
-        // Short-lived flow, likely a handshake fragment.
-        if (flow.DurationSeconds < 0.1)
-            return null;
-
-        // FlowKey orders endpoints by IP string, not by who sent first, so the
-        // attacker may be on either side. Normalise so the dominant sender is forward.
-        var direction = Normalise(flow);
-
-        // Attack signatures run before the benign filters because floods are one-directional.
-        var attack = DetectFlood(direction) ?? DetectScan(direction) ?? DetectBruteForce(direction);
-        if (attack is not null)
-            return attack;
-
-        // Unidirectional traffic, typical of broadcast/multicast.
-        if (direction.FwdPackets == 0 || direction.BwdPackets == 0)
-            return null;
-
-        bool isNormalWebTraffic =
-            (direction.DestinationPort == 443 || direction.DestinationPort == 80) &&
-            direction.FwdPackets > 5 &&
-            direction.BwdPackets > 5 &&
-            direction.SynCount <= 1 &&
-            direction.RstCount == 0 &&
-            direction.FinCount <= 2 &&
-            direction.DownUpRatio > 0.1 &&
-            direction.DownUpRatio < 10;
-
-        if (isNormalWebTraffic)
-            return null;
-
-        bool isOrdinaryTwoWayTraffic =
-            direction.DurationSeconds > 1.0 &&
-            direction.SynCount <= 1;
-
-        if (isOrdinaryTwoWayTraffic)
-            return null;
-
-        // Every rule has been evaluated and nothing matched: hand it to the AI engine.
-        suspicious = true;
-        return null;
-    }
-
-    // Returns the flow as seen from the dominant sender, so the attack rules can
-    // assume forward = attacker regardless of how FlowKey ordered the endpoints.
-    private static FlowRecord Normalise(FlowRecord flow)
-    {
-        if (flow.FwdPackets >= flow.BwdPackets)
+        if (flow.TotalPackets >= _minPacketsForAnalysis)
         {
-            return flow;
+            var attack = DetectFlood(flow) ?? DetectScan(flow) ?? DetectBruteForce(flow);
+            if (attack is not null)
+                return attack;
         }
 
-        return new FlowRecord
-        {
-            StartTime = flow.StartTime,
-            LastSeenTime = flow.LastSeenTime,
-            Protocol = flow.Protocol,
-            DestinationPort = flow.DestinationPort,
-            FwdPackets = flow.BwdPackets,
-            BwdPackets = flow.FwdPackets,
-            FwdBytes = flow.BwdBytes,
-            BwdBytes = flow.FwdBytes,
-            SynCount = flow.SynCount,
-            AckCount = flow.AckCount,
-            FinCount = flow.FinCount,
-            RstCount = flow.RstCount,
-            PshCount = flow.PshCount
-        };
+        suspicious = true;
+        return null;
     }
 
     // DoS family: SYN / UDP / ACK / ICMP floods, driven by flag counts and one-way packet volume.

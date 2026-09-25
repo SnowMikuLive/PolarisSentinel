@@ -1,12 +1,26 @@
 cd "c:\Users\chaiz\OneDrive\桌面\PolarisSentinel"
 ml\.venv\Scripts\Activate.ps1
 
+#做出「未知攻击」表
 python ml\scripts\prepare_novelty.py
+
+#试哪种变换/树参数好
 python ml\scripts\train_if.py
+
+#定稿（和 RF 一起算误报）
 python ml\scripts\tune_if.py
+
+#写成 C# 要加载的 if_model.onnx
 python ml\scripts\export_if_onnx.py
 
 可选：
 
+#开工前可行性试探。用假的重尾随机数，尝试裸 IF、Quantile+IF、Power+IF 能不能转 ONNX、分数是不是 decision_function。
 python ml\scripts\spike_if_onnx.py
+
+#检查前面产物有没有配错，
+#novelty 标签与 RF 四类不重叠		无文件
+#novelty.npz 仍是同一套 20 维		prepare_novelty.py
+#ONNX 与 sklearn 异常判定一致		tune_if + export_if_onnx
+#ONNX 元数据 = 调参阈值/锚点		同上
 pytest ml\tests\test_isolation_forest.py -q

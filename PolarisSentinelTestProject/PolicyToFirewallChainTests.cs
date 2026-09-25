@@ -33,6 +33,41 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(rule.Enabled);
         }
 
+        //规则须关联触发告警与决策策略。
+        //The rule must reference both the triggering alert and deciding policy.
+        [TestMethod]
+        public void Alert_RuleShouldLinkAlertIdAndPolicyId()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var pipeline = CreatePipeline(clock, firewall);
+            var policy = CreatePolicy();
+            policy.Id = "P-7";
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.55", AttackTypes.DoS), policy);
+
+            var rule = firewall.GetAllRules()[0];
+            Assert.AreEqual(decision.Id, rule.AlertId);
+            Assert.AreEqual("P-7", rule.PolicyId);
+        }
+
+        //告警须先于规则提交（AlertId外键）。
+        //The alert must be committed before the rule (AlertId FK).
+        [TestMethod]
+        public void Alert_ShouldBePersistedBeforeRuleIsCreated()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var unitOfWork = new FakeUnitOfWork();
+            var pipeline = CreatePipeline(clock, firewall, unitOfWork);
+
+            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.56", AttackTypes.DoS), CreatePolicy());
+
+            var stored = unitOfWork.Alerts.GetByIdAsync(decision.Id).GetAwaiter().GetResult();
+            Assert.IsNotNull(stored);
+            Assert.HasCount(1, firewall.GetAllRules());
+        }
+
         [TestMethod]
         public void Alert_UnmatchedAttackType_ShouldNotCreateRule()
         {
@@ -115,8 +150,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
+        //PreFilter路径：告警ID为32位GUID，规则名PolarisSentinel_Block_{id}。
+        //PreFilter path:alert id is 32-char GUID;rule name PolarisSentinel_Block_{id}.
         [TestMethod]
-        public void Alert_RuleShouldCarryPfAlertIdForPreFilter()
+        public void Alert_RuleShouldCarryAlertIdForPreFilter()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -124,7 +161,8 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.80", AttackTypes.DoS), CreatePolicy());
 
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
+            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
             Assert.AreEqual($"PolarisSentinel_Block_{decision.Id}", decision.RuleName);
             Assert.AreEqual(decision.RuleName, firewall.GetAllRules()[0].Name);
         }
@@ -145,6 +183,8 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, rule.SourcePort);
         }
 
+        //同源两次检测各自GUID，不再复用递增序号。
+        //Two hits on the same source get distinct GUIDs,not a shared counter.
         [TestMethod]
         public void Alert_SameSourceTwiceShouldCreateRulePerAlert()
         {
@@ -171,8 +211,14 @@ namespace PolarisSentienlUnitTestProject
 
         private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall)
         {
+            return CreatePipeline(clock, firewall, new FakeUnitOfWork());
+        }
+
+        private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall,
+            FakeUnitOfWork unitOfWork)
+        {
             var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall,
+            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall, unitOfWork,
                 NullLogger<DetectionPipeline>.Instance);
         }
 

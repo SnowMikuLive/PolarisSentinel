@@ -11,31 +11,45 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly IInferenceEngine _inference;
     private readonly IPolicyEngine _policy;
     private readonly IFirewallEnforcer _firewall;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DetectionPipeline> _logger;
 
     public DetectionPipeline(
         IInferenceEngine inference,
         IPolicyEngine policy,
         IFirewallEnforcer firewall,
+        IUnitOfWork unitOfWork,
         ILogger<DetectionPipeline> logger)
     {
         _inference = inference;
         _policy = policy;
         _firewall = firewall;
+        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
     // Runs one flow through detection, policy evaluation and enforcement.
     public Alert ProcessFlow(FlowFeatureVector flow, Policy policy)
     {
+        return ProcessFlow(flow, new[] { policy });
+    }
+
+    public Alert ProcessFlow(FlowFeatureVector flow, IReadOnlyList<Policy> policies)
+    {
         // A rule-based pre-filter verdict is already an attack: skip inference entirely.
         var detection = flow.PreFilterVerdict is { } verdict
             ? BuildPreFilterAlert(flow, verdict)
             : _inference.Detect(flow);
 
+        var policy = _policy.SelectPolicy(policies, detection);
         var decision = _policy.Evaluate(detection, policy);
 
-        if (decision.Action == PolicyAction.Block)
+        // The alert must be committed before any rule can reference it,
+        // because Rule.AlertId is a foreign key into Alerts.
+        _unitOfWork.Alerts.Add(decision);
+        _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
+        if (decision.Action == PolicyAction.Block && policy != null)
         {
             // The policy decides which parts of the 5-tuple the rule constrains;
             // a field whose action is Allow becomes Any (a wildcard) in the rule.
@@ -55,11 +69,16 @@ public class DetectionPipeline : IDetectionPipeline
                 decision.Protocol,
                 decision.Action,
                 decision.Id,
+                policy.Id,
                 decision.AttackType,
                 TimeSpan.FromMinutes(policy.BlockDurationMinutes),
                 scope);
 
             decision.RuleName = rule.Name;
+
+            // The rule is staged by the enforcer; commit it now that its alert exists.
+            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
             _logger.LogInformation(
                 "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType}, all traffic {AllTraffic})",
                 decision.SourceIp, policy.BlockDurationMinutes, decision.AttackType, scope.IsAny);

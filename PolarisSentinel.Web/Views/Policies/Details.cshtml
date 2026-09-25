@@ -13,6 +13,9 @@
         </div>
         <div class="card-body">
             <dl class="row mb-0">
+                <dt class="col-sm-3">Enabled</dt>
+                <dd class="col-sm-9">@(Model.Enabled ? "Yes" : "No")</dd>
+
                 <dt class="col-sm-3">Owner</dt>
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.UserId) ? "-" : Model.UserId)</dd>
 

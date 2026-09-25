@@ -1,5 +1,6 @@
-# 构建 IF 新类攻击留出集。输出: novelty.npz
-# Build IF novelty holdout. Outputs: novelty.npz
+#从CIC-IDS2017里把RF没学过的攻击抽出来，写成novelty.npz，给IF当「未知攻击」评测集
+#Build IF novelty holdout. Outputs:novelty.npz
+#只保留Benign/DoS/PortScan/BruteForce，其余标签直接丢掉
 import sys
 from pathlib import Path
 import numpy as np
@@ -12,9 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = ROOT.parent / "CIC-IDS2017"
 OUT_PATH = ROOT / "data" / "novelty.npz"
 
-
-# CIC 标签→新类组名；RF 范围内返回 None
-# Map CIC label to novelty group.
+#CIC标签→新类组名；RF范围内返回None
+#Map CIC label to novelty group.
 def classify(label):
     if label == "DDoS":
         return "DDoS"
@@ -27,7 +27,6 @@ def classify(label):
     if label == "Heartbleed":
         return "Heartbleed"
     return None
-
 
 def main():
     usecols = [raw for _, raw in BASE_FEATURES] + [" Label"]
@@ -42,7 +41,6 @@ def main():
     unmapped = set(df.loc[df["Group"].isna(), " Label"]) - known
     if unmapped:
         raise SystemExit(f"Labels neither known nor classified as novelty: {unmapped}")
-
     df = df.dropna(subset=["Group"])
 
     negative_duration = df[" Flow Duration"] < 0
@@ -66,7 +64,6 @@ def main():
         feature_names=np.array(FEATURE_NAMES),
     )
     print(f"Saved {OUT_PATH} ({OUT_PATH.stat().st_size / 1e6:.1f} MB)")
-
 
 if __name__ == "__main__":
     main()

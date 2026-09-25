@@ -1,5 +1,5 @@
-# 构建 20 维特征并划分数据集。输出: prepared.npz
-# Build 20-D features and split. Outputs: prepared.npz
+#构建20维特征并划分数据集。输出:prepared.npz
+#Build 20-D features and split. Outputs:prepared.npz
 import sys
 from pathlib import Path
 import numpy as np
@@ -58,16 +58,15 @@ BASE_FEATURES = [
 DERIVED_FEATURES = ["flow_bytes_per_ms", "flow_pkts_per_ms", "down_up_ratio"]
 FEATURE_NAMES = [name for name, _ in BASE_FEATURES] + DERIVED_FEATURES
 
-
-# 原始 CSV → 20 维 float32
-# Raw CSV to 20-D float32.
+#原始CSV → 20维float32
+#Raw CSV to 20-D float32.
 def build_features(df):
     cols = {}
     for name, raw in BASE_FEATURES:
         values = df[raw].to_numpy(dtype=np.float64)
         if name.endswith("_ms"):
-            # 微秒→毫秒
-            # microseconds to milliseconds
+            #微秒→毫秒
+            #microseconds to milliseconds
             values = values / 1e3
         cols[name] = np.maximum(values, 0.0)
 
@@ -91,7 +90,6 @@ def build_features(df):
         feature_columns.append(cols[name])
     return np.column_stack(feature_columns).astype(np.float32)
 
-
 def print_split(name, y):
     counts = np.bincount(y, minlength=len(CLASS_NAMES))
     class_counts = []
@@ -99,7 +97,6 @@ def print_split(name, y):
         class_counts.append(f"{class_name}: {count:,}")
     dist = ", ".join(class_counts)
     print(f"    {name:<6} {len(y):>10,} rows | {dist}")
-
 
 def main():
     usecols = [raw for _, raw in BASE_FEATURES] + [" Label"]
@@ -121,10 +118,9 @@ def main():
         class_index[class_name] = index
     y = df["Class"].map(class_index).to_numpy(dtype=np.int8)
 
-    # 按组划分防泄漏
-    # group split
+    #按组划分防泄漏
+    #group split
     groups = pd.util.hash_pandas_object(pd.DataFrame(X), index=False).to_numpy()
-
     splitter = GroupShuffleSplit(n_splits=1, test_size=0.30, random_state=SEED)
     train_idx, rest_idx = next(splitter.split(X, y, groups))
     splitter = GroupShuffleSplit(n_splits=1, test_size=0.50, random_state=SEED)
@@ -150,7 +146,6 @@ def main():
         class_names=np.array(CLASS_NAMES),
     )
     print(f"Saved {OUT_PATH} ({OUT_PATH.stat().st_size / 1e6:.1f} MB)")
-
 
 if __name__ == "__main__":
     main()

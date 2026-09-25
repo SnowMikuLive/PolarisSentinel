@@ -44,8 +44,8 @@ internal static class FeatureExporter
             ? (float)(flow.TotalPackets / durationMs)
             : 0;
 
-        // 与训练脚本一致：down_up_ratio = 下行包数 / 上行包数
-        // Matches the training script: down_up_ratio = bwd_pkts / fwd_pkts
+        //与训练脚本一致：down_up_ratio =下行包数/上行包数
+        //Matches the training script:down_up_ratio = bwd_pkts / fwd_pkts
         float downUpRatio = flow.FwdPackets > 0
             ? (float)((double)flow.BwdPackets / flow.FwdPackets)
             : 0;
@@ -83,7 +83,9 @@ internal static class FeatureExporter
             DestinationPort = destinationPort,
             Protocol = protocol,
             FlowStartTime = flow.StartTime,
-            FlowEndTime = flow.LastSeenTime
+            FlowEndTime = flow.LastSeenTime,
+            TotalPackets = flow.TotalPackets,
+            TotalBytes = flow.TotalBytes
         };
     }
 }

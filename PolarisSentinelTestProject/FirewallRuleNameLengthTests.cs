@@ -53,7 +53,7 @@ namespace PolarisSentienlUnitTestProject
                 NullLogger<WindowsFirewallEnforcer>.Instance);
 
             var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, null, null, TimeSpan.FromMinutes(60));
+                PolicyAction.Block, null, null, null, TimeSpan.FromMinutes(60));
 
             Assert.IsNotNull(enforcer.GetById(rule.Id));
             Assert.IsNull(rule.AlertId);

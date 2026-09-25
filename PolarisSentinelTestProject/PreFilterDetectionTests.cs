@@ -33,21 +33,24 @@ namespace PolarisSentienlUnitTestProject
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
-        // Pre-filter attack ids use the PF tag.
+        // 唯一编号和检测来源分开保存。
+        // Store the unique ID separately from its source.
         [TestMethod]
-        public void PreFilterVerdict_ShouldUsePfAlertId()
+        public void PreFilterVerdict_ShouldKeepSourceWithUniqueId()
         {
             var clock = new FakeTimeProvider();
             var pipeline = CreatePipeline(clock, CreateFirewall(clock));
 
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.PortScan), CreatePolicy());
 
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
+            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
         }
 
-        // The PF tag must survive into the firewall rule name.
+        // 规则名保留告警编号。
+        // Keep the alert ID in the firewall rule name.
         [TestMethod]
-        public void PreFilterVerdict_ShouldUsePfTagInRuleName()
+        public void PreFilterVerdict_ShouldUseAlertIdInRuleName()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -55,7 +58,8 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), CreatePolicy());
 
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
+            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
             Assert.AreEqual($"PolarisSentinel_Block_{decision.Id}", decision.RuleName);
             Assert.AreEqual(decision.RuleName, firewall.GetAllRules()[0].Name);
         }
@@ -69,9 +73,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("A-IF-7", EntityIds.Alert(DetectionSource.IsolationForest, 7));
         }
 
-        // A pre-filter alert keeps the PF tag even when the policy does not act on it.
+        // 未匹配策略也保留来源。
+        // Keep the source even when no policy matches.
         [TestMethod]
-        public void PreFilterVerdict_NoMatch_ShouldStillUsePfAlertId()
+        public void PreFilterVerdict_NoMatch_ShouldKeepSourceWithUniqueId()
         {
             var clock = new FakeTimeProvider();
             var pipeline = CreatePipeline(clock, CreateFirewall(clock));
@@ -81,7 +86,8 @@ namespace PolarisSentienlUnitTestProject
             var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), policy);
 
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.StartsWith("A-PF-", decision.Id);
+            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
+            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
         }
 
         // The pre-filter alert carries the flow's 5-tuple.
@@ -113,7 +119,7 @@ namespace PolarisSentienlUnitTestProject
         private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall)
         {
             var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall,
+            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall, new FakeUnitOfWork(),
                 NullLogger<DetectionPipeline>.Instance);
         }
 

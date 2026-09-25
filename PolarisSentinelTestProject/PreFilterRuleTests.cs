@@ -148,7 +148,7 @@ namespace PolarisSentienlUnitTestProject
         #region Benign Traffic
 
         [TestMethod]
-        public void NormalHttpTraffic_ShouldNotBeFlagged()
+        public void NormalHttpTraffic_ShouldReachAi()
         {
             var flow = CreateFlow(Tcp, 443, durationSeconds: 5);
             flow.FwdPackets = 20;
@@ -161,11 +161,11 @@ namespace PolarisSentienlUnitTestProject
             var verdict = new PreFilter(3).Classify(flow, out bool suspicious);
 
             Assert.IsNull(verdict);
-            Assert.IsFalse(suspicious);
+            Assert.IsTrue(suspicious);
         }
 
         [TestMethod]
-        public void TooFewPackets_ShouldBeDropped()
+        public void TooFewPackets_ShouldReachAi()
         {
             var flow = CreateFlow(Tcp, 443, durationSeconds: 5);
             flow.FwdPackets = 1;
@@ -174,7 +174,7 @@ namespace PolarisSentienlUnitTestProject
             var verdict = new PreFilter(3).Classify(flow, out bool suspicious);
 
             Assert.IsNull(verdict);
-            Assert.IsFalse(suspicious);
+            Assert.IsTrue(suspicious);
         }
 
         #endregion
