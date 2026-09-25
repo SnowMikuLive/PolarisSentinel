@@ -10,35 +10,45 @@
 
     @if (TempData["success"] != null)
     {
-        <div class="alert alert-success">@TempData["success"]</div>
+    <div class="alert alert-success">@TempData["success"]</div>
     }
 
-    <div class="d-flex gap-2 mb-3">
-        <a asp-action="Create" class="btn btn-primary">Create New</a>
-        <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
-            <button type="submit" class="btn btn-outline-danger">Remove All</button>
-        </form>
+    @* changed: top bar: button group left + search input right *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex gap-2">
+            <a asp-action="Create" class="btn btn-primary">Create New</a>
+            <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
+                <button type="submit" class="btn btn-outline-danger">Remove All</button>
+            </form>
+        </div>
+        <input type="text" id="searchRule" class="form-control form-control-sm" 
+               placeholder="🔍 Search rules..." style="width:220px;"/>
     </div>
+    
 
     <div class="card shadow-sm border-primary">
         <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0 align-middle">
+            @* add: table-responsive for narrow-screen horizontal scroll *@
+            <div class="table-responsive">
+                @* change:remove table-striped: use table-sm table-hover to match Dashboard *@
+                <table class="table table-sm table-hover mb-0 align-middle">
                 <thead>
                     <tr>
-                        <th>Rule ID</th>
-                        <th>Source</th>
-                        <th>Destination</th>
-                        <th>Protocol</th>
-                        <th>Action</th>
-                        <th>Attack Type</th>
-                        <th>Policy</th>
-                        <th>Alert</th>
-                        <th>Created</th>
-                        <th>Expires</th>
-                        <th class="text-end">Actions</th>
+                        <th class="text-nowrap">Rule ID</th>
+                        <th class="text-nowrap">Source</th>
+                        <th class="text-nowrap">Destination</th>
+                        <th class="text-nowrap">Protocol</th>
+                        <th class="text-nowrap">Action</th>
+                        <th class="text-nowrap">Attack Type</th>
+                        <th class="text-nowrap">Policy</th>
+                        <th class="text-nowrap">Alert</th>
+                        <th class="text-nowrap">Created</th>
+                        <th class="text-nowrap">Expires</th>
+                        <th class="text-nowrap text-end">Manage</th>
                     </tr>
                 </thead>
-                <tbody>
+                @* Add:id="rulesTableBody" for JS search *@
+                <tbody id="rulesTableBody">
                     @if (Model.Count == 0)
                     {
                         <tr>
@@ -49,45 +59,54 @@
                     {
                         foreach (var item in Model)
                         {
-                            <tr>
-                                <td class="fw-bold">@item.Id</td>
-                                <td>@FormatEndpoint(item.SourceIp, item.SourcePort)</td>
-                                <td>@FormatEndpoint(item.DestinationIp, item.DestinationPort)</td>
-                                <td>@ProtocolName(item.Protocol)</td>
-                                <td><span class="badge bg-secondary">@item.Action</span></td>
-                                <td>@(string.IsNullOrEmpty(item.AttackType) ? "-" : item.AttackType)</td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(item.PolicyId))
-                                    {
-                                        <a asp-controller="Policies" asp-action="Details" asp-route-id="@item.PolicyId">@item.PolicyId</a>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(item.AlertId))
-                                    {
-                                        <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@item.AlertId">@item.AlertId</a>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>@TimeFormat.Format(item.CreatedAt)</td>
-                                <td>@(item.ExpiresAt != null ? TimeFormat.Format(item.ExpiresAt.Value) : "-")</td>
-                                <td class="text-end text-nowrap">
-                                    <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
-                                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Delete</a>
-                                </td>
-                            </tr>
+                            @* Add:Build searchable string *@
+                            var searchText = $"{item.Id} {item.SourceIp} {item.DestinationIp} {item.Protocol} {item.Action} {item.AttackType} {item.PolicyId} {item.AlertId}".ToLowerInvariant();
+                            @* add: Color-coded Action badge *@
+                            var actionColor = item.Action == PolarisSentinel.Core.Enums.PolicyAction.Block ? "bg-danger"
+                                        : item.Action == PolarisSentinel.Core.Enums.PolicyAction.Monitor ? "bg-warning text-dark"
+                                        : "bg-secondary";
+                            <tr data-search="@(searchText)">
+                            <td class="fw-bold text-nowrap">@item.Id</td>
+                            <td class="text-nowrap">@FormatEndpoint(item.SourceIp, item.SourcePort)</td>
+                            <td class="text-nowrap">@FormatEndpoint(item.DestinationIp, item.DestinationPort)</td>
+                            <td class="text-nowrap">@ProtocolName(item.Protocol)</td>
+                            <td class="text-nowrap">
+                                <span class="badge @actionColor">@item.Action</span>
+                            </td>
+                            <td class="text-nowrap">@(string.IsNullOrEmpty(item.AttackType) ? "-" : item.AttackType)</td>
+                            <td  class="text-nowrap">
+                                @if (!string.IsNullOrEmpty(item.PolicyId))
+                                {
+                                    <a asp-controller="Policies" asp-action="Details" asp-route-id="@item.PolicyId">@item.PolicyId</a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(item.AlertId))
+                                {
+                                    <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@item.AlertId">@item.AlertId</a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td class="text-nowrap small text-muted">@TimeFormat.Format(item.CreatedAt)</td>
+                            <td class="text-nowrap small text-muted">@(item.ExpiresAt != null ? TimeFormat.Format(item.ExpiresAt.Value) : "-")</td>
+                            <td class="text-end text-nowrap">
+                                <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
+                                <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
+                                <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                            </td>
+                        </tr>
                         }
                     }
                 </tbody>
             </table>
+          </div>
         </div>
         <div class="card-footer small text-muted">
             Total: @Model.Count rule(s)
@@ -113,4 +132,23 @@
         null => "Any",
         _ => protocol.Value.ToString()
     };
+}
+
+@* add: Frontend search script *@
+@section Scripts{
+    <script>
+        document.addEventListener('DOMContentLoaded',()=>{
+            const searchInput=document.getElementById('searchRule');
+            const tableBody=document.getElementById('rulesTableBody');
+            if(!searchInput||!tableBody)return;
+            searchInput.addEventListener('input',()=>
+            {
+                const query=searchInput.value.trim().toLowerCase();
+                tableBody.querySelectorAll('tr[data-search]').forEach(row=>{
+                    const match=!query||row.dataset.search.includes(query);
+                    row.style.display=match?'':'none';
+                });
+            });
+        });
+    </script>
 }
