@@ -115,7 +115,7 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
-        public void FloodInReverseDirection_ShouldBeDetected()
+        public void ReversePacketVolume_ShouldReachAiWithoutSwappingSource()
         {
             var filter = new PreFilter(3);
             var flow = new FlowRecord
@@ -133,9 +133,10 @@ namespace PolarisSentienlUnitTestProject
                 flow.PacketSizeStats.Add(1200);
             }
 
-            var verdict = filter.Classify(flow, out _);
+            var verdict = filter.Classify(flow, out bool suspicious);
 
-            Assert.IsNotNull(verdict, "UDP flood in the reverse direction was not detected.");
+            Assert.IsNull(verdict);
+            Assert.IsTrue(suspicious);
         }
     }
 }

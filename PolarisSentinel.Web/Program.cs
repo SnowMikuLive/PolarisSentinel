@@ -119,7 +119,8 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
                 new PolicyEngine(
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<PolicyEngine>>()));
+                    sp.GetRequiredService<ILogger<PolicyEngine>>(),
+                    builder.Configuration.GetSection("PolicySettings:Allowlist").Get<string[]>()));
 
             // Firewall enforcer stages rules; the pipeline commits them after the alert exists.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>

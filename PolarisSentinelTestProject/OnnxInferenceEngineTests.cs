@@ -62,4 +62,35 @@ public class OnnxInferenceEngineTests
         Assert.AreEqual(flow.SourceIp, result.SourceIp);
         Assert.AreEqual(flow.DestinationPort, result.DestinationPort);
     }
+
+    [TestMethod]
+    public void CaptureFeatures_ShouldMatchModelSchema()
+    {
+        CollectionAssert.AreEqual(_dual.FeatureNames.ToArray(),
+            PolarisSentinel.TrafficCapture.TrafficCaptureService.FeatureNames);
+    }
+
+    [TestMethod]
+    public void CompletedFlow_ShouldRunInDualModelEngine()
+    {
+        using var capture = new PolarisSentinel.TrafficCapture.TrafficCaptureService(1, 3);
+        Alert? result = null;
+        capture.OnFlowCompleted += (_, flow) => result = _dual.Detect(flow);
+        var start = new DateTime(2026, 9, 24);
+        var packet = new PacketDotNet.IPv4Packet(
+            System.Net.IPAddress.Parse("203.0.113.66"), System.Net.IPAddress.Parse("192.168.1.10"))
+        {
+            PayloadPacket = new PacketDotNet.TcpPacket(50000, 80) { Synchronize = true },
+            TotalLength = 40
+        };
+
+        capture.ProcessPacket(PacketDotNet.Packet.ParsePacket(PacketDotNet.LinkLayers.Raw, packet.Bytes), start);
+        capture.ExpireIdleFlows(start.AddSeconds(2));
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("203.0.113.66", result.SourceIp);
+        Assert.AreEqual(50000, result.SourcePort);
+        Assert.AreEqual(80, result.DestinationPort);
+        Assert.IsTrue(float.IsFinite(result.Confidence));
+    }
 }

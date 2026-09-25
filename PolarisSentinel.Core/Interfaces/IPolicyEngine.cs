@@ -8,6 +8,8 @@ public interface IPolicyEngine
 {
     //对指定策略评估一条告警（同一Alert实例被就地更新）。
     //Evaluate one alert against a policy (mutates the same instance).
-    Alert Evaluate(Alert alert, Policy policy);
+    Policy? SelectPolicy(IReadOnlyList<Policy> policies, Alert alert);
+
+    Alert Evaluate(Alert alert, Policy? policy);
 
 }

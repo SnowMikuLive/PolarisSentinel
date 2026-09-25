@@ -5,6 +5,11 @@ internal sealed class FlowRecord
 {
     public required DateTime StartTime { get; init; }
     public DateTime LastSeenTime { get; set; }
+    // 首包固定方向，回复包不改变源和目的地址。
+    // The first packet fixes the endpoints for this flow.
+    public string SourceIp { get; init; } = string.Empty;
+    public ushort SourcePort { get; init; }
+    public string DestinationIp { get; init; } = string.Empty;
 
     public long FwdPackets { get; set; }
     public long BwdPackets { get; set; }

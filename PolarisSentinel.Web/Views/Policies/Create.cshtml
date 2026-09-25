@@ -16,8 +16,14 @@
         </div>
         <div class="card-body">
             <form asp-action="Create" method="post">
-                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                <div asp-validation-summary="All" class="text-danger mb-3"></div>
 
+                <div class="form-check mb-3">
+                    <input asp-for="Enabled" class="form-check-input" />
+                    <label asp-for="Enabled" class="form-check-label">Enabled</label>
+                </div>
+                <p class="text-muted small">Saved changes apply to new detections. Disabled policies are skipped.
+                    Specific attack/protocol matches take priority; ties use the oldest policy, then its ID.</p>
                 <h6 class="text-secondary mb-3">Detection Thresholds</h6>
                 <div class="row">
                     <div class="col-md-4 mb-3">
@@ -34,14 +40,19 @@
                     </div>
                 </div>
 
+                <p class="text-muted small">These are decision confidence thresholds (0–1), not model thresholds.
+                    Blank disables the selected model policy. Below-threshold results remain Monitor.
+                    Isolation Forest and Unknown_Anomaly always remain Monitor; the threshold only changes the recorded reason.
+                    PreFilter does not use confidence thresholds.</p>
                 <h6 class="text-secondary mb-3">Enforcement</h6>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label asp-for="BlockDurationMinutes" class="form-label">Block Duration (minutes)</label>
-                        <input asp-for="BlockDurationMinutes" class="form-control" type="number" min="1" />
+                        <input asp-for="BlockDurationMinutes" class="form-control" type="number" min="1" max="525600" />
                     </div>
                 </div>
 
+                <p class="text-muted small">New block requests use this duration. Saving alone does not change existing rules or their expiry times.</p>
                 <h6 class="text-secondary mb-3">Alert Match Criteria</h6>
                 <div class="row">
                     <div class="col-md-4 mb-3">
@@ -68,6 +79,8 @@
                 </div>
 
                 <h6 class="text-secondary mb-3">Firewall Rule</h6>
+                <p class="text-muted small">Block matches the detected field; Allow means Any, not an allowlist entry.
+                    Source IP must be Block for automatic enforcement. Private, loopback and allowlisted sources remain Monitor.</p>
                 <div class="row">
                     <div class="col-md-3 mb-3">
                         <label asp-for="RuleSourceIpAction" class="form-label">Source IP</label>
@@ -103,7 +116,7 @@
             var fields = document.querySelectorAll('.threshold-field');
             function sync() {
                 fields.forEach(function (f) {
-                    var match = f.getAttribute('data-source') === source.value;
+                    var match = f.getAttribute('data-source') === source.options[source.selectedIndex].text;
                     f.classList.toggle('d-none', !match);
                     f.querySelectorAll('input').forEach(function (i) { i.disabled = !match; });
                 });

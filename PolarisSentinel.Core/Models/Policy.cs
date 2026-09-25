@@ -1,4 +1,5 @@
 using PolarisSentinel.Core.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace PolarisSentinel.Core.Models;
 
@@ -8,13 +9,18 @@ public class Policy
 
     public string UserId { get; set; } = string.Empty;
 
+    public bool Enabled { get; set; } = true;
+
     public DetectionSource DetectionSource { get; set; } = DetectionSource.RandomForest;
 
+    [Range(0, 1)]
     public float? RfConfidenceThreshold { get; set; }
 
 
+    [Range(0, 1)]
     public float? IfConfidenceThreshold { get; set; }
 
+    [Range(1, 525600)]
     public int BlockDurationMinutes { get; set; } = 60;
 
     public string? MatchAttackTypes { get; set; }

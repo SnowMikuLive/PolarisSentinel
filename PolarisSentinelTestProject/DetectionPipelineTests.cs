@@ -87,9 +87,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsNull(decision.RuleName);
         }
 
-        // Private addresses are blocked too: there is no allowlist any more.
+        // 内网来源只监控。
+        // Private sources remain Monitor-only.
         [TestMethod]
-        public void DetectionPipeline_PrivateIp_ShouldBlockAndCreateRule()
+        public void DetectionPipeline_PrivateIp_ShouldMonitorWithoutRule()
         {
             var clock = new FakeTimeProvider();
             var firewall = CreateFirewall(clock);
@@ -98,9 +99,56 @@ namespace PolarisSentienlUnitTestProject
 
             var decision = pipeline.ProcessFlow(CreateFlow("192.168.1.5"), CreatePolicy());
 
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.IsNotNull(decision.RuleName);
-            Assert.HasCount(1, firewall.GetAllRules());
+            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.IsNull(decision.RuleName);
+            Assert.IsEmpty(firewall.GetAllRules());
+        }
+
+        // 推理之后匹配具体策略，并把有效期传给执行器。
+        // Match after inference and pass the selected duration to enforcement.
+        [TestMethod]
+        public void PolicySelection_ShouldUseActualAttackAndSource()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var inference = new CountingInferenceEngine(CreateDetection());
+            var pipeline = CreatePipeline(inference, clock, firewall);
+            var wrongAttack = CreatePolicy();
+            wrongAttack.MatchAttackTypes = AttackTypes.PortScan;
+            var wrongSource = CreatePolicy(DetectionSource.IsolationForest);
+            var fallback = CreatePolicy();
+            var selected = CreatePolicy();
+            selected.Id = "P-2";
+            selected.MatchAttackTypes = AttackTypes.DoS;
+            selected.BlockDurationMinutes = 7;
+            var policies = new[] { wrongAttack, wrongSource, fallback, selected };
+
+            var result = pipeline.ProcessFlow(CreateFlow("203.0.113.66"), policies);
+
+            Assert.AreEqual(1, inference.CallCount);
+            Assert.AreEqual(PolicyAction.Block, result.Action);
+            var rule = firewall.GetAllRules().Single();
+            Assert.AreEqual("P-2", rule.PolicyId);
+            Assert.AreEqual(TimeSpan.FromMinutes(7), rule.ExpiresAt - rule.CreatedAt);
+        }
+
+        [TestMethod]
+        public void NoEnabledPolicy_ShouldStillSaveMonitorResult()
+        {
+            var clock = new FakeTimeProvider();
+            var firewall = CreateFirewall(clock);
+            var uow = new FakeUnitOfWork();
+            var pipeline = new DetectionPipeline(new CountingInferenceEngine(CreateDetection()),
+                new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance), firewall, uow,
+                NullLogger<DetectionPipeline>.Instance);
+            var policy = CreatePolicy();
+            policy.Enabled = false;
+
+            var result = pipeline.ProcessFlow(CreateFlow("203.0.113.66"), new[] { policy });
+
+            Assert.AreEqual(PolicyAction.Monitor, result.Action);
+            Assert.IsNotNull(uow.Alerts.GetByIdAsync(result.Id).Result);
+            Assert.IsEmpty(firewall.GetAllRules());
         }
 
         #endregion

@@ -73,7 +73,6 @@ def test_novelty_arrays_share_the_feature_contract():
     assert len(groups) == len(X)
     assert unique_groups == expected_groups
 
-
 @needs_artifacts
 def test_if_onnx_agrees_with_sklearn_on_anomaly_decisions():
     #Arrange

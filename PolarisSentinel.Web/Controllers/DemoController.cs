@@ -12,18 +12,18 @@ namespace PolarisSentinel.Web.Controllers
     {
         private readonly IDetectionPipeline _pipeline;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IInferenceEngine _inference;
+        private readonly IPolicyEngine _policy;
         private readonly ILogger<DemoController> _logger;
 
         public DemoController(
             IDetectionPipeline pipeline,
             IUnitOfWork unitOfWork,
-            IInferenceEngine inference,
+            IPolicyEngine policy,
             ILogger<DemoController> logger)
         {
             _pipeline = pipeline;
             _unitOfWork = unitOfWork;
-            _inference = inference;
+            _policy = policy;
             _logger = logger;
         }
 
@@ -41,19 +41,9 @@ namespace PolarisSentinel.Web.Controllers
             CancellationToken cancellationToken)
         {
             var policies = await _unitOfWork.Policies.GetAllAsync(cancellationToken);
-            if (policies.Count == 0)
-            {
-                return BadRequest(new { error = "No policy configured." });
-            }
-
             var flow = BuildFlow(request);
-            var policy = SelectPolicy(policies, request);
-            if (policy == null)
-            {
-                return BadRequest(new { error = "No policy matches the requested attack." });
-            }
-
-            var detection = _pipeline.ProcessFlow(flow, policy);
+            var detection = _pipeline.ProcessFlow(flow, policies);
+            var policy = _policy.SelectPolicy(policies, detection);
 
             _logger.LogInformation(
                 "Demo injection: {AttackType} from {SourceIp} -> {Action} ({Reason}), rule {RuleName}",
@@ -72,7 +62,7 @@ namespace PolarisSentinel.Web.Controllers
                 action = detection.Action.ToString(),
                 reason = detection.Reason,
                 ruleName = detection.RuleName,
-                policyId = policy.Id,
+                policyId = policy?.Id,
                 decidedAt = detection.DecidedAt.ToString("yyyy-MM-dd HH:mm:ss")
             });
         }
@@ -85,6 +75,7 @@ namespace PolarisSentinel.Web.Controllers
             return Ok(policies.Select(p => new
             {
                 id = p.Id,
+                enabled = p.Enabled,
                 detectionSource = p.DetectionSource.ToString(),
                 matchAttackTypes = p.MatchAttackTypes,
                 matchProtocol = p.MatchProtocol,
@@ -130,56 +121,6 @@ namespace PolarisSentinel.Web.Controllers
             return AttackTypes.DoS;
         }
 
-        private static Policy? SelectPolicy(IReadOnlyList<Policy> policies, InjectAttackRequest request)
-        {
-            bool isPreFilter = request.UsePreFilter ?? true;
-            string attackType = NormalizeAttackType(request.AttackType);
-            byte protocol = request.Protocol ?? ProtocolNumbers.Tcp;
-
-            Policy? best = null;
-            int bestScore = -1;
-
-            foreach (var policy in policies)
-            {
-                bool sourceMatches = isPreFilter
-                    ? policy.DetectionSource == DetectionSource.PreFilter
-                    : policy.DetectionSource != DetectionSource.PreFilter;
-                if (!sourceMatches)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes) &&
-                    !policy.MatchAttackTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        .Any(e => string.Equals(e, attackType, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                if (policy.MatchProtocol != 0 && policy.MatchProtocol != protocol)
-                {
-                    continue;
-                }
-
-                int score = 0;
-                if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
-                {
-                    score += 2;
-                }
-                if (policy.MatchProtocol != 0)
-                {
-                    score += 1;
-                }
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    best = policy;
-                }
-            }
-
-            return best;
-        }
     }
 
     public class InjectAttackRequest

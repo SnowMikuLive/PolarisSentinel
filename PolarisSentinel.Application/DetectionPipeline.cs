@@ -31,11 +31,17 @@ public class DetectionPipeline : IDetectionPipeline
     // Runs one flow through detection, policy evaluation and enforcement.
     public Alert ProcessFlow(FlowFeatureVector flow, Policy policy)
     {
+        return ProcessFlow(flow, new[] { policy });
+    }
+
+    public Alert ProcessFlow(FlowFeatureVector flow, IReadOnlyList<Policy> policies)
+    {
         // A rule-based pre-filter verdict is already an attack: skip inference entirely.
         var detection = flow.PreFilterVerdict is { } verdict
             ? BuildPreFilterAlert(flow, verdict)
             : _inference.Detect(flow);
 
+        var policy = _policy.SelectPolicy(policies, detection);
         var decision = _policy.Evaluate(detection, policy);
 
         // The alert must be committed before any rule can reference it,
@@ -43,7 +49,7 @@ public class DetectionPipeline : IDetectionPipeline
         _unitOfWork.Alerts.Add(decision);
         _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
-        if (decision.Action == PolicyAction.Block)
+        if (decision.Action == PolicyAction.Block && policy != null)
         {
             // The policy decides which parts of the 5-tuple the rule constrains;
             // a field whose action is Allow becomes Any (a wildcard) in the rule.

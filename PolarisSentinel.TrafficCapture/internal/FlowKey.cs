@@ -11,7 +11,8 @@ internal sealed class FlowKey : IEquatable<FlowKey>
 
     public static FlowKey Create(string ip1, ushort port1, string ip2, ushort port2, byte protocol)
     {
-        bool ip1IsLower = string.CompareOrdinal(ip1, ip2) <= 0;
+        int comparison = string.CompareOrdinal(ip1, ip2);
+        bool ip1IsLower = comparison < 0 || (comparison == 0 && port1 <= port2);
         return ip1IsLower
             ? new FlowKey { IpA = ip1, PortA = port1, IpB = ip2, PortB = port2, Protocol = protocol }
             : new FlowKey { IpA = ip2, PortA = port2, IpB = ip1, PortB = port1, Protocol = protocol };

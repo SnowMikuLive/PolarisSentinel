@@ -1,3 +1,9 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using PolarisSentinel.Application;
+using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Web.Controllers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -131,6 +137,82 @@ public class DatabaseStartupTests
 
     #endregion
 
+    // 页面保存后重新读库，验证下一条流使用新策略。
+    // Save through the page controller, then reload for the next flow.
+    [TestMethod]
+    public async Task PolicyPage_Edit_ShouldChangeNextDecision()
+    {
+        await using (var db = OpenDatabase())
+        {
+            await SentinelDbInitializer.MigrateDatabaseAsync(db);
+            Assert.IsTrue((await db.Policies.FindAsync("P-5"))!.Enabled);
+        }
+
+        foreach (var step in new[] { (0.99f, true), (0.80f, true), (0.80f, false) })
+        {
+            await using (var db = OpenDatabase())
+            {
+                var http = new DefaultHttpContext();
+                var controller = new PoliciesController(new UnitOfWork(db))
+                {
+                    ControllerContext = new ControllerContext { HttpContext = http },
+                    TempData = new TempDataDictionary(http, new TestTempDataProvider())
+                };
+                var edited = new Policy
+                {
+                    Enabled = step.Item2,
+                    DetectionSource = DetectionSource.RandomForest,
+                    RfConfidenceThreshold = step.Item1,
+                    BlockDurationMinutes = 7
+                };
+                var saved = await controller.Edit("P-5", edited, CancellationToken.None);
+                Assert.IsInstanceOfType<RedirectToActionResult>(saved);
+            }
+
+            // 新上下文代表下一次抓包回调。
+            // A fresh context represents the next capture callback.
+            await using (var db = OpenDatabase())
+            {
+                var uow = new UnitOfWork(db);
+                var policies = await uow.Policies.GetAllAsync();
+                var firewall = new WindowsFirewallEnforcer(uow.Rules,
+                    Options.Create(new FirewallOptions { DryRun = true }), TimeProvider.System,
+                    NullLogger<WindowsFirewallEnforcer>.Instance);
+                var pipeline = new DetectionPipeline(new TestInference(),
+                    new PolicyEngine(TimeProvider.System, NullLogger<PolicyEngine>.Instance),
+                    firewall, uow, NullLogger<DetectionPipeline>.Instance);
+                var decision = pipeline.ProcessFlow(new FlowFeatureVector
+                {
+                    Features = new float[20], SourceIp = "203.0.113.66", SourcePort = 12345,
+                    DestinationIp = "192.168.1.10", DestinationPort = 80, Protocol = 6,
+                    FlowStartTime = DateTime.Now, FlowEndTime = DateTime.Now
+                }, policies);
+                bool shouldBlock = step.Item2 && step.Item1 <= 0.95f;
+                Assert.AreEqual(shouldBlock ? PolicyAction.Block : PolicyAction.Monitor, decision.Action);
+                Assert.IsTrue(await db.Alerts.AnyAsync(a => a.Id == decision.Id));
+                if (shouldBlock)
+                {
+                    var rule = await db.Rules.SingleAsync(r => r.AlertId == decision.Id);
+                    Assert.AreEqual("P-5", rule.PolicyId);
+                    Assert.AreEqual(TimeSpan.FromMinutes(7), rule.ExpiresAt - rule.CreatedAt);
+                }
+                else
+                    Assert.IsFalse(await db.Rules.AnyAsync(r => r.AlertId == decision.Id));
+            }
+        }
+    }
+
+    private class TestInference : IInferenceEngine
+    {
+        public Alert Detect(FlowFeatureVector flow) => CreateAlert();
+    }
+
+    private class TestTempDataProvider : ITempDataProvider
+    {
+        public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) { }
+    }
+
     private SentinelDbContext OpenDatabase()
     {
         var options = new DbContextOptionsBuilder<SentinelDbContext>()
@@ -144,7 +226,7 @@ public class DatabaseStartupTests
     {
         await using var db = OpenDatabase();
         var engine = new PolicyEngine(TimeProvider.System, NullLogger<PolicyEngine>.Instance);
-        var decision = engine.Evaluate(CreateAlert(), new Policy { Id = "P-5" });
+        var decision = engine.Evaluate(CreateAlert(), new Policy { Id = "P-5", RfConfidenceThreshold = 0.6f });
         db.Alerts.Add(decision);
         await db.SaveChangesAsync();
 
