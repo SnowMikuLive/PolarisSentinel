@@ -183,13 +183,14 @@
             body.innerHTML = list.map(function (d) {
                 const badge = d.verdict === 'Malicious' ? 'bg-danger'
                     : d.verdict === 'Suspicious' ? 'bg-warning text-dark' : 'bg-success';
-                const endpoint = d.sourceIp ? (d.sourceIp + ':' + d.destinationPort) : '-';
                 const confidence = d.confidenceScore == null ? 'N/A' : Number(d.confidenceScore).toFixed(3);
+                const source = d.sourceIp ? (d.sourceIp + (d.sourcePort ? ':' + d.sourcePort : '')) : '-';
+                const destination = d.destinationIp ? (d.destinationIp + (d.destinationPort ? ':' + d.destinationPort : '')) : '-';
                 return '<tr>' +
                     '<td>' + d.createdAt + '</td>' +
                     '<td><span class="badge ' + badge + '">' + d.verdict + '</span></td>' +
-                    '<td>' + (d.sourceIp || '-') + '</td>' +
-                    '<td>' + (d.destinationIp || '-') + '</td>' +
+                    '<td>' + source + '</td>' +
+                    '<td>' + destination + '</td>' +
                     '<td>' + d.attackType + '</td>' +
                     '<td>' + confidence + '</td>' +
                     '<td>' + d.action + '</td>' +

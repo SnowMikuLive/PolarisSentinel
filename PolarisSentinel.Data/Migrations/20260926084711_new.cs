@@ -18,19 +18,22 @@ namespace PolarisSentinel.DataAccess.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    DetectionSource = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    ConfidenceScore = table.Column<float>(type: "real", nullable: true),
+                    Description = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     SourceIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
                     SourcePort = table.Column<int>(type: "int", nullable: false),
                     DestinationIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
                     DestinationPort = table.Column<int>(type: "int", nullable: false),
                     Protocol = table.Column<byte>(type: "tinyint", nullable: false),
-                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    Confidence = table.Column<float>(type: "real", nullable: false),
-                    Source = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    DetectedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RuleName = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    Reason = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    DecidedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    SynCount = table.Column<int>(type: "int", nullable: false),
+                    AckCount = table.Column<int>(type: "int", nullable: false),
+                    FinCount = table.Column<int>(type: "int", nullable: false),
+                    RstCount = table.Column<int>(type: "int", nullable: false),
+                    PshCount = table.Column<int>(type: "int", nullable: false),
+                    FlowSnapshotJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -56,6 +59,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    MustChangePassword = table.Column<bool>(type: "bit", nullable: false),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
@@ -82,22 +86,46 @@ namespace PolarisSentinel.DataAccess.Migrations
                 {
                     Id = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    DetectionSource = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    RfConfidenceThreshold = table.Column<float>(type: "real", nullable: true),
-                    IfConfidenceThreshold = table.Column<float>(type: "real", nullable: true),
+                    Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
+                    DetectionSource = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: true),
+                    RfThreshold = table.Column<float>(type: "real", nullable: true),
+                    IfThreshold = table.Column<float>(type: "real", nullable: true),
+                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
+                    Action = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     BlockDurationMinutes = table.Column<int>(type: "int", nullable: false),
-                    MatchAttackTypes = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
-                    MatchProtocol = table.Column<byte>(type: "tinyint", nullable: false),
-                    RuleSourceIpAction = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RuleSourcePortAction = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RuleDestinationIpAction = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
-                    RuleDestinationPortAction = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    Priority = table.Column<int>(type: "int", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Policies", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TrafficRecords",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    AlertId = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    SourceIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
+                    DestinationIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
+                    DestinationPort = table.Column<int>(type: "int", nullable: false),
+                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    ConfidenceScore = table.Column<float>(type: "real", nullable: true),
+                    Action = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    Reason = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    Source = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
+                    RuleName = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
+                    Verdict = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TrafficRecords", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -214,16 +242,13 @@ namespace PolarisSentinel.DataAccess.Migrations
                     Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                     PolicyId = table.Column<string>(type: "nvarchar(32)", nullable: true),
                     AlertId = table.Column<string>(type: "nvarchar(32)", nullable: true),
-                    Action = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
+                    Action = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     SourceIp = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
                     SourcePort = table.Column<int>(type: "int", nullable: true),
                     DestinationIp = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
                     DestinationPort = table.Column<int>(type: "int", nullable: true),
                     Protocol = table.Column<byte>(type: "tinyint", nullable: true),
-                    Enabled = table.Column<bool>(type: "bit", nullable: false),
-                    Status = table.Column<int>(type: "int", nullable: false),
-                    IsBlockRule = table.Column<bool>(type: "bit", nullable: false),
-                    AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
+                    Status = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: true)
@@ -247,20 +272,18 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             migrationBuilder.InsertData(
                 table: "Policies",
-                columns: new[] { "Id", "BlockDurationMinutes", "CreatedAt", "DetectionSource", "IfConfidenceThreshold", "MatchAttackTypes", "MatchProtocol", "RfConfidenceThreshold", "RuleDestinationIpAction", "RuleDestinationPortAction", "RuleSourceIpAction", "RuleSourcePortAction", "UpdatedAt", "UserId" },
+                columns: new[] { "Id", "Action", "AttackType", "BlockDurationMinutes", "CreatedAt", "Description", "DetectionSource", "IfThreshold", "IsEnabled", "Name", "Priority", "RfThreshold", "UpdatedAt", "UserId" },
                 values: new object[,]
                 {
-                    { "P-1", 10, new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "PreFilter", null, null, (byte)0, null, "Allow", "Allow", "Block", "Allow", new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-2", 10, new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "PreFilter", null, "DoS", (byte)0, null, "Allow", "Allow", "Block", "Block", new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-3", 10, new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "PreFilter", null, "DoS", (byte)1, null, "Allow", "Allow", "Block", "Allow", new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-4", 10, new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "PreFilter", null, "DoS", (byte)17, null, "Allow", "Allow", "Block", "Allow", new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-5", 10, new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "RandomForest", null, null, (byte)0, 0.6f, "Allow", "Allow", "Block", "Allow", new DateTime(2026, 9, 21, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
+                    { "P-1", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based DoS detection.", "PreFilter", null, true, "Prefilter DoS", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-2", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest port scan detection.", "RandomForest", null, true, "Random Forest PortScan", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-3", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest brute force detection.", "RandomForest", null, true, "Random Forest BruteForce", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Alerts_DetectedAt",
+                name: "IX_Alerts_CreatedAt",
                 table: "Alerts",
-                column: "DetectedAt");
+                column: "CreatedAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Alerts_SourceIp",
@@ -315,6 +338,11 @@ namespace PolarisSentinel.DataAccess.Migrations
                 name: "IX_Rules_PolicyId",
                 table: "Rules",
                 column: "PolicyId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TrafficRecords_CreatedAt",
+                table: "TrafficRecords",
+                column: "CreatedAt");
         }
 
         /// <inheritdoc />
@@ -337,6 +365,9 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             migrationBuilder.DropTable(
                 name: "Rules");
+
+            migrationBuilder.DropTable(
+                name: "TrafficRecords");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

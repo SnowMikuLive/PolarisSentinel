@@ -19,6 +19,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     public static string[] FeatureNames => Internal.FeatureExporter.FeatureNames;
     private ICaptureDevice? _device;
 
+    // Guards the device snapshot cache so concurrent API calls do not race.
+    private readonly object _deviceLock = new();
+
+    // Last known-good device list; never replaced by a smaller (transiently incomplete) one.
+    private List<NetworkInterfaceInfo> _cachedDevices = new();
+
     // Fast-path counters, reset every time OnLiveTrafficSummary fires.
     private long _packetsSinceLastTick;
     private long _bytesSinceLastTick;
@@ -59,10 +65,33 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     public IEnumerable<NetworkInterfaceInfo> GetAvailableDevices()
     {
-        // After a flood the cached device list (and each device's address list) can be
-        // in a bad state and throw while being enumerated. Refresh defensively and
-        // never let a single bad device blank out the whole list, otherwise the UI's
-        // network-interface selector disappears.
+        // Enumerating the live SharpPcap cache is unstable: Refresh() replaces the
+        // list and can transiently return an incomplete set (adapters disappear),
+        // which made the UI's network-interface selector lose entries after a flood.
+        // Snapshot once, keep the last good list, and only replace it when the new
+        // enumeration is at least as complete.
+        return SnapshotDevices();
+    }
+
+    // Builds a stable, cached snapshot of the capture devices.
+    private List<NetworkInterfaceInfo> SnapshotDevices()
+    {
+        lock (_deviceLock)
+        {
+            var fresh = EnumerateDevices();
+            if (fresh.Count >= _cachedDevices.Count)
+            {
+                _cachedDevices = fresh;
+            }
+
+            // Never hand back an empty list once a good one has been seen.
+            return _cachedDevices.Count > 0 ? new List<NetworkInterfaceInfo>(_cachedDevices) : fresh;
+        }
+    }
+
+    // Enumerates the current SharpPcap device list defensively.
+    private static List<NetworkInterfaceInfo> EnumerateDevices()
+    {
         try
         {
             CaptureDeviceList.Instance.Refresh();
@@ -74,50 +103,79 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         var devices = new List<NetworkInterfaceInfo>();
 
-        foreach (var device in CaptureDeviceList.Instance)
+        try
         {
-            try
+            foreach (var device in CaptureDeviceList.Instance)
             {
-                string? ip = null;
-                if (device is LibPcapLiveDevice liveDevice)
+                try
                 {
-                    ip = liveDevice.Addresses
-                        .Select(a => a.Addr?.ipAddress?.ToString())
-                        .FirstOrDefault(a => a is not null);
-                }
+                    string? ip = null;
+                    if (device is LibPcapLiveDevice liveDevice)
+                    {
+                        ip = liveDevice.Addresses
+                            .Select(a => a.Addr?.ipAddress?.ToString())
+                            .FirstOrDefault(a => a is not null);
+                    }
 
-                devices.Add(new NetworkInterfaceInfo
+                    devices.Add(new NetworkInterfaceInfo
+                    {
+                        DeviceName = device.Name,
+                        DisplayName = device.Description ?? device.Name,
+                        IpAddress = ip
+                    });
+                }
+                catch (Exception)
                 {
-                    DeviceName = device.Name,
-                    DisplayName = device.Description ?? device.Name,
-                    IpAddress = ip
-                });
+                    // Skip a device whose addresses cannot be read rather than failing the
+                    // whole enumeration; still surface it by name so it stays selectable.
+                    devices.Add(new NetworkInterfaceInfo
+                    {
+                        DeviceName = device.Name,
+                        DisplayName = device.Description ?? device.Name,
+                        IpAddress = null
+                    });
+                }
             }
-            catch (Exception)
-            {
-                // Skip a device whose addresses cannot be read rather than failing the
-                // whole enumeration; still surface it by name so it stays selectable.
-                devices.Add(new NetworkInterfaceInfo
-                {
-                    DeviceName = device.Name,
-                    DisplayName = device.Description ?? device.Name,
-                    IpAddress = null
-                });
-            }
+        }
+        catch (Exception)
+        {
+            // The whole list threw mid-enumeration; return what we collected so far.
         }
 
         return devices;
     }
 
+    // Resolves a device by name, refreshing and retrying a few times because the
+    // pcap cache can briefly omit a device right after a flood.
+    private ICaptureDevice ResolveDevice(string deviceName)
+    {
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                CaptureDeviceList.Instance.Refresh();
+            }
+            catch (Exception)
+            {
+            }
+
+            var match = CaptureDeviceList.Instance.FirstOrDefault(d => d.Name == deviceName);
+            if (match is not null)
+            {
+                return match;
+            }
+
+            Thread.Sleep(200);
+        }
+
+        throw new InvalidOperationException($"No capture device found with name '{deviceName}'.");
+    }
+
     public void Start(string deviceName)
     {
         // The device list is cached by SharpPcap. After a flood the adapter state can
-        // change, so force a refresh before looking the device up again.
-        CaptureDeviceList.Instance.Refresh();
-
-        _device = CaptureDeviceList.Instance
-            .FirstOrDefault(d => d.Name == deviceName)
-            ?? throw new InvalidOperationException($"No capture device found with name '{deviceName}'.");
+        // change, so resolve with a retry loop before giving up.
+        _device = ResolveDevice(deviceName);
 
         _device.OnPacketArrival += OnPacketArrival;
         _device.Open(DeviceModes.Promiscuous, 1000);

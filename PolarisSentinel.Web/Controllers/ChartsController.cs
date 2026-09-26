@@ -39,6 +39,17 @@ namespace PolarisSentinel.Web.Controllers
         public IActionResult Index(int page = 1)
         {
             PopulateViewBag(page);
+
+            // Results from a previous Evaluate POST (surfaced via TempData so the URL stays /Charts).
+            if (TempData["EvaluationResults"] is string json && !string.IsNullOrEmpty(json))
+            {
+                var results = System.Text.Json.JsonSerializer.Deserialize<List<ModelEvaluationResult>>(json)
+                    ?? new List<ModelEvaluationResult>();
+                ViewBag.RowCount = TempData["EvaluationRowCount"];
+                ViewBag.FileName = TempData["EvaluationFileName"];
+                return View(results);
+            }
+
             return View();
         }
 
@@ -120,10 +131,13 @@ namespace PolarisSentinel.Web.Controllers
 
             var rows = _dataset.GetPage(0, _dataset.Count);
             var results = _evaluation.EvaluateAll(rows);
-            ViewBag.RowCount = rows.Count;
-            ViewBag.FileName = _dataset.FileName;
-            PopulateViewBag(1);
-            return View(nameof(Index), results);
+
+            // POST-Redirect-GET: stash the results and redirect, so a refresh does not
+            // re-run the evaluation and the URL stays on /Charts.
+            TempData["EvaluationResults"] = System.Text.Json.JsonSerializer.Serialize(results);
+            TempData["EvaluationRowCount"] = rows.Count;
+            TempData["EvaluationFileName"] = _dataset.FileName;
+            return RedirectToAction(nameof(Index));
         }
 
         private void PopulateViewBag(int page)

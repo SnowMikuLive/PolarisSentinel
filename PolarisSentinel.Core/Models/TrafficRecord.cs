@@ -10,6 +10,8 @@ public class TrafficRecord
 
     public string SourceIp { get; set; } = string.Empty;
 
+    public int SourcePort { get; set; }
+
     public string DestinationIp { get; set; } = string.Empty;
 
     public int DestinationPort { get; set; }

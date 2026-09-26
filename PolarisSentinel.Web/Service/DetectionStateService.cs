@@ -8,6 +8,7 @@ namespace PolarisSentinel.Web.Service
     public record DetectionRecord(
         string AlertId,
         string SourceIp,
+        int SourcePort,
         string DestinationIp,
         int DestinationPort,
         string AttackType,
@@ -42,6 +43,7 @@ namespace PolarisSentinel.Web.Service
             var record = new DetectionRecord(
                 outcome.Alert?.Id ?? string.Empty,
                 outcome.Alert?.SourceIp ?? outcome.SourceIp,
+                outcome.Alert?.SourcePort ?? outcome.SourcePort,
                 outcome.Alert?.DestinationIp ?? outcome.DestinationIp,
                 outcome.Alert?.DestinationPort ?? outcome.DestinationPort,
                 outcome.Alert?.AttackType ?? AttackTypes.Benign,
@@ -101,6 +103,7 @@ namespace PolarisSentinel.Web.Service
                     var detection = new DetectionRecord(
                         record.AlertId,
                         record.SourceIp,
+                        record.SourcePort,
                         record.DestinationIp,
                         record.DestinationPort,
                         record.AttackType,
@@ -214,6 +217,7 @@ namespace PolarisSentinel.Web.Service
             {
                 AlertId = record.AlertId,
                 SourceIp = record.SourceIp,
+                SourcePort = record.SourcePort,
                 DestinationIp = record.DestinationIp,
                 DestinationPort = record.DestinationPort,
                 AttackType = record.AttackType,

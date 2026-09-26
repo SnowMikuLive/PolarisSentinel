@@ -12,8 +12,8 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
-    [Migration("20260926071303_AddTrafficRecords")]
-    partial class AddTrafficRecords
+    [Migration("20260926091021_AddAttackDetectionPolicies")]
+    partial class AddAttackDetectionPolicies
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -339,6 +339,100 @@ namespace PolarisSentinel.DataAccess.Migrations
                             RfThreshold = 0.7f,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-4",
+                            Action = "BlockInboundIp",
+                            AttackType = "PortScan",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of any rule-based port scan detection.",
+                            DetectionSource = "PreFilter",
+                            IsEnabled = true,
+                            Name = "Prefilter PortScan",
+                            Priority = 100,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-5",
+                            Action = "BlockInboundIp",
+                            AttackType = "BruteForce",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of any rule-based brute force detection.",
+                            DetectionSource = "PreFilter",
+                            IsEnabled = true,
+                            Name = "Prefilter BruteForce",
+                            Priority = 100,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-6",
+                            Action = "BlockInboundIp",
+                            AttackType = "DoS",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of an Isolation Forest DoS anomaly.",
+                            DetectionSource = "IsolationForest",
+                            IfThreshold = 0.6f,
+                            IsEnabled = true,
+                            Name = "Isolation Forest DoS",
+                            Priority = 80,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-7",
+                            Action = "BlockInboundIp",
+                            AttackType = "PortScan",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of an Isolation Forest port scan anomaly.",
+                            DetectionSource = "IsolationForest",
+                            IfThreshold = 0.6f,
+                            IsEnabled = true,
+                            Name = "Isolation Forest PortScan",
+                            Priority = 80,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-8",
+                            Action = "BlockInboundIp",
+                            AttackType = "BruteForce",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of an Isolation Forest brute force anomaly.",
+                            DetectionSource = "IsolationForest",
+                            IfThreshold = 0.6f,
+                            IsEnabled = true,
+                            Name = "Isolation Forest BruteForce",
+                            Priority = 80,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
+                        },
+                        new
+                        {
+                            Id = "P-9",
+                            Action = "BlockInboundIp",
+                            AttackType = "DoS",
+                            BlockDurationMinutes = 60,
+                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            Description = "Block the source of a Random Forest DoS detection.",
+                            DetectionSource = "RandomForest",
+                            IsEnabled = true,
+                            Name = "Random Forest DoS",
+                            Priority = 90,
+                            RfThreshold = 0.7f,
+                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
+                            UserId = "admin"
                         });
                 });
 
@@ -459,6 +553,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .IsRequired()
                         .HasMaxLength(45)
                         .HasColumnType("nvarchar(45)");
+
+                    b.Property<int>("SourcePort")
+                        .HasColumnType("int");
 
                     b.Property<string>("Verdict")
                         .IsRequired()

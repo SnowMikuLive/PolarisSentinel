@@ -145,6 +145,108 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             IsEnabled = true,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-4",
+            UserId = "admin",
+            Name = "Prefilter PortScan",
+            Description = "Block the source of any rule-based port scan detection.",
+            DetectionSource = DetectionSource.PreFilter,
+            RfThreshold = null,
+            IfThreshold = null,
+            AttackType = AttackTypes.PortScan,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 100,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-5",
+            UserId = "admin",
+            Name = "Prefilter BruteForce",
+            Description = "Block the source of any rule-based brute force detection.",
+            DetectionSource = DetectionSource.PreFilter,
+            RfThreshold = null,
+            IfThreshold = null,
+            AttackType = AttackTypes.BruteForce,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 100,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-6",
+            UserId = "admin",
+            Name = "Isolation Forest DoS",
+            Description = "Block the source of an Isolation Forest DoS anomaly.",
+            DetectionSource = DetectionSource.IsolationForest,
+            RfThreshold = null,
+            IfThreshold = 0.6f,
+            AttackType = AttackTypes.DoS,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 80,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-7",
+            UserId = "admin",
+            Name = "Isolation Forest PortScan",
+            Description = "Block the source of an Isolation Forest port scan anomaly.",
+            DetectionSource = DetectionSource.IsolationForest,
+            RfThreshold = null,
+            IfThreshold = 0.6f,
+            AttackType = AttackTypes.PortScan,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 80,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-8",
+            UserId = "admin",
+            Name = "Isolation Forest BruteForce",
+            Description = "Block the source of an Isolation Forest brute force anomaly.",
+            DetectionSource = DetectionSource.IsolationForest,
+            RfThreshold = null,
+            IfThreshold = 0.6f,
+            AttackType = AttackTypes.BruteForce,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 80,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
+        },
+        new()
+        {
+            Id = "P-9",
+            UserId = "admin",
+            Name = "Random Forest DoS",
+            Description = "Block the source of a Random Forest DoS detection.",
+            DetectionSource = DetectionSource.RandomForest,
+            RfThreshold = 0.7f,
+            IfThreshold = null,
+            AttackType = AttackTypes.DoS,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 90,
+            IsEnabled = true,
+            CreatedAt = SeedTimestamp,
+            UpdatedAt = SeedTimestamp
         }
     };
 }
