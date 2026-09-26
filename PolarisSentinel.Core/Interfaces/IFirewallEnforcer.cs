@@ -3,26 +3,14 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-// Firewall rule CRUD, driven by the 5-tuple plus a per-field scope.
+// Creates, updates and removes the Windows Firewall rules managed by Polaris Sentinel.
 public interface IFirewallEnforcer
 {
-    // Create a rule for the supplied scope. Null scope means the exact 5-tuple.
+    // Applies a policy decision: creates the rule for the alert and stages it.
     // A null alertId marks a manual rule with no originating alert.
-    // The rule is staged, not committed; the caller commits after the alert row exists.
-    Rule Block(
-        string sourceIp,
-        int sourcePort,
-        string destinationIp,
-        int destinationPort,
-        byte protocol,
-        PolicyAction action,
-        string? alertId,
-        string? policyId,
-        string? attackType,
-        TimeSpan duration,
-        FirewallRuleScope? scope = null);
+    Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration);
 
-    // Update the scope / action / enabled state of an existing rule.
+    // Update the scope / action / status of an existing rule.
     Rule? Update(
         string ruleId,
         string sourceIp,
@@ -31,9 +19,8 @@ public interface IFirewallEnforcer
         int destinationPort,
         byte protocol,
         PolicyAction action,
-        bool enabled,
-        TimeSpan duration,
-        FirewallRuleScope? scope = null);
+        RuleStatus status,
+        TimeSpan duration);
 
     // Remove one rule by its id.
     bool Remove(string ruleId);

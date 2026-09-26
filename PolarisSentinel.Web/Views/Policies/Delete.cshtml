@@ -4,26 +4,14 @@
 }
 
 <div class="container-fluid">
-    <h2 class="text-primary">Delete Policy</h2>
+    <h2 class="text-danger mb-3">Delete Policy</h2>
 
     <div class="card shadow-sm border-danger">
         <div class="card-header bg-danger text-white">
-            Confirm deletion
+            @Model.Id
         </div>
         <div class="card-body">
-            <p>Are you sure you want to delete this policy?</p>
-
-            <dl class="row">
-                <dt class="col-sm-3">Policy ID</dt>
-                <dd class="col-sm-9">@Model.Id</dd>
-
-                <dt class="col-sm-3">Random Forest Threshold</dt>
-                <dd class="col-sm-9">@(Model.RfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
-
-                <dt class="col-sm-3">Isolation Forest Threshold</dt>
-                <dd class="col-sm-9">@(Model.IfConfidenceThreshold?.ToString("0.00") ?? "disabled")</dd>
-            </dl>
-
+            <p>Delete policy <strong>@Model.Name</strong>? Existing rules keep their historical relationship to it.</p>
             <form asp-action="Delete" method="post">
                 <input type="hidden" name="id" value="@Model.Id" />
                 <button type="submit" class="btn btn-danger">Delete</button>

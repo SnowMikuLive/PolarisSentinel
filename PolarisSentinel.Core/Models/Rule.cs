@@ -2,21 +2,21 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// A firewall rule created by the system or by hand.
-// The firewall module owns persistence; this is the shared shape.
+// A firewall rule managed by Polaris Sentinel, created automatically from a policy
+// decision or by hand. The firewall module owns persistence.
 public class Rule
 {
-    // 新记录使用 GUID，旧编号保持不变。
-    // New records use GUIDs; existing IDs remain unchanged.
     public string Id { get; set; } = string.Empty;
 
     // Windows Firewall rule name (e.g. "PolarisSentinel_Block_A-RF-1").
     public string Name { get; set; } = string.Empty;
 
+    // The policy that produced this rule; null for manual rules.
     public string? PolicyId { get; set; }
 
     public Policy? Policy { get; set; }
 
+    // The alert that triggered this rule; null for manual rules.
     public string? AlertId { get; set; }
 
     public Alert? Alert { get; set; }
@@ -34,13 +34,7 @@ public class Rule
 
     public byte? Protocol { get; set; }
 
-    public bool Enabled { get; set; } = true;
-
     public RuleStatus Status { get; set; } = RuleStatus.Active;
-
-    public bool IsBlockRule { get; set; } = true;
-
-    public string? AttackType { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

@@ -29,6 +29,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private const int MaxFlowCount = 100000;
 
+    // Upper bound on flows exported per expiry tick, so a flood cannot stall the timer.
+    private const int MaxFlowsPerExpiryCycle = 500;
+
+    // Flows rejected because the table was full; surfaced so a flood is visible.
+    private long _droppedFlows;
+
     public event EventHandler<FlowFeatureVector>? OnFlowCompleted;
     public event EventHandler<LiveTrafficSummary>? OnLiveTrafficSummary;
 
@@ -45,33 +51,70 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         // Both timers are created suspended (Timeout.Infinite due time) and
         // only actually start ticking once Start(deviceName) is called.
-        _expiryTimer = new System.Threading.Timer(_ => ExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
-        _liveSummaryTimer = new System.Threading.Timer(_ => EmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
+        // The callbacks swallow exceptions: an unhandled throw on a timer thread
+        // would terminate the whole process.
+        _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
+        _liveSummaryTimer = new System.Threading.Timer(_ => SafeEmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public IEnumerable<NetworkInterfaceInfo> GetAvailableDevices()
     {
+        // After a flood the cached device list (and each device's address list) can be
+        // in a bad state and throw while being enumerated. Refresh defensively and
+        // never let a single bad device blank out the whole list, otherwise the UI's
+        // network-interface selector disappears.
+        try
+        {
+            CaptureDeviceList.Instance.Refresh();
+        }
+        catch (Exception)
+        {
+            // A failed refresh is non-fatal: fall back to whatever is cached.
+        }
+
+        var devices = new List<NetworkInterfaceInfo>();
+
         foreach (var device in CaptureDeviceList.Instance)
         {
-            string? ip = null;
-            if (device is LibPcapLiveDevice liveDevice)
+            try
             {
-                ip = liveDevice.Addresses
-                    .Select(a => a.Addr?.ipAddress?.ToString())
-                    .FirstOrDefault(a => a is not null);
-            }
+                string? ip = null;
+                if (device is LibPcapLiveDevice liveDevice)
+                {
+                    ip = liveDevice.Addresses
+                        .Select(a => a.Addr?.ipAddress?.ToString())
+                        .FirstOrDefault(a => a is not null);
+                }
 
-            yield return new NetworkInterfaceInfo
+                devices.Add(new NetworkInterfaceInfo
+                {
+                    DeviceName = device.Name,
+                    DisplayName = device.Description ?? device.Name,
+                    IpAddress = ip
+                });
+            }
+            catch (Exception)
             {
-                DeviceName = device.Name,
-                DisplayName = device.Description ?? device.Name,
-                IpAddress = ip
-            };
+                // Skip a device whose addresses cannot be read rather than failing the
+                // whole enumeration; still surface it by name so it stays selectable.
+                devices.Add(new NetworkInterfaceInfo
+                {
+                    DeviceName = device.Name,
+                    DisplayName = device.Description ?? device.Name,
+                    IpAddress = null
+                });
+            }
         }
+
+        return devices;
     }
 
     public void Start(string deviceName)
     {
+        // The device list is cached by SharpPcap. After a flood the adapter state can
+        // change, so force a refresh before looking the device up again.
+        CaptureDeviceList.Instance.Refresh();
+
         _device = CaptureDeviceList.Instance
             .FirstOrDefault(d => d.Name == deviceName)
             ?? throw new InvalidOperationException($"No capture device found with name '{deviceName}'.");
@@ -92,14 +135,46 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (_device is not null)
         {
-            _device.StopCapture();
+            // A driver in a bad state can throw here; the handle must still be released
+            // so the next Start() is not blocked by a half-closed device.
+            try
+            {
+                _device.StopCapture();
+            }
+            catch (Exception)
+            {
+            }
+
             _device.OnPacketArrival -= OnPacketArrival;
-            _device.Close();
+
+            try
+            {
+                _device.Close();
+            }
+            catch (Exception)
+            {
+            }
+
             _device = null;
         }
+
+        // Drop accumulated flow state so a restart begins clean.
+        _flows.Clear();
     }
 
     private void OnPacketArrival(object sender, PacketCapture e)
+    {
+        try
+        {
+            ProcessPacket(e);
+        }
+        catch (Exception)
+        {
+            // A malformed or unsupported packet must never kill the capture thread.
+        }
+    }
+
+    private void ProcessPacket(PacketCapture e)
     {
         RawCapture rawPacket = e.GetPacket();
         Packet parsed = Packet.ParsePacket(rawPacket.LinkLayerType, rawPacket.Data);
@@ -121,6 +196,15 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         UpdateFastPathCounters(packetSize, protocol);
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
+
+        // A flood (or a spoofed-source scan) can create flows faster than they expire.
+        // Cap the table so memory stays bounded; the expiry timer drains it afterwards.
+        if (_flows.Count >= MaxFlowCount && !_flows.ContainsKey(key))
+        {
+            Interlocked.Increment(ref _droppedFlows);
+            return;
+        }
+
         var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
         {
             StartTime = now,
@@ -178,25 +262,55 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
+    private void SafeExpireIdleFlows()
+    {
+        try
+        {
+            ExpireIdleFlows();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void SafeEmitLiveSummary()
+    {
+        try
+        {
+            EmitLiveSummary();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private void ExpireIdleFlows()
     {
         
         DateTime now = DateTime.Now;
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
 
+        // A flood can leave tens of thousands of idle flows at once. Processing them
+        // all in one cycle would block this timer thread for a long time, so the work
+        // is capped per cycle; the remainder is picked up on the next tick.
+        int processed = 0;
 
         foreach (var (key, flow) in _flows)
         {
+            if (processed >= MaxFlowsPerExpiryCycle) break;
+
             bool isIdle;
             lock (flow) { isIdle = now - flow.LastSeenTime > timeout; }
             if (!isIdle) continue;
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
+            processed++;
+
             // Rule-based pre-filter runs first: attack verdicts are emitted, benign flows are dropped,
             // and only flows that no rule could classify are exported for AI inference.
-            var verdict = _preFilter.Classify(flow, out bool suspicious);
-            if (verdict is null && !suspicious) continue;
+            var verdict = _preFilter.Classify(flow);
+            if (!verdict.IsKnownAttack && !verdict.IsSuspicious) continue;
 
             var featureVector = Internal.FeatureExporter.Export(
                 flow, key,
@@ -204,7 +318,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 destinationIp: key.IpB, destinationPort: key.PortB,
                 protocol: key.Protocol);
 
-            OnFlowCompleted?.Invoke(this, new FlowFeatureVector
+            var completed = new FlowFeatureVector
             {
                 Features = featureVector.Features,
                 SourceIp = featureVector.SourceIp,
@@ -216,8 +330,29 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 FlowEndTime = featureVector.FlowEndTime,
                 TotalPackets = featureVector.TotalPackets,
                 TotalBytes = featureVector.TotalBytes,
+                SynCount = featureVector.SynCount,
+                AckCount = featureVector.AckCount,
+                FinCount = featureVector.FinCount,
+                RstCount = featureVector.RstCount,
+                PshCount = featureVector.PshCount,
                 PreFilterVerdict = verdict
-            });
+            };
+
+            // Hand off to the thread pool so a slow subscriber (DB + inference + SignalR)
+            // cannot stall the expiry timer.
+            ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));
+        }
+    }
+
+    private void RaiseFlowCompleted(FlowFeatureVector flow)
+    {
+        try
+        {
+            OnFlowCompleted?.Invoke(this, flow);
+        }
+        catch (Exception)
+        {
+            // A subscriber fault must not take down the process.
         }
     }
 
@@ -243,7 +378,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             ActiveFlowCount = _flows.Count,
             TcpShare = (double)tcp / total,
             UdpShare = (double)udp / total,
-            IcmpShare = (double)icmp / total
+            IcmpShare = (double)icmp / total,
+            DroppedFlowCount = (int)Interlocked.Read(ref _droppedFlows)
         });
     }
 

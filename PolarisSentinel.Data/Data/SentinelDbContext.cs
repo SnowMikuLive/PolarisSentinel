@@ -6,7 +6,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.DataAccess.Data;
 
-public class SentinelDbContext : IdentityDbContext
+public class SentinelDbContext : IdentityDbContext<ApplicationUser>
 {
     public SentinelDbContext(DbContextOptions<SentinelDbContext> options)
         : base(options)
@@ -19,6 +19,8 @@ public class SentinelDbContext : IdentityDbContext
 
     public DbSet<Rule> Rules => Set<Rule>();
 
+    public DbSet<TrafficRecord> TrafficRecords => Set<TrafficRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -29,12 +31,11 @@ public class SentinelDbContext : IdentityDbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
             e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
-            e.Property(x => x.MatchAttackTypes).HasMaxLength(512);
-            e.Property(x => x.RuleSourceIpAction).HasConversion<string>().HasMaxLength(16);
-            e.Property(x => x.RuleSourcePortAction).HasConversion<string>().HasMaxLength(16);
-            e.Property(x => x.RuleDestinationIpAction).HasConversion<string>().HasMaxLength(16);
-            e.Property(x => x.RuleDestinationPortAction).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Name).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(512);
+            e.Property(x => x.AttackType).HasMaxLength(64);
             e.Property(x => x.DetectionSource).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(32);
         });
 
         modelBuilder.Entity<Alert>(e =>
@@ -45,11 +46,9 @@ public class SentinelDbContext : IdentityDbContext
             e.Property(x => x.SourceIp).HasMaxLength(45).IsRequired();
             e.Property(x => x.DestinationIp).HasMaxLength(45).IsRequired();
             e.Property(x => x.AttackType).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
-            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
-            e.Property(x => x.RuleName).HasMaxLength(128);
-            e.Property(x => x.Reason).HasMaxLength(128).IsRequired();
-            e.HasIndex(x => x.DetectedAt);
+            e.Property(x => x.Description).HasMaxLength(256);
+            e.Property(x => x.DetectionSource).HasConversion<string>().HasMaxLength(32);
+            e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.SourceIp);
         });
 
@@ -59,10 +58,10 @@ public class SentinelDbContext : IdentityDbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(32);
             e.Property(x => x.Name).HasMaxLength(128);
-            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.SourceIp).HasMaxLength(64);
             e.Property(x => x.DestinationIp).HasMaxLength(64);
-            e.Property(x => x.AttackType).HasMaxLength(64);
             e.HasOne(x => x.Policy)
                 .WithMany()
                 .HasForeignKey(x => x.PolicyId)
@@ -73,27 +72,43 @@ public class SentinelDbContext : IdentityDbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<Policy>().HasData(DemoPolicies);
+        modelBuilder.Entity<TrafficRecord>(e =>
+        {
+            e.ToTable("TrafficRecords");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.AlertId).HasMaxLength(32);
+            e.Property(x => x.SourceIp).HasMaxLength(45);
+            e.Property(x => x.DestinationIp).HasMaxLength(45);
+            e.Property(x => x.AttackType).HasMaxLength(64);
+            e.Property(x => x.Action).HasMaxLength(32);
+            e.Property(x => x.Reason).HasMaxLength(256);
+            e.Property(x => x.Source).HasMaxLength(32);
+            e.Property(x => x.RuleName).HasMaxLength(128);
+            e.Property(x => x.Verdict).HasMaxLength(16);
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<Policy>().HasData(DefaultPolicies);
     }
 
-    private static readonly DateTime SeedTimestamp = new DateTime(2026, 9, 21, 0, 0, 0, DateTimeKind.Unspecified);
+    private static readonly DateTime SeedTimestamp = new DateTime(2026, 9, 26, 0, 0, 0, DateTimeKind.Unspecified);
 
-    private static readonly Policy[] DemoPolicies =
+    private static readonly Policy[] DefaultPolicies =
     {
         new()
         {
             Id = "P-1",
             UserId = "admin",
+            Name = "Prefilter DoS",
+            Description = "Block the source of any rule-based DoS detection.",
             DetectionSource = DetectionSource.PreFilter,
-            RfConfidenceThreshold = null,
-            IfConfidenceThreshold = null,
-            BlockDurationMinutes = 10,
-            MatchAttackTypes = null,
-            MatchProtocol = 0,
-            RuleSourceIpAction = PolicyAction.Block,
-            RuleSourcePortAction = PolicyAction.Allow,
-            RuleDestinationIpAction = PolicyAction.Allow,
-            RuleDestinationPortAction = PolicyAction.Allow,
+            RfThreshold = null,
+            IfThreshold = null,
+            AttackType = AttackTypes.DoS,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 100,
+            IsEnabled = true,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
         },
@@ -101,16 +116,16 @@ public class SentinelDbContext : IdentityDbContext
         {
             Id = "P-2",
             UserId = "admin",
-            DetectionSource = DetectionSource.PreFilter,
-            RfConfidenceThreshold = null,
-            IfConfidenceThreshold = null,
-            BlockDurationMinutes = 10,
-            MatchAttackTypes = AttackTypes.DoS,
-            MatchProtocol = 0,
-            RuleSourceIpAction = PolicyAction.Block,
-            RuleSourcePortAction = PolicyAction.Block,
-            RuleDestinationIpAction = PolicyAction.Allow,
-            RuleDestinationPortAction = PolicyAction.Allow,
+            Name = "Random Forest PortScan",
+            Description = "Block the source of a Random Forest port scan detection.",
+            DetectionSource = DetectionSource.RandomForest,
+            RfThreshold = 0.7f,
+            IfThreshold = null,
+            AttackType = AttackTypes.PortScan,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 90,
+            IsEnabled = true,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
         },
@@ -118,50 +133,16 @@ public class SentinelDbContext : IdentityDbContext
         {
             Id = "P-3",
             UserId = "admin",
-            DetectionSource = DetectionSource.PreFilter,
-            RfConfidenceThreshold = null,
-            IfConfidenceThreshold = null,
-            BlockDurationMinutes = 10,
-            MatchAttackTypes = AttackTypes.DoS,
-            MatchProtocol = ProtocolNumbers.Icmp,
-            RuleSourceIpAction = PolicyAction.Block,
-            RuleSourcePortAction = PolicyAction.Allow,
-            RuleDestinationIpAction = PolicyAction.Allow,
-            RuleDestinationPortAction = PolicyAction.Allow,
-            CreatedAt = SeedTimestamp,
-            UpdatedAt = SeedTimestamp
-        },
-        new()
-        {
-            Id = "P-4",
-            UserId = "admin",
-            DetectionSource = DetectionSource.PreFilter,
-            RfConfidenceThreshold = null,
-            IfConfidenceThreshold = null,
-            BlockDurationMinutes = 10,
-            MatchAttackTypes = AttackTypes.DoS,
-            MatchProtocol = ProtocolNumbers.Udp,
-            RuleSourceIpAction = PolicyAction.Block,
-            RuleSourcePortAction = PolicyAction.Allow,
-            RuleDestinationIpAction = PolicyAction.Allow,
-            RuleDestinationPortAction = PolicyAction.Allow,
-            CreatedAt = SeedTimestamp,
-            UpdatedAt = SeedTimestamp
-        },
-        new()
-        {
-            Id = "P-5",
-            UserId = "admin",
+            Name = "Random Forest BruteForce",
+            Description = "Block the source of a Random Forest brute force detection.",
             DetectionSource = DetectionSource.RandomForest,
-            RfConfidenceThreshold = 0.6f,
-            IfConfidenceThreshold = null,
-            BlockDurationMinutes = 10,
-            MatchAttackTypes = null,
-            MatchProtocol = 0,
-            RuleSourceIpAction = PolicyAction.Block,
-            RuleSourcePortAction = PolicyAction.Allow,
-            RuleDestinationIpAction = PolicyAction.Allow,
-            RuleDestinationPortAction = PolicyAction.Allow,
+            RfThreshold = 0.7f,
+            IfThreshold = null,
+            AttackType = AttackTypes.BruteForce,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 90,
+            IsEnabled = true,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
         }

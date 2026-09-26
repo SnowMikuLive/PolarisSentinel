@@ -66,7 +66,7 @@ namespace PolarisSentinel.FirewallEnforement
             // 256 = any protocol; 0 is not a valid Windows Firewall protocol value.
             target.Protocol = rule.Protocol == 0 ? 256 : rule.Protocol;
             target.RemoteAddresses = remoteAddresses;
-            target.Direction = 1;
+            target.Direction = rule.Direction;
             target.Action = 0;
             target.Profiles = int.MaxValue;
             target.Enabled = rule.Enabled;

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using PolarisSentinel.Core.Enums;
@@ -8,7 +8,7 @@ using PolarisSentinel.Web.Hubs;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Capture adapter: runs the detection pipeline, pushes SignalR updates and persists alerts.
+    // Capture adapter: runs the detection pipeline, pushes SignalR updates and records dashboard counters.
     public class TrafficBroadcastService : IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
@@ -16,6 +16,7 @@ namespace PolarisSentinel.Web.Service
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CaptureControlService _captureControl;
         private readonly DetectionStateService _state;
+        private readonly TrafficHistoryService _history;
         private readonly ILogger<TrafficBroadcastService> _logger;
 
         public TrafficBroadcastService(
@@ -24,6 +25,7 @@ namespace PolarisSentinel.Web.Service
             IServiceScopeFactory scopeFactory,
             CaptureControlService captureControl,
             DetectionStateService state,
+            TrafficHistoryService history,
             ILogger<TrafficBroadcastService> logger)
         {
             _hubContext = hubContext;
@@ -31,6 +33,7 @@ namespace PolarisSentinel.Web.Service
             _scopeFactory = scopeFactory;
             _captureControl = captureControl;
             _state = state;
+            _history = history;
             _logger = logger;
         }
 
@@ -63,7 +66,7 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Runs one completed flow through the pipeline and persists the resulting alert.
+        // Runs one completed flow through the pipeline and records the outcome.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
@@ -72,34 +75,15 @@ namespace PolarisSentinel.Web.Service
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var pipeline = scope.ServiceProvider.GetRequiredService<IDetectionPipeline>();
 
-                var policies = await unitOfWork.Policies.GetAllAsync();
-                var activePolicy = SelectPolicy(policies, flow);
-                if (activePolicy == null)
-                {
-                    _logger.LogDebug("No policy matches flow from {SourceIp}", flow.SourceIp);
-                    return;
-                }
+                var policies = await unitOfWork.Policies.GetEnabledAsync();
+                var outcome = pipeline.ProcessFlow(flow, policies);
 
-                var decision = pipeline.ProcessFlow(flow, activePolicy);
-                _logger.LogInformation(
-                    "Flow {SourceIp}: {AttackType}, {Source}, {Action}, {Reason}",
-                    decision.SourceIp, decision.AttackType, decision.Source, decision.Action, decision.Reason);
+                var record = _state.Record(outcome);
 
-                var record = new DetectionRecord(
-                    decision.Id,
-                    decision.SourceIp,
-                    decision.DestinationIp,
-                    decision.DestinationPort,
-                    decision.AttackType,
-                    decision.Confidence,
-                    decision.Action.ToString(),
-                    decision.DecidedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                    decision.Reason,
-                    decision.Source.ToString(),
-                    decision.RuleName);
+                // Persist for long-term history so charts survive a restart.
+                _history.Enqueue(DetectionStateService.ToTrafficRecord(record));
 
-                // Push results first so a database error does not stop live updates.
-                _state.Record(record);
+                // Every classified flow is pushed so the live monitor can show the full window.
                 await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
             }
             catch (Exception ex)
@@ -113,68 +97,6 @@ namespace PolarisSentinel.Web.Service
             _trafficCaptureService.OnLiveTrafficSummary -= OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted -= OnFlowCompletedHandler;
             return Task.CompletedTask;
-        }
-
-        private static Policy? SelectPolicy(IReadOnlyList<Policy> policies, FlowFeatureVector flow)
-        {
-            var verdict = flow.PreFilterVerdict;
-
-            Policy? best = null;
-            int bestScore = -1;
-
-            foreach (var policy in policies)
-            {
-                if (!MatchesSource(policy, verdict != null))
-                {
-                    continue;
-                }
-
-                if (verdict != null && !MatchesAttackType(policy, verdict.AttackType))
-                {
-                    continue;
-                }
-
-                if (policy.MatchProtocol != 0 && policy.MatchProtocol != flow.Protocol)
-                {
-                    continue;
-                }
-
-                int score = 0;
-                if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
-                {
-                    score += 2;
-                }
-                if (policy.MatchProtocol != 0)
-                {
-                    score += 1;
-                }
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    best = policy;
-                }
-            }
-
-            return best;
-        }
-
-        private static bool MatchesSource(Policy policy, bool isPreFilter)
-        {
-            return isPreFilter
-                ? policy.DetectionSource == DetectionSource.PreFilter
-                : policy.DetectionSource != DetectionSource.PreFilter;
-        }
-
-        private static bool MatchesAttackType(Policy policy, string attackType)
-        {
-            if (string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
-            {
-                return true;
-            }
-
-            var entries = policy.MatchAttackTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            return entries.Any(e => string.Equals(e, attackType, StringComparison.OrdinalIgnoreCase));
         }
 
         public void Dispose()

@@ -20,13 +20,13 @@
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.SourceIp) ? "Any" : Model.SourceIp)</dd>
 
                 <dt class="col-sm-3">Source Port</dt>
-                <dd class="col-sm-9">@(Model.SourcePort == 0 ? "Any" : Model.SourcePort.ToString())</dd>
+                <dd class="col-sm-9">@(Model.SourcePort is null or 0 ? "Any" : Model.SourcePort.ToString())</dd>
 
                 <dt class="col-sm-3">Destination IP</dt>
                 <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.DestinationIp) ? "Any" : Model.DestinationIp)</dd>
 
                 <dt class="col-sm-3">Destination Port</dt>
-                <dd class="col-sm-9">@(Model.DestinationPort == 0 ? "Any" : Model.DestinationPort.ToString())</dd>
+                <dd class="col-sm-9">@(Model.DestinationPort is null or 0 ? "Any" : Model.DestinationPort.ToString())</dd>
 
                 <dt class="col-sm-3">Protocol</dt>
                 <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
@@ -34,18 +34,19 @@
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
 
-                <dt class="col-sm-3">Attack Type</dt>
-                <dd class="col-sm-9">@(string.IsNullOrEmpty(Model.AttackType) ? "-" : Model.AttackType)</dd>
-
-                <dt class="col-sm-3">Enabled</dt>
+                <dt class="col-sm-3">Status</dt>
                 <dd class="col-sm-9">
-                    @if (Model.Enabled)
+                    @if (Model.Status == PolarisSentinel.Core.Enums.RuleStatus.Active)
                     {
-                        <span class="badge bg-success">Enabled</span>
+                        <span class="badge bg-success">Active</span>
+                    }
+                    else if (Model.Status == PolarisSentinel.Core.Enums.RuleStatus.Expired)
+                    {
+                        <span class="badge bg-warning text-dark">Expired</span>
                     }
                     else
                     {
-                        <span class="badge bg-secondary">Disabled</span>
+                        <span class="badge bg-secondary">Inactive</span>
                     }
                 </dd>
 

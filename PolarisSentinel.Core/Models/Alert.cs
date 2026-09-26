@@ -2,13 +2,20 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// The 5-tuple plus detection outcome produced by the capture layer or the AI engine,
-// and enriched by the policy engine with the action it decided on.
+// A detection result: what was seen, where, and how it was classified.
+// Policy decisions are not stored here; they live on the Rule the decision produced.
 public class Alert
 {
-    // 新记录使用 GUID，旧编号保持不变。
-    // New records use GUIDs; existing IDs remain unchanged.
     public string Id { get; set; } = string.Empty;
+
+    public DetectionSource DetectionSource { get; set; }
+
+    public required string AttackType { get; set; }
+
+    // Null for rule-based pre-filter alerts, which carry no model probability.
+    public float? ConfidenceScore { get; set; }
+
+    public string? Description { get; set; }
 
     // 5-tuple
     public required string SourceIp { get; set; }
@@ -21,21 +28,19 @@ public class Alert
 
     public byte Protocol { get; set; }
 
-    // Detection outcome
-    public required string AttackType { get; set; }
+    // TCP flag counters, used for alert detail and pre-filter logic (not ML features).
+    public int SynCount { get; set; }
 
-    public float Confidence { get; set; }
+    public int AckCount { get; set; }
 
-    public DetectionSource Source { get; set; }
+    public int FinCount { get; set; }
 
-    public DateTime DetectedAt { get; set; } = DateTime.Now;
+    public int RstCount { get; set; }
 
-    // Policy decision applied to this alert.
-    public PolicyAction Action { get; set; } = PolicyAction.Monitor;
+    public int PshCount { get; set; }
 
-    public string? RuleName { get; set; }
+    // JSON snapshot of the 20 ML features plus the TCP flag counters at detection time.
+    public string? FlowSnapshotJson { get; set; }
 
-    public required string Reason { get; set; }
-
-    public DateTime DecidedAt { get; set; } = DateTime.Now;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

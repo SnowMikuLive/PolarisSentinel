@@ -2,12 +2,21 @@ namespace PolarisSentinel.Core.Enums;
 
 public enum PolicyAction
 {
-    //No action required, traffic is treated as benign.
+    // No action required, traffic is treated as benign.
     Allow,
 
-    //Log and surface the event on the Dashboard
+    // Log and surface the event on the Dashboard without touching the firewall.
     Monitor,
 
-    //Create a Windows Firewall rule blocking the source IP address.
-    Block
+    // Block the alert's source IP with an inbound rule.
+    BlockInboundIp,
+
+    // Block the alert's destination port with an inbound rule.
+    BlockInboundPort,
+
+    // Block the alert's destination IP with an outbound rule.
+    BlockOutboundIp,
+
+    // Block the alert's destination port with an outbound rule.
+    BlockOutboundPort
 }

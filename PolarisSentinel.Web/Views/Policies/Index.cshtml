@@ -6,7 +6,7 @@
 
 <div class="container-fluid">
     <h2 class="text-primary">Policies</h2>
-    <p class="text-muted">Detection thresholds and enforcement settings.</p>
+    <p class="text-muted">Matching conditions and the firewall action applied to a matching alert.</p>
 
     @if (TempData["success"] != null)
     {
@@ -23,13 +23,14 @@
                 <thead>
                     <tr>
                         <th>Policy ID</th>
+                        <th>Name</th>
                         <th>Detection Source</th>
-                        <th>Match</th>
-                        <th>RF Threshold</th>
-                        <th>IF Threshold</th>
+                        <th>Attack Type</th>
+                        <th>Thresholds</th>
+                        <th>Priority</th>
+                        <th>Action</th>
                         <th>Block Duration</th>
-                        <th>Created</th>
-                        <th>Updated</th>
+                        <th>Enabled</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -37,7 +38,7 @@
                     @if (Model.Count == 0)
                     {
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-3">No policies.</td>
+                            <td colspan="10" class="text-center text-muted py-3">No policies.</td>
                         </tr>
                     }
                     else
@@ -46,13 +47,23 @@
                         {
                             <tr>
                                 <td class="fw-bold">@item.Id</td>
-                                <td><span class="badge bg-primary">@item.DetectionSource</span></td>
-                                <td class="small">@DescribeMatch(item)</td>
-                                <td>@(item.RfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
-                                <td>@(item.IfConfidenceThreshold?.ToString("0.00") ?? "-")</td>
+                                <td>@item.Name</td>
+                                <td><span class="badge bg-primary">@(item.DetectionSource?.ToString() ?? "Any")</span></td>
+                                <td>@(item.AttackType ?? "Any")</td>
+                                <td class="small">RF @(item.RfThreshold?.ToString("0.00") ?? "-") / IF @(item.IfThreshold?.ToString("0.00") ?? "-")</td>
+                                <td>@item.Priority</td>
+                                <td><span class="badge bg-danger">@item.Action</span></td>
                                 <td>@item.BlockDurationMinutes min</td>
-                                <td>@TimeFormat.Format(item.CreatedAt)</td>
-                                <td>@TimeFormat.Format(item.UpdatedAt)</td>
+                                <td>
+                                    @if (item.IsEnabled)
+                                    {
+                                        <span class="badge bg-success">Enabled</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Disabled</span>
+                                    }
+                                </td>
                                 <td class="text-end text-nowrap">
                                     <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
                                     <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary">Edit</a>
@@ -69,33 +80,3 @@
         </div>
     </div>
 </div>
-
-@functions {
-    // One-line summary of the alert match criteria; "Any" when nothing is constrained.
-    static string DescribeMatch(PolarisSentinel.Core.Models.Policy policy)
-    {
-        var parts = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(policy.MatchAttackTypes))
-        {
-            parts.Add(policy.MatchAttackTypes);
-        }
-
-        if (policy.MatchProtocol != 0)
-        {
-            parts.Add(ProtocolName(policy.MatchProtocol));
-        }
-
-        return parts.Count == 0 ? "Any" : string.Join(" / ", parts);
-    }
-
-    // Map an IP protocol number to a readable name.
-    static string ProtocolName(byte protocol) => protocol switch
-    {
-        1 => "ICMP",
-        6 => "TCP",
-        17 => "UDP",
-        0 => "Any",
-        _ => protocol.ToString()
-    };
-}

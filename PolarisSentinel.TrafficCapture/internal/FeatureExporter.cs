@@ -83,7 +83,14 @@ internal static class FeatureExporter
             DestinationPort = destinationPort,
             Protocol = protocol,
             FlowStartTime = flow.StartTime,
-            FlowEndTime = flow.LastSeenTime
+            FlowEndTime = flow.LastSeenTime,
+            TotalPackets = flow.TotalPackets,
+            TotalBytes = flow.TotalBytes,
+            SynCount = flow.SynCount,
+            AckCount = flow.AckCount,
+            FinCount = flow.FinCount,
+            RstCount = flow.RstCount,
+            PshCount = flow.PshCount
         };
     }
 }

@@ -8,7 +8,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Policy CRUD. Every property is editable except UserId, which follows the signed-in user.
+    // Policy CRUD. UserId follows the signed-in user; every other property is editable.
     [Authorize]
     public class PoliciesController : Controller
     {
@@ -45,11 +45,11 @@ namespace PolarisSentinel.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
+            [Bind("Name,Description,DetectionSource,RfThreshold,IfThreshold,AttackType,Action,BlockDurationMinutes,Priority,IsEnabled")]
             Policy policy,
             CancellationToken cancellationToken)
         {
-            if (!ModelState.IsValid)
+            if (!Validate(policy))
             {
                 PopulateLists();
                 return View(policy);
@@ -83,7 +83,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             string id,
-            [Bind("DetectionSource,RfConfidenceThreshold,IfConfidenceThreshold,Action,BlockDurationMinutes,MatchAttackTypes,MatchProtocol,RuleSourceIpAction,RuleSourcePortAction,RuleDestinationIpAction,RuleDestinationPortAction")]
+            [Bind("Name,Description,DetectionSource,RfThreshold,IfThreshold,AttackType,Action,BlockDurationMinutes,Priority,IsEnabled")]
             Policy policy,
             CancellationToken cancellationToken)
         {
@@ -93,23 +93,23 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
-            if (!ModelState.IsValid)
+            if (!Validate(policy))
             {
                 policy.Id = existing.Id;
                 PopulateLists();
                 return View(policy);
             }
 
+            existing.Name = policy.Name;
+            existing.Description = policy.Description;
             existing.DetectionSource = policy.DetectionSource;
-            existing.RfConfidenceThreshold = policy.RfConfidenceThreshold;
-            existing.IfConfidenceThreshold = policy.IfConfidenceThreshold;
+            existing.RfThreshold = policy.RfThreshold;
+            existing.IfThreshold = policy.IfThreshold;
+            existing.AttackType = policy.AttackType;
+            existing.Action = policy.Action;
             existing.BlockDurationMinutes = policy.BlockDurationMinutes;
-            existing.MatchAttackTypes = policy.MatchAttackTypes;
-            existing.MatchProtocol = policy.MatchProtocol;
-            existing.RuleSourceIpAction = policy.RuleSourceIpAction;
-            existing.RuleSourcePortAction = policy.RuleSourcePortAction;
-            existing.RuleDestinationIpAction = policy.RuleDestinationIpAction;
-            existing.RuleDestinationPortAction = policy.RuleDestinationPortAction;
+            existing.Priority = policy.Priority;
+            existing.IsEnabled = policy.IsEnabled;
             existing.UpdatedAt = DateTime.Now;
 
             _uow.Policies.Update(existing);
@@ -154,12 +154,46 @@ namespace PolarisSentinel.Web.Controllers
 
         private void PopulateLists()
         {
-            // Firewall rule actions are Allow or Block only; Monitor is a detection outcome.
-            ViewBag.RuleActions = new SelectList(new[] { PolicyAction.Allow, PolicyAction.Block });
-            // None is not a selectable detector.
             ViewBag.DetectionSources = new SelectList(
                 Enum.GetValues<DetectionSource>().Where(s => s != DetectionSource.None));
+            ViewBag.Actions = new SelectList(PolicyActions.Blocking);
             ViewBag.AttackTypes = new SelectList(AttackTypes.Selectable);
+        }
+
+        // Validates the policy fields against the ranges the policy engine relies on.
+        private bool Validate(Policy policy)
+        {
+            if (string.IsNullOrWhiteSpace(policy.Name))
+            {
+                ModelState.AddModelError(nameof(Policy.Name), "Name is required.");
+            }
+
+            if (policy.Priority is < 0 or > 100)
+            {
+                ModelState.AddModelError(nameof(Policy.Priority), "Priority must be between 0 and 100.");
+            }
+
+            if (policy.RfThreshold is { } rf && (rf < 0 || rf > 1))
+            {
+                ModelState.AddModelError(nameof(Policy.RfThreshold), "RF threshold must be between 0 and 1.");
+            }
+
+            if (policy.IfThreshold is { } ift && (ift < 0 || ift > 1))
+            {
+                ModelState.AddModelError(nameof(Policy.IfThreshold), "IF threshold must be between 0 and 1.");
+            }
+
+            if (PolicyActions.IsBlocking(policy.Action) && policy.BlockDurationMinutes <= 0)
+            {
+                ModelState.AddModelError(nameof(Policy.BlockDurationMinutes), "Block duration must be positive for blocking policies.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(policy.AttackType) && !AttackTypes.IsDefined(policy.AttackType))
+            {
+                ModelState.AddModelError(nameof(Policy.AttackType), "Unknown attack type.");
+            }
+
+            return ModelState.IsValid;
         }
 
         // Next "P-n" id, scanned from the stored policies.

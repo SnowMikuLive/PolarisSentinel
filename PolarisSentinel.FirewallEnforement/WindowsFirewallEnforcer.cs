@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Security.Principal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -62,58 +61,26 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        // Create a rule for the scope, or extend the expiry of an equivalent existing one.
-        // The rule is staged only; the caller commits once the alert row exists.
-        public Rule Block(
-            string sourceIp,
-            int sourcePort,
-            string destinationIp,
-            int destinationPort,
-            byte protocol,
-            PolicyAction action,
-            string? alertId,
-            string? policyId,
-            string? attackType,
-            TimeSpan duration,
-            FirewallRuleScope? scope = null)
+        public Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration)
         {
-            if (duration <= TimeSpan.Zero)
+            var alert = decision.Alert;
+            var spec = FirewallRuleSpec.TryCreate(decision.Action, alert, out string? error);
+            if (spec == null)
             {
-                _logger.LogWarning("Invalid block request for {Ip}", sourceIp);
-                return new Rule { Id = string.Empty, Name = string.Empty, SourceIp = sourceIp };
+                throw new InvalidOperationException(error ?? "The policy action cannot be applied to this alert.");
             }
-
-            // Without an explicit scope the exact 5-tuple is used.
-            scope ??= new FirewallRuleScope
-            {
-                SourceIp = sourceIp ?? string.Empty,
-                SourcePort = sourcePort,
-                DestinationIp = destinationIp ?? string.Empty,
-                DestinationPort = destinationPort,
-                Protocol = protocol
-            };
 
             lock (_lock)
             {
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
-                //规则行主键独立GUID；防火墙规则名仍绑定alertId（或ANY共享名）。
-                //Rule row id is its own GUID;firewall name still keys off alertId (or shared ANY).
-                var ruleId = EntityIds.NewId();
-
-                // A rule that constrains nothing blocks every flow, so it must not be
-                // tied to a single alert id; one shared rule is reused instead.
-                // Manual rules have no alert at all, so they key off their own id.
-                string ruleName = scope.IsAny
-                    ? EntityIds.FirewallRule(EntityIds.AnyTrafficRuleName)
-                    : EntityIds.FirewallRule(string.IsNullOrEmpty(alertId) ? ruleId : alertId);
+                var ruleId = _rules.NextIdAsync().GetAwaiter().GetResult();
+                string ruleName = EntityIds.FirewallRule(string.IsNullOrEmpty(alertId) ? ruleId : alertId);
 
                 var existing = _rules.GetAllAsync().GetAwaiter().GetResult()
                     .FirstOrDefault(r => r.Name == ruleName);
-
                 if (existing != null)
                 {
-                    // Same rule already present: only push the expiry out.
                     if (expiresAt > existing.ExpiresAt)
                     {
                         existing.ExpiresAt = expiresAt;
@@ -129,23 +96,27 @@ namespace PolarisSentinel.FirewallEnforement
                     Name = ruleName,
                     PolicyId = string.IsNullOrEmpty(policyId) ? null : policyId,
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
-                    Action = action,
-                    Enabled = true,
-                    AttackType = attackType,
+                    Action = decision.Action,
+                    Status = RuleStatus.Active,
+                    SourceIp = spec.RemoteAddress ?? string.Empty,
+                    SourcePort = spec.RemotePort,
+                    DestinationIp = spec.RemoteAddress ?? string.Empty,
+                    DestinationPort = spec.LocalPort,
+                    Protocol = spec.Protocol,
                     CreatedAt = now,
+                    UpdatedAt = now,
                     ExpiresAt = expiresAt
                 };
-                // Any field left empty/zero is a wildcard, not a constraint.
-                scope.ApplyTo(rule);
 
                 _rules.Add(rule);
-                _logger.LogInformation("Firewall staged {RuleName} for {SourceIp}, expires {ExpiresAt}, dry-run {DryRun}",
-                    ruleName, sourceIp, expiresAt, IsDryRun);
+                _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                SaveToWindows(rule, spec);
+                _logger.LogInformation("Firewall applied {RuleName} for {Action}, expires {ExpiresAt}, dry-run {DryRun}",
+                    ruleName, decision.Action, expiresAt, IsDryRun);
                 return rule;
             }
         }
 
-        // Update an existing rule's scope, action, enabled state and expiry.
         public Rule? Update(
             string ruleId,
             string sourceIp,
@@ -154,9 +125,8 @@ namespace PolarisSentinel.FirewallEnforement
             int destinationPort,
             byte protocol,
             PolicyAction action,
-            bool enabled,
-            TimeSpan duration,
-            FirewallRuleScope? scope = null)
+            RuleStatus status,
+            TimeSpan duration)
         {
             lock (_lock)
             {
@@ -169,23 +139,22 @@ namespace PolarisSentinel.FirewallEnforement
                 var now = _timeProvider.GetLocalNow().DateTime;
                 RemoveFromWindows(rule.Name);
 
-                scope ??= new FirewallRuleScope
-                {
-                    SourceIp = sourceIp ?? string.Empty,
-                    SourcePort = sourcePort,
-                    DestinationIp = destinationIp ?? string.Empty,
-                    DestinationPort = destinationPort,
-                    Protocol = protocol
-                };
-                scope.ApplyTo(rule);
                 rule.Action = action;
-                rule.Enabled = enabled;
+                rule.Status = status;
+                rule.SourceIp = sourceIp ?? string.Empty;
+                rule.SourcePort = sourcePort == 0 ? null : sourcePort;
+                rule.DestinationIp = destinationIp ?? string.Empty;
+                rule.DestinationPort = destinationPort == 0 ? null : destinationPort;
+                rule.Protocol = protocol;
                 rule.ExpiresAt = now.Add(duration);
                 rule.UpdatedAt = now;
 
                 _rules.Update(rule);
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                SaveToWindows(rule);
+                if (status == RuleStatus.Active)
+                {
+                    SaveToWindows(rule, SpecFrom(rule));
+                }
                 _logger.LogInformation("Firewall updated {RuleName}", rule.Name);
                 return rule;
             }
@@ -237,12 +206,14 @@ namespace PolarisSentinel.FirewallEnforement
                 foreach (var rule in expired)
                 {
                     RemoveFromWindows(rule.Name);
-                    _rules.Remove(rule);
+                    rule.Status = RuleStatus.Expired;
+                    rule.UpdatedAt = now;
+                    _rules.Update(rule);
                 }
                 if (expired.Count > 0)
                 {
                     _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                    _logger.LogInformation("Removed {Count} expired firewall rule(s)", expired.Count);
+                    _logger.LogInformation("Expired {Count} firewall rule(s)", expired.Count);
                 }
                 return expired.Count;
             }
@@ -264,36 +235,41 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
+        private static FirewallRuleSpec SpecFrom(Rule rule) => new()
+        {
+            Direction = rule.Action is PolicyAction.BlockOutboundIp or PolicyAction.BlockOutboundPort ? 2 : 1,
+            RemoteAddress = rule.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp ? rule.SourceIp : null,
+            LocalPort = rule.Action == PolicyAction.BlockInboundPort ? rule.DestinationPort : null,
+            RemotePort = rule.Action == PolicyAction.BlockOutboundPort ? rule.DestinationPort : null,
+            Protocol = rule.Protocol ?? 0
+        };
+
         // Push a rule to the Windows Firewall API (skipped in dry-run).
-        private void SaveToWindows(Rule rule)
+        private void SaveToWindows(Rule rule, FirewallRuleSpec spec)
         {
             if (_firewall == null || !OperatingSystem.IsWindows())
             {
                 return;
             }
 
-            // Empty address means Any: Windows Firewall uses "*" for that.
-            bool anyAddress = string.IsNullOrWhiteSpace(rule.SourceIp);
-            string? ip = anyAddress ? "*" : NormalizeIp(rule.SourceIp!);
+            bool anyAddress = string.IsNullOrWhiteSpace(spec.RemoteAddress);
+            string? ip = anyAddress ? "*" : NormalizeIp(spec.RemoteAddress!);
             if (ip == null)
             {
-                _logger.LogWarning("Cannot apply rule {RuleName}: invalid source address {SourceIp}", rule.Name, rule.SourceIp);
+                _logger.LogWarning("Cannot apply rule {RuleName}: invalid address {Address}", rule.Name, spec.RemoteAddress);
                 return;
             }
 
-            // Port 0 and protocol 0 mean Any and are passed through as wildcards.
-            // Null / 0 port and null / 0 protocol all mean Any and are passed through
-            // as wildcards; the Windows layer maps them to "*" / 256.
             _firewall.Save(new FirewallStoredRule
             {
                 Name = rule.Name,
                 RemoteAddress = ip,
-                LocalPort = Math.Max(0, rule.DestinationPort ?? 0),
-                RemotePort = Math.Max(0, rule.SourcePort ?? 0),
-                Protocol = rule.Protocol ?? 0,
-                Enabled = rule.Enabled,
-                IsBlockRule = rule.Action == PolicyAction.Block,
-                Direction = 1
+                LocalPort = spec.LocalPort ?? 0,
+                RemotePort = spec.RemotePort ?? 0,
+                Protocol = spec.Protocol,
+                Enabled = rule.Status == RuleStatus.Active,
+                IsBlockRule = true,
+                Direction = spec.Direction
             });
         }
 

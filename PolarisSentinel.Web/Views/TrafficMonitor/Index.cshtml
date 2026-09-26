@@ -15,7 +15,7 @@
         <span class="me-3">Bytes/s:<span id="liveBytesPerSecond">0</span></span>
     </div>
 
-    @* Capture device selector: switching restarts capture on the chosen NIC. *@
+    @* Capture device selector: pick a NIC, then press Set to switch capture to it. *@
     <div class="card shadow-sm border-primary mb-3">
         <div class="card-header bg-primary text-white">
             Network Interface
@@ -27,6 +27,7 @@
                     <select id="deviceSelect" class="form-select"></select>
                 </div>
                 <div class="col-md-6">
+                    <button type="button" id="setDevice" class="btn btn-primary">Set</button>
                     <button type="button" id="refreshDevices" class="btn btn-outline-primary">Refresh</button>
                     <span id="deviceStatus" class="ms-2 small"></span>
                 </div>
@@ -89,6 +90,7 @@
    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
+    <script src="~/js/polaris-hub.js"></script>
 
     <script>
         //Register datalabels plugin (required)
@@ -150,9 +152,8 @@
         let countPps=0;
         let totalBytes=0;
 
-        //to connet to TrafiicHub using SignalR
-        const connection=new signalR.HubConnectionBuilder().withUrl('/trafficHub').configureLogging(signalR.LogLevel.Information).build();
-        connection.on('ReceiveLiveTrafficSummary',(summary)=>{
+        // Shared connection with automatic reconnect.
+        polarisHub.on('ReceiveLiveTrafficSummary',(summary)=>{
 
             //update the protocol chart
             protocolChart.data.datasets[0].data=[summary.tcpShare*100,summary.udpShare*100,summary.icmpShare*100];
@@ -183,7 +184,15 @@
 
         });
             //Start connection
-            connection.start().catch(err=>console.error(err.toString()));
+            polarisHub.start();
+
+        // Restore today's totals so the cards show history immediately after a restart.
+        fetch('/api/detections/state')
+            .then(r=>r.json())
+            .then(state=>{
+                document.getElementById('activeFlowsCard').innerText=state.capturedFlows||0;
+            })
+            .catch(err=>console.error('Failed to fetch traffic state',err));
 
         // ---- Network interface selector ----
         const deviceSelect=document.getElementById('deviceSelect');
@@ -195,34 +204,62 @@
             deviceStatus.className='ms-2 small '+(isError?'text-danger':'text-success');
         }
 
-        // Load devices and mark the one currently capturing.
+        // Load devices and mark the one currently capturing. Keeps the user's
+        // in-progress selection if it still exists, so a refresh does not reset it.
         function loadDevices()
         {
             setDeviceStatus('Loading...',false);
+            const previous=deviceSelect.value;
             fetch('/api/capture/devices')
-                .then(r=>r.json())
+                .then(r=>{
+                    if(!r.ok)throw new Error('HTTP '+r.status);
+                    return r.json();
+                })
                 .then(data=>{
+                    const devices=data.devices||[];
+                    // If the backend momentarily returns nothing (e.g. right after a
+                    // flood), keep the existing options instead of blanking the
+                    // selector, so the network interface UI does not disappear.
+                    if(devices.length===0&&deviceSelect.options.length>0)
+                    {
+                        setDeviceStatus('No capture devices reported; keeping previous list.',true);
+                        return;
+                    }
                     deviceSelect.innerHTML='';
-                    (data.devices||[]).forEach(d=>{
+                    let currentValue=null;
+                    devices.forEach(d=>{
                         const option=document.createElement('option');
                         option.value=d.deviceName;
                         // Tag Wi-Fi so the auto-selected default is obvious.
                         option.textContent=d.displayName+(d.isWifi?' [Wi-Fi]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
-                        option.selected=d.isCurrent;
                         deviceSelect.appendChild(option);
+                        if(d.isCurrent)currentValue=d.deviceName;
                     });
-                    setDeviceStatus(data.devices&&data.devices.length?'':'No capture devices found.',!(data.devices&&data.devices.length));
+                    // Prefer the user's selection, then the active device, then the first.
+                    if(previous&&[...deviceSelect.options].some(o=>o.value===previous))
+                    {
+                        deviceSelect.value=previous;
+                    }
+                    else if(currentValue)
+                    {
+                        deviceSelect.value=currentValue;
+                    }
+                    setDeviceStatus(devices.length?'':'No capture devices found.',!devices.length);
                 })
                 .catch(err=>{
                     console.error('Failed to load devices',err);
+                    // Do not clear the selector on a transient error; keep whatever
+                    // options are already shown so the UI stays usable.
                     setDeviceStatus('Failed to load devices.',true);
                 });
         }
 
-        // Switching restarts capture on the new NIC.
-        deviceSelect.addEventListener('change',function(){
+        // Pressing Set switches capture to the chosen NIC.
+        document.getElementById('setDevice').addEventListener('click',function(){
             const name=deviceSelect.value;
             if(!name)return;
+            const button=this;
+            button.disabled=true;
             setDeviceStatus('Switching...',false);
             fetch('/api/capture/select',{
                 method:'POST',
@@ -237,10 +274,15 @@
                 .catch(err=>{
                     console.error('Failed to switch device',err);
                     setDeviceStatus('Failed to switch device.',true);
-                });
+                })
+                .finally(()=>{button.disabled=false;});
         });
 
         document.getElementById('refreshDevices').addEventListener('click',loadDevices);
         loadDevices();
+
+        // Periodically re-scan so the selector recovers on its own after a flood
+        // temporarily takes the NIC (and its device list) offline.
+        setInterval(loadDevices,30000);
     </script>
 }

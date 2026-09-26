@@ -1,7 +1,11 @@
 @model PolarisSentinel.Core.Models.Alert
+@using PolarisSentinel.Core.Models
 @using PolarisSentinel.Web.Service
 @{
     ViewData["Title"] = "Alert Details";
+    var snapshot = FlowSnapshot.Read(Model.FlowSnapshotJson);
+    var features = snapshot.Where(kv => !kv.Key.EndsWith("_count")).ToList();
+    var flags = snapshot.Where(kv => kv.Key.EndsWith("_count")).ToList();
 }
 
 <div class="container-fluid">
@@ -12,43 +16,99 @@
             @Model.AttackType
         </div>
         <div class="card-body">
-            <h5 class="mb-3">Network 5-Tuple</h5>
+            <h5 class="mb-3">Detection</h5>
             <dl class="row">
                 <dt class="col-sm-3">ID</dt>
                 <dd class="col-sm-9">@Model.Id</dd>
 
-                <dt class="col-sm-3">Source IP</dt>
-                <dd class="col-sm-9">@Model.SourceIp</dd>
+                <dt class="col-sm-3">Detection Source</dt>
+                <dd class="col-sm-9"><span class="badge bg-primary">@Model.DetectionSource</span></dd>
 
-                <dt class="col-sm-3">Source Port</dt>
-                <dd class="col-sm-9">@Model.SourcePort</dd>
-
-                <dt class="col-sm-3">Destination IP</dt>
-                <dd class="col-sm-9">@Model.DestinationIp</dd>
-
-                <dt class="col-sm-3">Destination Port</dt>
-                <dd class="col-sm-9">@Model.DestinationPort</dd>
-
-                <dt class="col-sm-3">Protocol</dt>
-                <dd class="col-sm-9">@Model.Protocol</dd>
-            </dl>
-
-            <h5 class="mb-3">Inference Result</h5>
-            <dl class="row mb-0">
                 <dt class="col-sm-3">Attack Type</dt>
                 <dd class="col-sm-9">@Model.AttackType</dd>
 
                 <dt class="col-sm-3">Confidence</dt>
-                <dd class="col-sm-9">@Model.Confidence.ToString("0.000")</dd>
+                <dd class="col-sm-9">@(Model.ConfidenceScore?.ToString("0.000") ?? "N/A")</dd>
 
-                <dt class="col-sm-3">Detection Source</dt>
-                <dd class="col-sm-9">@Model.Source</dd>
+                <dt class="col-sm-3">Description</dt>
+                <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(Model.Description) ? "-" : Model.Description)</dd>
 
-                <dt class="col-sm-3">Detected At</dt>
-                <dd class="col-sm-9">@TimeFormat.Format(Model.DetectedAt)</dd>
+                <dt class="col-sm-3">Created At</dt>
+                <dd class="col-sm-9">@TimeFormat.Format(Model.CreatedAt)</dd>
             </dl>
+
+            <h5 class="mb-3">Network 5-Tuple</h5>
+            <dl class="row">
+                <dt class="col-sm-3">Source</dt>
+                <dd class="col-sm-9">@Model.SourceIp:@Model.SourcePort</dd>
+
+                <dt class="col-sm-3">Destination</dt>
+                <dd class="col-sm-9">@Model.DestinationIp:@Model.DestinationPort</dd>
+
+                <dt class="col-sm-3">Protocol</dt>
+                <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
+            </dl>
+
+            <h5 class="mb-3">TCP Flags</h5>
+            <dl class="row mb-0">
+                <dt class="col-sm-3">SYN / ACK</dt>
+                <dd class="col-sm-9">@Model.SynCount / @Model.AckCount</dd>
+
+                <dt class="col-sm-3">FIN / RST / PSH</dt>
+                <dd class="col-sm-9">@Model.FinCount / @Model.RstCount / @Model.PshCount</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+            Flow Snapshot
+        </div>
+        <div class="card-body p-0">
+            @if (snapshot.Count == 0)
+            {
+                <div class="text-center text-muted py-4">No snapshot recorded for this alert.</div>
+            }
+            else
+            {
+                <table class="table table-sm table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th class="text-end">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var kv in features)
+                        {
+                            <tr>
+                                <td>@kv.Key</td>
+                                <td class="text-end">@kv.Value.ToString("0.######")</td>
+                            </tr>
+                        }
+                        @foreach (var kv in flags)
+                        {
+                            <tr>
+                                <td>@kv.Key</td>
+                                <td class="text-end">@kv.Value.ToString("0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 
     <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
 </div>
+
+@functions {
+    static string ProtocolName(byte protocol) => protocol switch
+    {
+        1 => "ICMP",
+        6 => "TCP",
+        17 => "UDP",
+        0 => "Any",
+        _ => protocol.ToString()
+    };
+}

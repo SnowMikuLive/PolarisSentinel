@@ -1,12 +1,25 @@
 namespace PolarisSentinel.Core.Models;
 
-// Rule-based verdict produced by the capture-layer pre-filter.
+// Result of the rule-based pre-filter, the upstream stage of the AI engine.
 public class PreFilterResult
 {
-    public required string AttackType { get; init; }
+    // The flow matched a known attack signature.
+    public bool IsKnownAttack { get; init; }
 
-    // Confidence the rule assigns to its own verdict.
-    public float Confidence { get; init; } = 1f;
+    // The flow is not a known attack but is not clearly normal either, so it should reach the AI engine.
+    public bool IsSuspicious { get; init; }
 
-    public required string Reason { get; init; }
+    // Attack category, set only when IsKnownAttack is true.
+    public string? AttackType { get; init; }
+
+    // Short human-readable explanation, e.g. "SYN flood".
+    public string? Description { get; init; }
+
+    public static PreFilterResult Normal() => new();
+
+    public static PreFilterResult Suspicious(string description) =>
+        new() { IsSuspicious = true, Description = description };
+
+    public static PreFilterResult KnownAttack(string attackType, string description) =>
+        new() { IsKnownAttack = true, IsSuspicious = true, AttackType = attackType, Description = description };
 }

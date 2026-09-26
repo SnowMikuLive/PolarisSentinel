@@ -1,25 +1,18 @@
 ﻿@{
     ViewData["Title"] = "Dashboard";
+    var combinations = PolarisSentinel.Core.Constants.ModelCombinations.All;
 }
 
 <div class="container-fluid">
     <h2 class="text-primary">Dashboard</h2>
 
-    @* Four cards on the top now show the overview of system, all driven by SignalR *@
+    @* Four cards: captured flows, alerts, active rules and the AI model selector. *@
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="card text-center border-primary shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold" id="c-live-traffic">0</div>
-                    <div class="text-muted">Live Traffic (Kpps)</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card text-center border-info shadow-sm">
-                <div class="card-body">
-                    <div class="fs-2 fw-bold text-info" id="c-active-flows">0</div>
-                    <div class="text-muted">Active Flows</div>
+                    <div class="fs-2 fw-bold" id="c-captured">0</div>
+                    <div class="text-muted">Captured Flows</div>
                 </div>
             </div>
         </div>
@@ -27,184 +20,255 @@
             <div class="card text-center border-warning shadow-sm">
                 <div class="card-body">
                     <div class="fs-2 fw-bold text-warning" id="c-alerts">0</div>
-                    <div class="text-muted">Alerts (Cumulative)</div>
+                    <div class="text-muted">Alerts</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card text-center border-danger shadow-sm">
                 <div class="card-body">
-                    <div class="fs-2 fw-bold text-danger" id="c-blocks">0</div>
-                    <div class="text-muted">Blocks (Cumulative)</div>
+                    <div class="fs-2 fw-bold text-danger" id="c-rules">0</div>
+                    <div class="text-muted">Active Rules</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-info shadow-sm h-100">
+                <div class="card-body">
+                    <label for="modelCombination" class="form-label text-muted small">Active AI Model</label>
+                    <div class="input-group input-group-sm">
+                        <select id="modelCombination" class="form-select form-select-sm">
+                            @foreach (var item in combinations)
+                            {
+                                <option value="@item">@PolarisSentinel.Core.Constants.ModelCombinations.DisplayName(item)</option>
+                            }
+                        </select>
+                        <button type="button" class="btn btn-info" id="btnSetModel">Set</button>
+                    </div>
+                    <div id="modelStatus" class="small mt-1 text-muted"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    @* Left: live traffic trend chart *@
     <div class="row mt-4 g-3">
-        <div class="col-md-6">
+        <div class="col-md-7">
             <div class="card shadow-sm border-primary h-100">
                 <div class="card-header bg-primary text-white">
-                    Live Traffic Trend
+                    Traffic Classification
                 </div>
                 <div class="card-body">
-                    <canvas id="trafficChart" height="220"></canvas>
-                </div>   
+                    <canvas id="verdictChart" height="240"></canvas>
+                </div>
             </div>
         </div>
 
-        @* Right: AI Inference Results (latest 8 policy decisions) *@
-        <div class="col-md-6"> 
-             <div class="card shadow-sm border-primary h-100"> 
+        <div class="col-md-5">
+            <div class="card shadow-sm border-primary h-100">
                 <div class="card-header bg-primary text-white">
-                    AI Inference Results
+                    Live Traffic
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Type</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        @* id="aiResultBody" filled by SignalR *@
-                        <tbody id="aiResultBody">
-                        </tbody>
-                    </table>
-                </div> 
-             </div>
-         </div>
+                <div class="card-body">
+                    <canvas id="trafficChart" height="240"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    @* Rolling 24-hour window of classified flows, restored on page load. *@
+    <div class="card shadow-sm border-primary mt-3">
+        <div class="card-header bg-primary text-white">
+            Live Traffic (last 24 hours)
+            <span class="float-end small" id="liveCount">0 record(s)</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
+                <table class="table table-sm table-striped table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Verdict</th>
+                            <th>Source</th>
+                            <th>Destination</th>
+                            <th>Attack Type</th>
+                            <th>Confidence</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="liveBody">
+                        <tr><td colspan="7" class="text-center text-muted py-3">No traffic yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
+    <script src="~/js/polaris-hub.js"></script>
     <script>
-        const MAX_ROWS=8;
-        const ctx = document.getElementById('trafficChart').getContext('2d');
-        const trafficChart = new Chart(ctx, {
+        // Mutually exclusive verdict bar chart.
+        const verdictChart = new Chart(document.getElementById('verdictChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Normal', 'Suspicious', 'Malicious'],
+                datasets: [{
+                    label: 'Flows',
+                    data: [0, 0, 0],
+                    backgroundColor: ['#198754', '#ffc107', '#dc3545']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+        });
+
+        const trafficChart = new Chart(document.getElementById('trafficChart').getContext('2d'), {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Packets per second',
+                    label: 'Flows per minute',
                     data: [],
                     borderColor: '#2563EB',
-                    backgroundColor: 'rgba(40, 100, 235, 0.1)',
+                    backgroundColor: 'rgba(37,99,235,0.1)',
                     fill: true,
                     tension: 0.3
                 }]
             },
             options: {
-                responsive:true,
-                maintainAspectRatio:false,
-                scales: {
-                    y: { 
-                        beginAtZero: true,
-                        grid:{color:'rgba(37,99,235,0.1)'},
-                        ticks:{color:'#2563EB'}
-                        },
-                    x: { 
-                        grid:{color:'rgba(37,99,235,0.1)'},
-                        ticks:{color:'#2563EB'}
-                        }
-                }
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
             }
         });
 
-        //local counters for SignalR updates
-        let cumulativeAlerts=0;
-        let cumulativeBlocks=0;
-
-        //add: Fetch state from API on load
-        fetch('/api/detections/state')
-            .then(r=>r.json())
-            .then(state=>{
-                //Restore cumulative counters
-                cumulativeAlerts=state.monitor+state.block;
-                cumulativeBlocks=state.block;
-                document.getElementById('c-alerts').textContent=cumulativeAlerts;
-                document.getElementById('c-blocks').textContent=cumulativeBlocks;
-
-
-                //Restore AI results table (non-benign only, newest first, max 8)
-                const nonBenign=state.recent;//.filter(d=>d.attackType !=='Benign');
-
-                for (let i=Math.min(nonBenign.length, MAX_ROWS)-1;i>=0;i--)
-                {
-                    addAiResultRow(nonBenign[i]);
-                }
-        })
-        .catch(err=>console.error('Failed to fetch state',err));
-
-        // Connect the SignalR
-        const connection = new signalR.HubConnectionBuilder()
-            .withUrl("/trafficHub")
-            .withAutomaticReconnect()
-            .build();
-       
-        // Receive live traffic summary: update chart + two live cards
-        connection.on("ReceiveLiveTrafficSummary", (summary) => {
-            const now = new Date().toLocaleTimeString();
-            trafficChart.data.labels.push(now);
-            trafficChart.data.datasets[0].data.push(summary.packetsPerSecond);
-
-            if (trafficChart.data.labels.length > 20) {
-                trafficChart.data.labels.shift();
-                trafficChart.data.datasets[0].data.shift();
-            }
-
-            trafficChart.update();
-
-            // Live Traffic card show Kpps
-            document.getElementById('c-live-traffic').textContent=(summary.packetsPerSecond/1000).toFixed(1);
-            
-            // Active Flows card
-            document.getElementById('c-active-flows').textContent=summary.activeFlowCount;
-        });
-
-        //Receive policy decisions:accumulate Alerts/Blocks + add to AI results
-        connection.on('ReceivePolicyDecision',(d)=>{
-            if(d.attackType==='Benign')return;
-
-            cumulativeAlerts++;
-            if(d.action==='Block')cumulativeBlocks++;
-
-            document.getElementById('c-alerts').textContent=cumulativeAlerts;
-            document.getElementById('c-blocks').textContent=cumulativeBlocks;
-
-            addAiResultRow(d);
-        });
-
-        // AI results function shows
-        function addAiResultRow(d)
-        {
-            const body=document.getElementById('aiResultBody');
-            const row=body.insertRow(0);
-
-            //color depende on the policy action
-            row.className=d.action==='Block'?'table-danger':
-                          d.action==='Monitor'?'table-warning':'';
-
-            // the budge which can distinguish the IF and RF
-            const badge=d.action==='Block'?
-                            '<span class="badge bg-danger">BLOCK</span>':
-                            (d.action==='Monitor' && d.attackType==='Unknown_Anomaly') ?
-                            '<span class="badge bg-warning text-dark">IF</span>':
-                            '<span class="badge bg-warning text-dark">RF</span>';
-            row.innerHTML=
-                    `<td>${d.decidedAt}</td>`+
-                    `<td>${d.attackType}</td>`+
-                    `<td>${badge}</td>`;
-
-            //Keep max 8 rows
-            while (body.rows.length>MAX_ROWS)body.deleteRow(MAX_ROWS);
+        // Reloads the whole-day traffic series (used on load and after new flows).
+        function loadTrafficSeries() {
+            return fetch('/api/detections/traffic-series')
+                .then(r => r.json())
+                .then(data => {
+                    const points = data.points || [];
+                    trafficChart.data.labels = points.map(p => p.time);
+                    trafficChart.data.datasets[0].data = points.map(p => p.count);
+                    trafficChart.update();
+                })
+                .catch(err => console.error('Failed to fetch traffic series', err));
         }
 
-        connection.start().catch(err => console.error(err.toString()));
+        function applyState(state) {
+            document.getElementById('c-captured').textContent = state.capturedFlows;
+            document.getElementById('c-alerts').textContent = state.alerts;
+            verdictChart.data.datasets[0].data = [state.normal, state.suspicious, state.malicious];
+            verdictChart.update();
+            renderLive(state.recent);
+        }
+
+        // Renders the rolling 24-hour window, newest first.
+        function renderLive(records) {
+            const body = document.getElementById('liveBody');
+            const list = records || [];
+            document.getElementById('liveCount').textContent = list.length + ' record(s)';
+
+            if (list.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No traffic yet.</td></tr>';
+                return;
+            }
+
+            body.innerHTML = list.map(function (d) {
+                const badge = d.verdict === 'Malicious' ? 'bg-danger'
+                    : d.verdict === 'Suspicious' ? 'bg-warning text-dark' : 'bg-success';
+                const endpoint = d.sourceIp ? (d.sourceIp + ':' + d.destinationPort) : '-';
+                const confidence = d.confidenceScore == null ? 'N/A' : Number(d.confidenceScore).toFixed(3);
+                return '<tr>' +
+                    '<td>' + d.createdAt + '</td>' +
+                    '<td><span class="badge ' + badge + '">' + d.verdict + '</span></td>' +
+                    '<td>' + (d.sourceIp || '-') + '</td>' +
+                    '<td>' + (d.destinationIp || '-') + '</td>' +
+                    '<td>' + d.attackType + '</td>' +
+                    '<td>' + confidence + '</td>' +
+                    '<td>' + d.action + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        // Captured flows, alerts and verdict counts on load.
+        fetch('/api/detections/state')
+            .then(r => r.json())
+            .then(applyState)
+            .catch(err => console.error('Failed to fetch state', err));
+
+        // Restore the whole day's traffic line chart from the persisted series.
+        loadTrafficSeries();
+
+        // Active rule count and the current AI model combination.
+        const modelSelect = document.getElementById('modelCombination');
+        const modelStatus = document.getElementById('modelStatus');
+
+        fetch('/api/dashboard/info')
+            .then(r => r.json())
+            .then(info => {
+                document.getElementById('c-rules').textContent = info.activeRules;
+                // The option values are enum names, so use activeModel (not the display name).
+                modelSelect.value = info.activeModel;
+                modelStatus.textContent = 'Active: ' + info.activeModelDisplay;
+            })
+            .catch(err => console.error('Failed to fetch dashboard info', err));
+
+        // Change the live model combination from the dashboard.
+        document.getElementById('btnSetModel').addEventListener('click', function () {
+            const selectedText = modelSelect.options[modelSelect.selectedIndex].text;
+            const selectedValue = modelSelect.value;
+
+            // Optimistic: reflect the choice immediately, then confirm with the server.
+            modelStatus.textContent = 'Active: ' + selectedText;
+            modelStatus.className = 'small mt-1 text-success';
+
+            fetch('/api/dashboard/model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelCombination: selectedValue })
+            })
+                .then(async r => {
+                    const data = await r.json();
+                    if (!r.ok) { throw new Error(data.error || 'Failed to change model.'); }
+                    return data;
+                })
+                .then(data => {
+                    modelStatus.textContent = 'Active: ' + data.activeModelDisplay;
+                    modelStatus.className = 'small mt-1 text-success';
+                })
+                .catch(err => {
+                    modelStatus.textContent = err.message;
+                    modelStatus.className = 'small mt-1 text-danger';
+                });
+        });
+
+        // Shared connection with automatic reconnect.
+        // The dashboard ignores the raw per-second summary (the line chart uses the
+        // persisted per-minute series); register a no-op so the hub does not warn.
+        polarisHub.on('ReceiveLiveTrafficSummary', () => { });
+
+        // Refresh the counters and the day's traffic series whenever a flow is classified.
+        let seriesTimer = null;
+        polarisHub.on('ReceivePolicyDecision', () => {
+            fetch('/api/detections/state').then(r => r.json()).then(applyState)
+                .catch(err => console.error(err));
+
+            // Throttle the series reload so a burst of flows does not spam the server.
+            if (seriesTimer === null) {
+                seriesTimer = setTimeout(() => {
+                    seriesTimer = null;
+                    loadTrafficSeries();
+                }, 3000);
+            }
+        });
+
+        polarisHub.start();
     </script>
 }

@@ -30,7 +30,7 @@
                         <th>Destination</th>
                         <th>Protocol</th>
                         <th>Action</th>
-                        <th>Attack Type</th>
+                        <th>Status</th>
                         <th>Policy</th>
                         <th>Alert</th>
                         <th>Created</th>
@@ -55,7 +55,20 @@
                                 <td>@FormatEndpoint(item.DestinationIp, item.DestinationPort)</td>
                                 <td>@ProtocolName(item.Protocol)</td>
                                 <td><span class="badge bg-secondary">@item.Action</span></td>
-                                <td>@(string.IsNullOrEmpty(item.AttackType) ? "-" : item.AttackType)</td>
+                                <td>
+                                    @if (item.Status == PolarisSentinel.Core.Enums.RuleStatus.Active)
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else if (item.Status == PolarisSentinel.Core.Enums.RuleStatus.Expired)
+                                    {
+                                        <span class="badge bg-warning text-dark">Expired</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    }
+                                </td>
                                 <td>
                                     @if (!string.IsNullOrEmpty(item.PolicyId))
                                     {

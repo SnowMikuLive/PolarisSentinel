@@ -8,158 +8,155 @@ using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.FirewallEnforement;
-using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
     [TestClass]
     public class DetectionPipelineTests
     {
-        #region Pipeline Tests
-
-        // A high-confidence model detection blocks and creates a firewall rule.
+        // A normal flow stops at the pre-filter: the AI engine is not called.
         [TestMethod]
-        public void DetectionPipeline_RandomForestAttack_ShouldBlockAndCreateRule()
+        public void ProcessFlow_NormalFlow_ShouldNotCallInference()
         {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var pipeline = CreatePipeline(CreateDetection(), clock, firewall);
-            var policy = CreatePolicy();
+            var inference = new CountingInferenceEngine(CreateDetection());
+            var pipeline = CreatePipeline(inference, out _);
 
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.66"), policy);
+            var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Normal()), new[] { CreatePolicy() });
 
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.AreEqual(DetectionSource.RandomForest, decision.Source);
-            Assert.AreEqual(EntityIds.FirewallRule(decision.Id), decision.RuleName);
-            Assert.HasCount(1, firewall.GetAllRules());
+            Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
+            Assert.AreEqual(0, inference.CallCount);
+            Assert.IsNull(outcome.Alert);
         }
 
-        // A pre-filter verdict skips inference entirely and blocks without a confidence check.
+        // A known attack is alerted straight from the pre-filter, without inference.
         [TestMethod]
-        public void DetectionPipeline_PreFilterVerdict_ShouldBlockWithoutInference()
+        public void ProcessFlow_KnownAttack_ShouldAlertWithoutInference()
         {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
             var inference = new CountingInferenceEngine(CreateDetection());
-            var pipeline = CreatePipeline(inference, clock, firewall);
+            var pipeline = CreatePipeline(inference, out var firewall);
 
-            var flow = CreateFlow("203.0.113.66");
-            var preFilterFlow = new FlowFeatureVector
-            {
-                Features = flow.Features,
-                SourceIp = flow.SourceIp,
-                SourcePort = flow.SourcePort,
-                DestinationIp = flow.DestinationIp,
-                DestinationPort = flow.DestinationPort,
-                Protocol = flow.Protocol,
-                FlowStartTime = flow.FlowStartTime,
-                FlowEndTime = flow.FlowEndTime,
-                PreFilterVerdict = new PreFilterResult
-                {
-                    AttackType = AttackTypes.DoS,
-                    Confidence = 1f,
-                    Reason = "prefilter_syn_flood"
-                }
-            };
-
-            var decision = pipeline.ProcessFlow(preFilterFlow, CreatePolicy(DetectionSource.PreFilter));
+            var flow = CreateFlow(PreFilterResult.KnownAttack(AttackTypes.DoS, "SYN flood"));
+            var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.PreFilter) });
 
             Assert.AreEqual(0, inference.CallCount);
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
-            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
-        }
-
-        // 未知异常即使高置信度也不封禁。
-        // Unknown anomalies never create automatic firewall rules.
-        [TestMethod]
-        public void DetectionPipeline_UnknownAnomaly_ShouldMonitorWithoutRule()
-        {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var detection = CreateDetection(AttackTypes.UnknownAnomaly, 0.99f, DetectionSource.IsolationForest);
-            var pipeline = CreatePipeline(detection, clock, firewall);
-
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.66"), CreatePolicy(DetectionSource.IsolationForest));
-
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.IsEmpty(firewall.GetAllRules());
-            Assert.IsNull(decision.RuleName);
-        }
-
-        // Private addresses are blocked too: there is no allowlist any more.
-        [TestMethod]
-        public void DetectionPipeline_PrivateIp_ShouldBlockAndCreateRule()
-        {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var detection = CreateDetection(sourceIp: "192.168.1.5");
-            var pipeline = CreatePipeline(detection, clock, firewall);
-
-            var decision = pipeline.ProcessFlow(CreateFlow("192.168.1.5"), CreatePolicy());
-
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.IsNotNull(decision.RuleName);
+            Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
+            Assert.AreEqual(DetectionSource.PreFilter, outcome.Alert!.DetectionSource);
+            Assert.IsNull(outcome.Alert.ConfidenceScore);
+            Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
-        #endregion
+        // A suspicious flow is forwarded to the AI engine.
+        [TestMethod]
+        public void ProcessFlow_SuspiciousFlow_ShouldCallInference()
+        {
+            var inference = new CountingInferenceEngine(CreateDetection());
+            var pipeline = CreatePipeline(inference, out _);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("looks odd")), new[] { CreatePolicy() });
+
+            Assert.AreEqual(1, inference.CallCount);
+            Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
+        }
+
+        // An AI anomaly below the policy threshold is suspicious, not malicious.
+        [TestMethod]
+        public void ProcessFlow_BelowThreshold_ShouldBeSuspicious()
+        {
+            var detection = CreateDetection(confidence: 0.4f);
+            var pipeline = CreatePipeline(new CountingInferenceEngine(detection), out var firewall);
+
+            var outcome = pipeline.ProcessFlow(
+                CreateFlow(PreFilterResult.Suspicious("looks odd")),
+                new[] { CreatePolicy(rfThreshold: 0.8f) });
+
+            Assert.AreEqual(TrafficVerdict.Suspicious, outcome.Verdict);
+            Assert.IsNull(outcome.Alert);
+            Assert.IsEmpty(firewall.GetAllRules());
+        }
+
+        // The firewall rule links back to the alert that produced it.
+        [TestMethod]
+        public void ProcessFlow_BlockDecision_ShouldCreateLinkedRule()
+        {
+            var pipeline = CreatePipeline(new CountingInferenceEngine(CreateDetection()), out var firewall);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("looks odd")), new[] { CreatePolicy() });
+
+            Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
+            var rule = firewall.GetAllRules().Single();
+            Assert.AreEqual(outcome.Alert!.Id, rule.AlertId);
+            Assert.AreEqual("P-1", rule.PolicyId);
+        }
+
+        // A benign AI result produces no alert even though inference ran.
+        [TestMethod]
+        public void ProcessFlow_BenignAiResult_ShouldBeNormal()
+        {
+            var detection = CreateDetection(attackType: AttackTypes.Benign, source: DetectionSource.None);
+            var pipeline = CreatePipeline(new CountingInferenceEngine(detection), out _);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("looks odd")), new[] { CreatePolicy() });
+
+            Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
+            Assert.IsNull(outcome.Alert);
+        }
 
         #region Helper Methods
 
-        private static WindowsFirewallEnforcer CreateFirewall(FakeTimeProvider clock)
+        private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)
         {
-            return new WindowsFirewallEnforcer(new FakeRuleRepository(),
+            var clock = new FakeTimeProvider();
+            firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(),
                 Options.Create(new FirewallOptions()), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
-        }
 
-        private static DetectionPipeline CreatePipeline(Alert detection, FakeTimeProvider clock,
-            WindowsFirewallEnforcer firewall)
-        {
-            return CreatePipeline(new CountingInferenceEngine(detection), clock, firewall);
-        }
-
-        private static DetectionPipeline CreatePipeline(IInferenceEngine inference, FakeTimeProvider clock,
-            WindowsFirewallEnforcer firewall)
-        {
-            var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
+            var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
             return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),
                 NullLogger<DetectionPipeline>.Instance);
         }
 
-        private static Policy CreatePolicy(DetectionSource source = DetectionSource.RandomForest) => new()
+        private static Policy CreatePolicy(
+            DetectionSource? source = DetectionSource.RandomForest,
+            float? rfThreshold = null) => new()
         {
             Id = "P-1",
+            Name = "P-1",
+            UserId = "admin",
             DetectionSource = source,
-            RfConfidenceThreshold = 0.6f,
-            IfConfidenceThreshold = 0.6f,
-            BlockDurationMinutes = 60
+            RfThreshold = rfThreshold,
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 100,
+            IsEnabled = true
         };
 
-        private static Alert CreateDetection(string attackType = AttackTypes.DoS, float confidence = 0.95f,
-            DetectionSource source = DetectionSource.RandomForest, string sourceIp = "203.0.113.66") => new()
+        private static Alert CreateDetection(
+            string attackType = AttackTypes.DoS,
+            float confidence = 0.95f,
+            DetectionSource source = DetectionSource.RandomForest) => new()
         {
-            SourceIp = sourceIp,
-            DestinationIp = "192.168.1.10",
+            DetectionSource = source,
             AttackType = attackType,
-            Confidence = confidence,
-            Source = source,
-            Reason = string.Empty
+            ConfidenceScore = confidence,
+            SourceIp = "203.0.113.66",
+            DestinationIp = "192.168.1.10",
+            DestinationPort = 80,
+            Protocol = ProtocolNumbers.Tcp
         };
 
-        private static FlowFeatureVector CreateFlow(string sourceIp) => new()
+        private static FlowFeatureVector CreateFlow(PreFilterResult verdict) => new()
         {
             Features = new float[20],
-            SourceIp = sourceIp,
+            SourceIp = "203.0.113.66",
             SourcePort = 12345,
             DestinationIp = "192.168.1.10",
             DestinationPort = 80,
-            Protocol = 6,
+            Protocol = ProtocolNumbers.Tcp,
             FlowStartTime = DateTime.UnixEpoch,
-            FlowEndTime = DateTime.UnixEpoch.AddSeconds(1)
+            FlowEndTime = DateTime.UnixEpoch.AddSeconds(1),
+            PreFilterVerdict = verdict
         };
 
-        // Returns a fresh copy each call because the policy engine mutates the alert in place.
         private class CountingInferenceEngine : IInferenceEngine
         {
             private readonly Alert _result;
@@ -171,21 +168,21 @@ namespace PolarisSentienlUnitTestProject
                 _result = result;
             }
 
-            public Alert Detect(FlowFeatureVector flow)
+            public Alert Detect(FlowFeatureVector flow) => Detect(flow, ModelCombination.RandomForestOnly);
+
+            public Alert Detect(FlowFeatureVector flow, ModelCombination combination)
             {
                 CallCount++;
                 return new Alert
                 {
-                    SourceIp = _result.SourceIp,
-                    SourcePort = _result.SourcePort,
-                    DestinationIp = _result.DestinationIp,
-                    DestinationPort = _result.DestinationPort,
-                    Protocol = _result.Protocol,
+                    DetectionSource = _result.DetectionSource,
                     AttackType = _result.AttackType,
-                    Confidence = _result.Confidence,
-                    Source = _result.Source,
-                    DetectedAt = _result.DetectedAt,
-                    Reason = _result.Reason
+                    ConfidenceScore = _result.ConfidenceScore,
+                    SourceIp = flow.SourceIp,
+                    SourcePort = flow.SourcePort,
+                    DestinationIp = flow.DestinationIp,
+                    DestinationPort = flow.DestinationPort,
+                    Protocol = flow.Protocol
                 };
             }
         }

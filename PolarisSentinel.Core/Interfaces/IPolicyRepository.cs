@@ -6,10 +6,10 @@ public interface IPolicyRepository
 {
     Task<Policy?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
 
-    // The policy owned by a user; null when the user has none yet.
-    Task<Policy?> GetByUserAsync(string userId, CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<Policy>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    // Every enabled policy, ordered by priority (highest first).
+    Task<IReadOnlyList<Policy>> GetEnabledAsync(CancellationToken cancellationToken = default);
 
     void Add(Policy policy);
 
