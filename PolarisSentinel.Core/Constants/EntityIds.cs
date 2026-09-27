@@ -26,6 +26,24 @@ public static class EntityIds
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
 
+    // Sequential alert id, e.g. "A-1".
+    public static string Alert(int number) => $"{AlertPrefix}{number}";
+
+    // The highest numeric suffix among ids with the given prefix, or 0 when none exist.
+    public static int MaxNumber(IEnumerable<string> ids, string prefix)
+    {
+        int max = 0;
+        foreach (string id in ids)
+        {
+            if (id.StartsWith(prefix, StringComparison.Ordinal) &&
+                int.TryParse(id.AsSpan(prefix.Length), out int n) && n > max)
+            {
+                max = n;
+            }
+        }
+        return max;
+    }
+
     //历史告警编号：RF/IF/PF来源标签+序号（仅旧数据/测试）
     //Legacy alert id:RF/IF/PF tag plus counter (old rows and tests only)
     public static string Alert(DetectionSource source, int number)

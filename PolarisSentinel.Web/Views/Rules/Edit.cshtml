@@ -90,10 +90,11 @@
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label asp-for="Enabled" class="form-label"></label>
-                        <select asp-for="Enabled" class="form-select">
-                            <option value="true" selected="@Model.Enabled">Enabled</option>
-                            <option value="false" selected="@(!Model.Enabled)">Disabled</option>
+                        <label asp-for="Status" class="form-label"></label>
+                        <select asp-for="Status" class="form-select">
+                            <option value="Active" selected="@(Model.Status == PolarisSentinel.Core.Enums.RuleStatus.Active)">Active</option>
+                            <option value="Inactive" selected="@(Model.Status == PolarisSentinel.Core.Enums.RuleStatus.Inactive)">Inactive</option>
+                            <option value="Expired" selected="@(Model.Status == PolarisSentinel.Core.Enums.RuleStatus.Expired)">Expired</option>
                         </select>
                     </div>
 

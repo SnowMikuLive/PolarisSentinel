@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.DataAccess.Data;
@@ -19,11 +20,19 @@ public class AlertRepository : IAlertRepository
         _context.Alerts.Add(alert);
     }
 
+    // Sequential ids are derived from the highest existing number, so deleted
+    // rows can cause a number to be reused; acceptable for this prototype.
+    public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
+    {
+        var ids = await _context.Alerts.Select(a => a.Id).ToListAsync(cancellationToken);
+        return EntityIds.Alert(EntityIds.MaxNumber(ids, EntityIds.AlertPrefix) + 1);
+    }
+
     public async Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
     {
         return await _context.Alerts
             .AsNoTracking()
-            .OrderByDescending(a => a.DetectedAt)
+            .OrderByDescending(a => a.CreatedAt)
             .Take(count)
             .ToListAsync(cancellationToken);
     }
@@ -32,7 +41,7 @@ public class AlertRepository : IAlertRepository
     {
         return await _context.Alerts
             .AsNoTracking()
-            .OrderByDescending(a => a.DetectedAt)
+            .OrderByDescending(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 

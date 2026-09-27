@@ -1,0 +1,356 @@
+@model IReadOnlyList<PolarisSentinel.Core.Models.ModelEvaluationResult>?
+@using PolarisSentinel.Core.Constants
+@using PolarisSentinel.Core.Models
+@{
+    ViewData["Title"] = "Charts";
+    var results = Model as IReadOnlyList<ModelEvaluationResult> ?? Array.Empty<ModelEvaluationResult>();
+    var combinations = ModelCombinations.All;
+    var rows = ViewBag.Rows as IReadOnlyList<LabeledFlow> ?? Array.Empty<LabeledFlow>();
+    int page = ViewBag.Page ?? 1;
+    int pageSize = ViewBag.PageSize ?? 20;
+    int datasetCount = ViewBag.DatasetCount ?? 0;
+    string? datasetName = ViewBag.DatasetName;
+    int startIndex = (page - 1) * pageSize;
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary">Charts</h2>
+    <p class="text-muted">
+        Test a model combination on a real flow and compare all five combinations on the loaded dataset.
+        The models are not retrained here; the live pre-filter is not used.
+    </p>
+
+    @if (TempData["success"] != null)
+    {
+        <div class="alert alert-success">@TempData["success"]</div>
+    }
+    @if (TempData["error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["error"]</div>
+    }
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+            Test Dataset
+        </div>
+        <div class="card-body">
+            <form asp-action="Upload" method="post" enctype="multipart/form-data" class="row align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label">Labeled CSV</label>
+                    <input type="file" name="dataset" accept=".csv" class="form-control" />
+                    <div class="text-muted small mt-1">
+                        Upload a CIC-IDS-2017 style CSV with the 20 ML feature columns plus a <code>label</code> column.
+                        @if (datasetCount > 0)
+                        {
+                            <span>Loaded: <strong>@datasetName</strong> (@datasetCount row(s)).</span>
+                        }
+                        else
+                        {
+                            <span>No dataset loaded yet.</span>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-outline-secondary">Load Dataset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    Model Test
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Model Combination</label>
+                            <select id="modelCombination" class="form-select">
+                                @foreach (var item in combinations)
+                                {
+                                    <option value="@item">@ModelCombinations.DisplayName(item)</option>
+                                }
+                            </select>
+                            <div class="text-muted small mt-1">Change the live model on the Dashboard.</div>
+                        </div>
+                    </div>
+
+                    <h6 class="text-secondary mb-2">Test Rows</h6>
+                    @if (rows.Count == 0)
+                    {
+                        <div class="alert alert-info mb-0">Load a dataset to select a test row.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Label</th>
+                                        <th class="text-end">Duration (ms)</th>
+                                        <th class="text-end">Fwd Pkts</th>
+                                        <th class="text-end">Bwd Pkts</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < rows.Count; i++)
+                                    {
+                                        int rowIndex = startIndex + i;
+                                        var row = rows[i];
+                                        <tr>
+                                            <td>@(rowIndex + 1)</td>
+                                            <td>
+                                                @if (row.IsMalicious)
+                                                {
+                                                    <span class="badge bg-danger">Malicious</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success">Benign</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">@row.Flow.Features[0].ToString("0.##")</td>
+                                            <td class="text-end">@row.Flow.Features[1].ToString("0.##")</td>
+                                            <td class="text-end">@row.Flow.Features[2].ToString("0.##")</td>
+                                            <td class="text-end">
+                                                <button type="button" class="btn btn-sm btn-primary run-row" data-index="@rowIndex">Run</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (datasetCount > pageSize)
+                        {
+                            <nav class="mt-2">
+                                <ul class="pagination pagination-sm mb-0">
+                                    @for (int p = 1; p <= (datasetCount + pageSize - 1) / pageSize; p++)
+                                    {
+                                        <li class="page-item @(p == page ? "active" : "")">
+                                            <a class="page-link" asp-action="Index" asp-route-page="@p">@p</a>
+                                        </li>
+                                    }
+                                </ul>
+                            </nav>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-header bg-primary text-white">
+                    Result
+                </div>
+                <div class="card-body">
+                    <div id="testError" class="alert alert-danger d-none"></div>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-6">Selected Model Combination</dt>
+                        <dd class="col-sm-6" id="r-combination">-</dd>
+
+                        <dt class="col-sm-6">Attack Type</dt>
+                        <dd class="col-sm-6" id="r-attackType">-</dd>
+
+                        <dt class="col-sm-6">Confidence Score</dt>
+                        <dd class="col-sm-6" id="r-confidence">-</dd>
+
+                        <dt class="col-sm-6">Detection Source</dt>
+                        <dd class="col-sm-6" id="r-source">-</dd>
+
+                        <dt class="col-sm-6">Alert Threshold</dt>
+                        <dd class="col-sm-6" id="r-threshold">-</dd>
+
+                        <dt class="col-sm-6">Would Generate Alert</dt>
+                        <dd class="col-sm-6" id="r-wouldAlert">-</dd>
+
+                        <dt class="col-sm-6">Dataset Label</dt>
+                        <dd class="col-sm-6" id="r-expected">-</dd>
+                    </dl>
+                    <div class="alert alert-info mt-3 mb-0 small">
+                        Manual testing never modifies Windows Firewall. Only the live detection pipeline enforces rules.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+            Model Comparison
+        </div>
+        <div class="card-body">
+            <form asp-action="Evaluate" method="post">
+                <button type="submit" class="btn btn-primary" @(datasetCount == 0 ? "disabled" : "")>Evaluate Loaded Dataset</button>
+                <span class="text-muted small ms-2">
+                    @if (datasetCount > 0)
+                    {
+                        <span>Runs all five combinations on @datasetName (@datasetCount row(s)).</span>
+                    }
+                    else
+                    {
+                        <span>Load a dataset first.</span>
+                    }
+                </span>
+            </form>
+        </div>
+    </div>
+
+    @if (results.Count > 0)
+    {
+        <div class="card shadow-sm border-primary mb-3">
+            <div class="card-header bg-primary text-white">
+                Model Comparison
+                <span class="float-end small">@ViewBag.FileName - @ViewBag.RowCount row(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Model Combination</th>
+                                <th class="text-end">Accuracy</th>
+                                <th class="text-end">Precision</th>
+                                <th class="text-end">Recall</th>
+                                <th class="text-end">F1-score</th>
+                                <th class="text-end">FPR</th>
+                                <th class="text-end">FNR</th>
+                                <th class="text-end">TP</th>
+                                <th class="text-end">TN</th>
+                                <th class="text-end">FP</th>
+                                <th class="text-end">FN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in results)
+                            {
+                                var m = row.Metrics;
+                                <tr>
+                                    <td>@ModelCombinations.DisplayName(row.Combination)</td>
+                                    <td class="text-end">@Pct(m.Accuracy)</td>
+                                    <td class="text-end">@Pct(m.Precision)</td>
+                                    <td class="text-end">@Pct(m.Recall)</td>
+                                    <td class="text-end">@Pct(m.F1Score)</td>
+                                    <td class="text-end">@Pct(m.FalsePositiveRate)</td>
+                                    <td class="text-end">@Pct(m.FalseNegativeRate)</td>
+                                    <td class="text-end">@m.TruePositives</td>
+                                    <td class="text-end">@m.TrueNegatives</td>
+                                    <td class="text-end">@m.FalsePositives</td>
+                                    <td class="text-end">@m.FalseNegatives</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-primary mb-3">
+            <div class="card-header bg-primary text-white">
+                Metrics by Model Combination
+            </div>
+            <div class="card-body">
+                <canvas id="metricsChart" height="120"></canvas>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-primary">
+            <div class="card-header bg-primary text-white">Metric Formulas</div>
+            <div class="card-body small">
+                <div>Accuracy = (TP + TN) / (TP + TN + FP + FN)</div>
+                <div>Precision = TP / (TP + FP)</div>
+                <div>Recall = TP / (TP + FN)</div>
+                <div>F1-score = 2 * (Precision * Recall) / (Precision + Recall)</div>
+                <div>False Positive Rate (FPR) = FP / (FP + TN)</div>
+                <div>False Negative Rate (FNR) = FN / (FN + TP)</div>
+            </div>
+        </div>
+    }
+</div>
+
+@functions {
+    // Percentages with two decimals; "N/A" when the denominator was zero.
+    static string Pct(double? value) => value is null ? "N/A" : (value.Value * 100).ToString("0.00") + "%";
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.querySelectorAll('.run-row').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const body = {
+                    modelCombination: document.getElementById('modelCombination').value,
+                    rowIndex: parseInt(button.dataset.index, 10)
+                };
+
+                fetch('/Charts/Test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                })
+                    .then(async r => {
+                        const data = await r.json();
+                        if (!r.ok) { throw new Error(data.error || 'Test failed.'); }
+                        return data;
+                    })
+                    .then(showResult)
+                    .catch(showError);
+            });
+        });
+
+        function showResult(data) {
+            document.getElementById('testError').classList.add('d-none');
+            document.getElementById('r-combination').textContent = data.combination;
+            document.getElementById('r-attackType').textContent = data.attackType;
+            document.getElementById('r-confidence').textContent = data.confidenceScore == null ? 'N/A' : data.confidenceScore.toFixed(3);
+            document.getElementById('r-source').textContent = data.detectionSource;
+            document.getElementById('r-threshold').textContent = data.threshold == null ? 'Not checked' : data.threshold.toFixed(2);
+            document.getElementById('r-wouldAlert').innerHTML = data.wouldGenerateAlert
+                ? '<span class="badge bg-danger">Yes</span>'
+                : '<span class="badge bg-success">No</span>';
+            document.getElementById('r-expected').innerHTML = data.expectedMalicious
+                ? '<span class="badge bg-danger">Malicious</span>'
+                : '<span class="badge bg-success">Benign</span>';
+        }
+
+        function showError(err) {
+            const box = document.getElementById('testError');
+            box.textContent = err.message;
+            box.classList.remove('d-none');
+        }
+
+        @if (results.Count > 0)
+        {
+            <text>
+            const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => ModelCombinations.DisplayName(r.Combination))));
+            const accuracy = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.Accuracy)));
+            const precision = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.Precision)));
+            const recall = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.Recall)));
+            const f1 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.F1Score)));
+
+            new Chart(document.getElementById('metricsChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Accuracy', data: accuracy, backgroundColor: '#0d6efd' },
+                        { label: 'Precision', data: precision, backgroundColor: '#198754' },
+                        { label: 'Recall', data: recall, backgroundColor: '#ffc107' },
+                        { label: 'F1-score', data: f1, backgroundColor: '#dc3545' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 1 } }
+                }
+            });
+            </text>
+        }
+    </script>
+}

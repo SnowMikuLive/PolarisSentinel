@@ -1,0 +1,18 @@
+@{
+    ViewData["Title"] = "Access Denied";
+    Layout = "_LoginLayout";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white">
+                Access Denied
+            </div>
+            <div class="card-body">
+                <p>You do not have permission to access this page.</p>
+                <a asp-controller="Dashboard" asp-action="Index" class="btn btn-outline-primary">Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>

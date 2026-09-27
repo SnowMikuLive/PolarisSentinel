@@ -2,9 +2,12 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-// Classifies a flow's features into an attack type and confidence.
+// Runs the configured AI model combination over a flow and produces a detection result.
 public interface IInferenceEngine
 {
-    // Run inference and return an alert carrying the 5-tuple and the detected attack type.
+    // Runs the active model combination and returns the resulting alert.
     Alert Detect(FlowFeatureVector flow);
+
+    // Runs a specific model combination without touching the live configuration.
+    Alert Detect(FlowFeatureVector flow, Enums.ModelCombination combination);
 }

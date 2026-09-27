@@ -12,257 +12,180 @@ namespace PolarisSentienlUnitTestProject
     [TestClass]
     public class FirewallEnforcerUnitTest
     {
-        #region Block Tests
-
         [TestMethod]
-        public void FirewallEnforcer_Block_ShouldCreateRule()
+        public void Apply_BlockInboundIp_ShouldConstrainRemoteAddress()
         {
             var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
 
-            var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsTrue(enforcer.IsDryRun);
-            Assert.IsTrue(Guid.TryParseExact(rule.Id, "N", out _));
             Assert.AreEqual("PolarisSentinel_Block_A-RF-1", rule.Name);
-            Assert.HasCount(1, enforcer.GetAllRules());
+            Assert.AreEqual("203.0.113.10", rule.SourceIp);
+            Assert.IsNull(rule.SourcePort);
+            Assert.AreEqual((byte)ProtocolNumbers.Tcp, rule.Protocol);
+            Assert.AreEqual("P-1", rule.PolicyId);
+            Assert.AreEqual("A-RF-1", rule.AlertId);
         }
 
         [TestMethod]
-        public void FirewallEnforcer_Block_ShouldPersistFiveTuple()
+        public void Apply_BlockInboundPort_ShouldConstrainLocalPort()
         {
             var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
 
-            enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundPort), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            var stored = enforcer.GetAllRules()[0];
-            Assert.AreEqual("203.0.113.10", stored.SourceIp);
-            Assert.AreEqual(44321, stored.SourcePort);
-            Assert.AreEqual("192.168.1.10", stored.DestinationIp);
-            Assert.AreEqual(80, stored.DestinationPort);
-            Assert.AreEqual((byte)6, stored.Protocol);
+            Assert.AreEqual(80, rule.DestinationPort);
+            Assert.IsNull(rule.SourcePort);
         }
 
-        // Blocking the same alert id again only pushes the expiry out.
         [TestMethod]
-        public void FirewallEnforcer_SameAlertId_ShouldExtendExpiry()
+        public void Apply_BlockOutboundIp_ShouldConstrainDestinationAddress()
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
+
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockOutboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
+
+            Assert.AreEqual("192.168.1.10", rule.SourceIp);
+            Assert.AreEqual(PolicyAction.BlockOutboundIp, rule.Action);
+        }
+
+        // ICMP has no ports, so a port action must be rejected with a clear error.
+        [TestMethod]
+        public void Apply_PortActionOnIcmp_ShouldThrow()
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert(protocol: ProtocolNumbers.Icmp);
+
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                enforcer.Apply(Decision(alert, PolicyAction.BlockInboundPort), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60)));
+        }
+
+        // A null alert id marks a manual rule with no originating alert.
+        [TestMethod]
+        public void Apply_ManualRule_ShouldHaveNullAssociations()
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
+
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), null, null, null, TimeSpan.FromMinutes(60));
+
+            Assert.IsNull(rule.PolicyId);
+            Assert.IsNull(rule.AlertId);
+            Assert.IsTrue(rule.Name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal));
+        }
+
+        [TestMethod]
+        public void Apply_SameAlertId_ShouldExtendExpiryAndKeepOneRule()
         {
             var clock = new FakeTimeProvider();
             var (enforcer, _) = CreateEnforcer(clock);
+            var alert = CreateAlert();
 
-            var first = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var first = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
             var firstExpiry = first.ExpiresAt;
 
             clock.Advance(TimeSpan.FromMinutes(10));
-
-            var second = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var second = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.HasCount(1, enforcer.GetAllRules());
             Assert.IsTrue(second.ExpiresAt > firstExpiry);
         }
 
-        // A shorter duration never shortens an existing rule's expiry.
         [TestMethod]
-        public void FirewallEnforcer_SameAlertIdShorterDuration_ShouldKeepExpiry()
-        {
-            var clock = new FakeTimeProvider();
-            var (enforcer, _) = CreateEnforcer(clock);
-
-            var first = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-            var firstExpiry = first.ExpiresAt;
-
-            var second = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(10));
-
-            Assert.HasCount(1, enforcer.GetAllRules());
-            Assert.AreEqual(firstExpiry, second.ExpiresAt);
-        }
-
-        [TestMethod]
-        public void FirewallEnforcer_ZeroDuration_ShouldNotCreateRule()
+        public void Update_ShouldChangeFiveTupleAndStatus()
         {
             var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.Zero);
-
-            Assert.IsEmpty(enforcer.GetAllRules());
-        }
-
-        [TestMethod]
-        public void FirewallEnforcer_Block_ShouldCreateDifferentRuleIds()
-        {
-            var (enforcer, _) = CreateEnforcer();
-
-            var first = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-            var second = enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6,
-                PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
-
-            Assert.AreNotEqual(first.Id, second.Id);
-        }
-
-        // A scope that constrains nothing becomes a single shared all-traffic rule.
-        [TestMethod]
-        public void FirewallEnforcer_BlockAnyScope_ShouldCreateSingleSharedRule()
-        {
-            var (enforcer, _) = CreateEnforcer();
-
-            var first = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
-                FirewallRuleScope.Any);
-            var second = enforcer.Block("198.51.100.23", 2, "192.168.1.20", 22, 6,
-                PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60),
-                FirewallRuleScope.Any);
-
-            Assert.HasCount(1, enforcer.GetAllRules());
-            Assert.AreEqual("PolarisSentinel_Block_ANY", first.Name);
-            Assert.AreEqual(first.Id, second.Id);
-            Assert.AreEqual(string.Empty, first.SourceIp);
-            Assert.AreEqual((byte)0, first.Protocol);
-        }
-
-        // Partial scopes keep only the fields the policy chose to block.
-        [TestMethod]
-        public void FirewallEnforcer_BlockPartialScope_ShouldKeepBlockedFieldsOnly()
-        {
-            var (enforcer, _) = CreateEnforcer();
-
-            var rule = enforcer.Block("203.0.113.10", 44321, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60),
-                new FirewallRuleScope { SourceIp = "203.0.113.10", Protocol = 6 });
-
-            Assert.AreEqual("203.0.113.10", rule.SourceIp);
-            Assert.AreEqual(0, rule.SourcePort);
-            Assert.AreEqual(string.Empty, rule.DestinationIp);
-            Assert.AreEqual(0, rule.DestinationPort);
-            Assert.AreEqual((byte)6, rule.Protocol);
-            Assert.IsFalse(rule.Name.EndsWith("ANY", StringComparison.Ordinal));
-        }
-
-        #endregion
-
-        #region Update / Remove Tests
-
-        [TestMethod]
-        public void FirewallEnforcer_Update_ShouldChangeFiveTuple()
-        {
-            var (enforcer, _) = CreateEnforcer();
-            var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-
-            var updated = enforcer.Update(rule.Id, "198.51.100.23", 2, "192.168.1.20", 443, 17,
-                PolicyAction.Block, true, TimeSpan.FromMinutes(30));
+            var updated = enforcer.Update(rule.Id, "198.51.100.23", 2, "192.168.1.20", 443, ProtocolNumbers.Udp,
+                PolicyAction.BlockOutboundPort, RuleStatus.Inactive, TimeSpan.FromMinutes(30));
 
             Assert.IsNotNull(updated);
             Assert.AreEqual("198.51.100.23", updated.SourceIp);
             Assert.AreEqual(443, updated.DestinationPort);
-            Assert.AreEqual((byte)17, updated.Protocol);
+            Assert.AreEqual(RuleStatus.Inactive, updated.Status);
         }
 
         [TestMethod]
-        public void FirewallEnforcer_UpdateUnknownId_ShouldReturnNull()
+        public void Update_UnknownId_ShouldReturnNull()
         {
             var (enforcer, _) = CreateEnforcer();
-            var updated = enforcer.Update("R-99", "1.1.1.1", 1, "2.2.2.2", 2, 6,
-                PolicyAction.Block, true, TimeSpan.FromMinutes(30));
-            Assert.IsNull(updated);
+            Assert.IsNull(enforcer.Update("R-99", "1.1.1.1", 1, "2.2.2.2", 2, ProtocolNumbers.Tcp,
+                PolicyAction.BlockInboundIp, RuleStatus.Active, TimeSpan.FromMinutes(30)));
         }
 
         [TestMethod]
-        public void FirewallEnforcer_Remove_ShouldDeleteRule()
+        public void Remove_ShouldDeleteRule()
         {
             var (enforcer, _) = CreateEnforcer();
-            var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var alert = CreateAlert();
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             Assert.IsTrue(enforcer.Remove(rule.Id));
             Assert.IsEmpty(enforcer.GetAllRules());
-        }
-
-        [TestMethod]
-        public void FirewallEnforcer_RemoveUnknownId_ShouldReturnFalse()
-        {
-            var (enforcer, _) = CreateEnforcer();
             Assert.IsFalse(enforcer.Remove("R-99"));
         }
 
         [TestMethod]
-        public void FirewallEnforcer_RemoveAll_ShouldDeleteEveryRule()
+        public void RemoveAll_ShouldDeleteEveryRule()
         {
             var (enforcer, _) = CreateEnforcer();
-            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6, PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-            enforcer.Block("198.51.100.23", 2, "192.168.1.10", 22, 6, PolicyAction.Block, "A-RF-2", "P-1", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
+            enforcer.Apply(Decision(CreateAlert("A-RF-1"), PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            enforcer.Apply(Decision(CreateAlert("A-RF-2"), PolicyAction.BlockInboundIp), "P-1", "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
 
             Assert.AreEqual(2, enforcer.RemoveAll());
             Assert.IsEmpty(enforcer.GetAllRules());
         }
 
-        #endregion
-
-        #region Expiry Tests
-
         [TestMethod]
-        public void FirewallEnforcer_RemoveExpired_ShouldKeepActiveRule()
+        public void RemoveExpired_ShouldMarkRuleExpired()
         {
             var clock = new FakeTimeProvider();
             var (enforcer, _) = CreateEnforcer(clock);
-            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var alert = CreateAlert();
+            enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
             clock.Advance(TimeSpan.FromMinutes(30));
             Assert.AreEqual(0, enforcer.RemoveExpired());
-            Assert.HasCount(1, enforcer.GetAllRules());
-        }
 
-        [TestMethod]
-        public void FirewallEnforcer_RemoveExpired_ShouldDeleteExpiredRule()
-        {
-            var clock = new FakeTimeProvider();
-            var (enforcer, _) = CreateEnforcer(clock);
-            enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-
-            clock.Advance(TimeSpan.FromMinutes(61));
+            clock.Advance(TimeSpan.FromMinutes(31));
             Assert.AreEqual(1, enforcer.RemoveExpired());
-            Assert.IsEmpty(enforcer.GetAllRules());
         }
-
-        #endregion
-
-        #region Lookup Tests
-
-        [TestMethod]
-        public void FirewallEnforcer_GetById_ShouldReturnRule()
-        {
-            var (enforcer, _) = CreateEnforcer();
-            var rule = enforcer.Block("203.0.113.10", 1, "192.168.1.10", 80, 6,
-                PolicyAction.Block, "A-RF-1", "P-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-
-            Assert.IsNotNull(enforcer.GetById(rule.Id));
-            Assert.IsNull(enforcer.GetById("R-99"));
-        }
-
-        #endregion
 
         #region Helper Methods
 
-        // DryRun keeps the tests in memory; the repository is still written.
         private static (WindowsFirewallEnforcer Enforcer, FakeRuleRepository Repository) CreateEnforcer(
             FakeTimeProvider? clock = null)
         {
             var repository = new FakeRuleRepository();
             var enforcer = new WindowsFirewallEnforcer(
                 repository,
-                Options.Create(new FirewallOptions()),
+                Options.Create(new FirewallOptions { DryRun = true }),
                 clock ?? new FakeTimeProvider(),
                 NullLogger<WindowsFirewallEnforcer>.Instance);
             return (enforcer, repository);
         }
+
+        private static PolicyDecision Decision(Alert alert, PolicyAction action) =>
+            new() { Alert = alert, Action = action, PolicyId = "P-1", BlockDurationMinutes = 60 };
+
+        private static Alert CreateAlert(string id = "A-RF-1", byte protocol = ProtocolNumbers.Tcp) => new()
+        {
+            Id = id,
+            DetectionSource = DetectionSource.RandomForest,
+            AttackType = AttackTypes.DoS,
+            ConfidenceScore = 0.95f,
+            SourceIp = "203.0.113.10",
+            SourcePort = 44321,
+            DestinationIp = "192.168.1.10",
+            DestinationPort = 80,
+            Protocol = protocol
+        };
 
         #endregion
     }

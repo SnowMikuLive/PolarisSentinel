@@ -8,7 +8,7 @@ using PolarisSentinel.Web.Hubs;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Capture adapter: runs the detection pipeline, pushes SignalR updates and persists alerts.
+    // Capture adapter: runs the detection pipeline, pushes SignalR updates and records dashboard counters.
     public class TrafficBroadcastService : IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
@@ -16,6 +16,7 @@ namespace PolarisSentinel.Web.Service
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly CaptureControlService _captureControl;
         private readonly DetectionStateService _state;
+        private readonly TrafficHistoryService _history;
         private readonly ILogger<TrafficBroadcastService> _logger;
 
         public TrafficBroadcastService(
@@ -24,6 +25,7 @@ namespace PolarisSentinel.Web.Service
             IServiceScopeFactory scopeFactory,
             CaptureControlService captureControl,
             DetectionStateService state,
+            TrafficHistoryService history,
             ILogger<TrafficBroadcastService> logger)
         {
             _hubContext = hubContext;
@@ -31,6 +33,7 @@ namespace PolarisSentinel.Web.Service
             _scopeFactory = scopeFactory;
             _captureControl = captureControl;
             _state = state;
+            _history = history;
             _logger = logger;
         }
 
@@ -63,7 +66,7 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Runs one completed flow through the pipeline and persists the resulting alert.
+        // Runs one completed flow through the pipeline and records the outcome.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
@@ -72,27 +75,15 @@ namespace PolarisSentinel.Web.Service
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var pipeline = scope.ServiceProvider.GetRequiredService<IDetectionPipeline>();
 
-                var policies = await unitOfWork.Policies.GetAllAsync();
-                var decision = pipeline.ProcessFlow(flow, policies);
-                _logger.LogInformation(
-                    "Flow {SourceIp}: {AttackType}, {Source}, {Action}, {Reason}",
-                    decision.SourceIp, decision.AttackType, decision.Source, decision.Action, decision.Reason);
+                var policies = await unitOfWork.Policies.GetEnabledAsync();
+                var outcome = pipeline.ProcessFlow(flow, policies);
 
-                var record = new DetectionRecord(
-                    decision.Id,
-                    decision.SourceIp,
-                    decision.DestinationIp,
-                    decision.DestinationPort,
-                    decision.AttackType,
-                    decision.Confidence,
-                    decision.Action.ToString(),
-                    decision.DecidedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                    decision.Reason,
-                    decision.Source.ToString(),
-                    decision.RuleName);
+                var record = _state.Record(outcome);
 
-                // Push results first so a database error does not stop live updates.
-                _state.Record(record);
+                // Persist for long-term history so charts survive a restart.
+                _history.Enqueue(DetectionStateService.ToTrafficRecord(record));
+
+                // Every classified flow is pushed so the live monitor can show the full window.
                 await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
             }
             catch (Exception ex)

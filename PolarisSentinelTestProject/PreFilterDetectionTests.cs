@@ -8,160 +8,155 @@ using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.FirewallEnforement;
-using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
     [TestClass]
     public class PreFilterDetectionTests
     {
-        #region Pipeline Tests
-
-        // A pre-filter verdict is treated like a model detection and blocks immediately.
+        // A known pre-filter attack blocks immediately and never reaches inference.
         [TestMethod]
         public void PreFilterVerdict_ShouldBlockImmediately()
         {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var pipeline = CreatePipeline(clock, firewall);
+            var inference = new CountingInferenceEngine();
+            var pipeline = CreatePipeline(inference, out var firewall);
 
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), CreatePolicy());
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
 
-            Assert.AreEqual(PolicyAction.Block, decision.Action);
-            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
-            Assert.AreEqual("attack_detected", decision.Reason);
+            Assert.AreEqual(0, inference.CallCount);
+            Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
+            Assert.AreEqual(DetectionSource.PreFilter, outcome.Alert!.DetectionSource);
+            Assert.AreEqual("policy_block", outcome.Decision.Reason);
             Assert.HasCount(1, firewall.GetAllRules());
         }
 
-        // 唯一编号和检测来源分开保存。
-        // Store the unique ID separately from its source.
+        // A pre-filter alert carries no model confidence.
         [TestMethod]
-        public void PreFilterVerdict_ShouldKeepSourceWithUniqueId()
+        public void PreFilterVerdict_ShouldHaveNullConfidence()
         {
-            var clock = new FakeTimeProvider();
-            var pipeline = CreatePipeline(clock, CreateFirewall(clock));
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
 
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.PortScan), CreatePolicy());
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.PortScan), new[] { CreatePolicy() });
 
-            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
-            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
+            Assert.IsNull(outcome.Alert!.ConfidenceScore);
+            Assert.AreEqual("PortScan", outcome.Alert.AttackType);
         }
 
-        // 规则名保留告警编号。
-        // Keep the alert ID in the firewall rule name.
+        // The firewall rule name contains the alert id.
         [TestMethod]
         public void PreFilterVerdict_ShouldUseAlertIdInRuleName()
         {
-            var clock = new FakeTimeProvider();
-            var firewall = CreateFirewall(clock);
-            var pipeline = CreatePipeline(clock, firewall);
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out var firewall);
 
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), CreatePolicy());
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
 
-            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
-            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
-            Assert.AreEqual($"PolarisSentinel_Block_{decision.Id}", decision.RuleName);
-            Assert.AreEqual(decision.RuleName, firewall.GetAllRules()[0].Name);
+            Assert.AreEqual($"PolarisSentinel_Block_{outcome.Alert!.Id}", outcome.Rule!.Name);
+            Assert.AreEqual(outcome.Rule.Name, firewall.GetAllRules()[0].Name);
         }
 
-        // Every detection source maps onto its own alert tag.
+        // The pre-filter alert carries the flow's 5-tuple and flag counters.
         [TestMethod]
-        public void AlertId_ShouldTagEveryDetectionSource()
+        public void PreFilterVerdict_ShouldCarryFiveTupleAndFlags()
         {
-            Assert.AreEqual("A-PF-7", EntityIds.Alert(DetectionSource.PreFilter, 7));
-            Assert.AreEqual("A-RF-7", EntityIds.Alert(DetectionSource.RandomForest, 7));
-            Assert.AreEqual("A-IF-7", EntityIds.Alert(DetectionSource.IsolationForest, 7));
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
+
+            var alert = outcome.Alert!;
+            Assert.AreEqual("203.0.113.9", alert.SourceIp);
+            Assert.AreEqual(12345, alert.SourcePort);
+            Assert.AreEqual("192.168.1.10", alert.DestinationIp);
+            Assert.AreEqual(80, alert.DestinationPort);
+            Assert.AreEqual(ProtocolNumbers.Tcp, alert.Protocol);
+            Assert.AreEqual(1500, alert.SynCount);
         }
 
-        // 未匹配策略也保留来源。
-        // Keep the source even when no policy matches.
+        // The flow snapshot is persisted for the alert detail page.
         [TestMethod]
-        public void PreFilterVerdict_NoMatch_ShouldKeepSourceWithUniqueId()
+        public void PreFilterVerdict_ShouldStoreFlowSnapshot()
         {
-            var clock = new FakeTimeProvider();
-            var pipeline = CreatePipeline(clock, CreateFirewall(clock));
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
+
+            var snapshot = FlowSnapshot.Read(outcome.Alert!.FlowSnapshotJson);
+            Assert.IsNotEmpty(snapshot);
+            Assert.IsTrue(snapshot.Any(kv => kv.Key == "flow_duration_ms"));
+            Assert.IsTrue(snapshot.Any(kv => kv.Key == "syn_count"));
+        }
+
+        // A pre-filter attack that no policy matches is still alerted, just monitored.
+        [TestMethod]
+        public void PreFilterVerdict_NoMatchingPolicy_ShouldStillAlert()
+        {
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out var firewall);
             var policy = CreatePolicy();
-            policy.MatchAttackTypes = AttackTypes.BruteForce;
+            policy.AttackType = AttackTypes.BruteForce;
 
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), policy);
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { policy });
 
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.IsTrue(Guid.TryParseExact(decision.Id, "N", out _));
-            Assert.AreEqual(DetectionSource.PreFilter, decision.Source);
+            Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
+            Assert.AreEqual(PolicyAction.Monitor, outcome.Decision!.Action);
+            Assert.IsEmpty(firewall.GetAllRules());
         }
-
-        // The pre-filter alert carries the flow's 5-tuple.
-        [TestMethod]
-        public void PreFilterVerdict_ShouldCarryFiveTuple()
-        {
-            var clock = new FakeTimeProvider();
-            var pipeline = CreatePipeline(clock, CreateFirewall(clock));
-
-            var decision = pipeline.ProcessFlow(CreateFlow("203.0.113.9", AttackTypes.DoS), CreatePolicy());
-
-            Assert.AreEqual("203.0.113.9", decision.SourceIp);
-            Assert.AreEqual(12345, decision.SourcePort);
-            Assert.AreEqual("192.168.1.10", decision.DestinationIp);
-            Assert.AreEqual(80, decision.DestinationPort);
-            Assert.AreEqual(6, decision.Protocol);
-        }
-
-        #endregion
 
         #region Helper Methods
 
-        private static WindowsFirewallEnforcer CreateFirewall(FakeTimeProvider clock)
+        private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)
         {
-            return new WindowsFirewallEnforcer(new FakeRuleRepository(),
+            var clock = new FakeTimeProvider();
+            firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(),
                 Options.Create(new FirewallOptions()), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
-        }
 
-        private static DetectionPipeline CreatePipeline(FakeTimeProvider clock, WindowsFirewallEnforcer firewall)
-        {
-            var policy = new PolicyEngine(clock, NullLogger<PolicyEngine>.Instance);
-            return new DetectionPipeline(new NoopInferenceEngine(), policy, firewall, new FakeUnitOfWork(),
+            var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
+            return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),
                 NullLogger<DetectionPipeline>.Instance);
         }
 
         private static Policy CreatePolicy() => new()
         {
             Id = "P-1",
+            Name = "P-1",
+            UserId = "admin",
             DetectionSource = DetectionSource.PreFilter,
-            RfConfidenceThreshold = 0.6f,
-            IfConfidenceThreshold = 0.6f,
-            BlockDurationMinutes = 60
+            Action = PolicyAction.BlockInboundIp,
+            BlockDurationMinutes = 60,
+            Priority = 100,
+            IsEnabled = true
         };
 
-        private static FlowFeatureVector CreateFlow(string sourceIp, string attackType) => new()
+        private static FlowFeatureVector CreateFlow(string attackType) => new()
         {
             Features = new float[20],
-            SourceIp = sourceIp,
+            SourceIp = "203.0.113.9",
             SourcePort = 12345,
             DestinationIp = "192.168.1.10",
             DestinationPort = 80,
-            Protocol = 6,
+            Protocol = ProtocolNumbers.Tcp,
             FlowStartTime = DateTime.UnixEpoch,
             FlowEndTime = DateTime.UnixEpoch.AddSeconds(1),
-            PreFilterVerdict = new PreFilterResult
-            {
-                AttackType = attackType,
-                Confidence = 1f,
-                Reason = $"prefilter_{attackType}"
-            }
+            SynCount = 1500,
+            PreFilterVerdict = PreFilterResult.KnownAttack(attackType, $"prefilter_{attackType.ToLowerInvariant()}")
         };
 
-        // Pre-filter flows never reach inference; this proves it by returning a benign result.
-        private class NoopInferenceEngine : IInferenceEngine
+        private class CountingInferenceEngine : IInferenceEngine
         {
-            public Alert Detect(FlowFeatureVector flow) => new()
+            public int CallCount { get; private set; }
+
+            public Alert Detect(FlowFeatureVector flow) => Detect(flow, ModelCombination.RandomForestOnly);
+
+            public Alert Detect(FlowFeatureVector flow, ModelCombination combination)
             {
-                SourceIp = flow.SourceIp,
-                DestinationIp = flow.DestinationIp,
-                AttackType = AttackTypes.Benign,
-                Confidence = 0f,
-                Source = DetectionSource.None,
-                Reason = string.Empty
-            };
+                CallCount++;
+                return new Alert
+                {
+                    DetectionSource = DetectionSource.RandomForest,
+                    AttackType = AttackTypes.DoS,
+                    ConfidenceScore = 0.99f,
+                    SourceIp = flow.SourceIp,
+                    DestinationIp = flow.DestinationIp
+                };
+            }
         }
 
         #endregion

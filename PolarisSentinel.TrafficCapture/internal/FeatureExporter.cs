@@ -85,7 +85,12 @@ internal static class FeatureExporter
             FlowStartTime = flow.StartTime,
             FlowEndTime = flow.LastSeenTime,
             TotalPackets = flow.TotalPackets,
-            TotalBytes = flow.TotalBytes
+            TotalBytes = flow.TotalBytes,
+            SynCount = flow.SynCount,
+            AckCount = flow.AckCount,
+            FinCount = flow.FinCount,
+            RstCount = flow.RstCount,
+            PshCount = flow.PshCount
         };
     }
 }

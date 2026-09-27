@@ -1,0 +1,101 @@
+using System.Globalization;
+using System.Text.Json;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
+using PolarisSentinel.Core.Constants;
+using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Core.Models;
+
+namespace PolarisSentinel.Inference;
+
+// Random Forest classifier backed by an ONNX model.
+public class RandomForestModel : IRandomForestModel, IDisposable
+{
+    private readonly InferenceSession _session;
+    private readonly string _inputName;
+    private readonly int _benignIndex;
+
+    public IReadOnlyList<string> ClassNames { get; }
+
+    public IReadOnlyList<string> FeatureNames { get; }
+
+    // Minimum probability for the classifier to report a known attack.
+    public double ConfidenceThreshold { get; }
+
+    public RandomForestModel(string modelPath)
+    {
+        if (!File.Exists(modelPath))
+        {
+            throw new FileNotFoundException($"ONNX classifier not found: {modelPath}");
+        }
+
+        _session = new InferenceSession(modelPath);
+        _inputName = _session.InputMetadata.Keys.First();
+
+        var metadata = _session.ModelMetadata.CustomMetadataMap;
+        ClassNames = JsonSerializer.Deserialize<string[]>(metadata["class_names"])!;
+        FeatureNames = JsonSerializer.Deserialize<string[]>(metadata["feature_names"])!;
+        ConfidenceThreshold = ParseDouble(metadata["rf_confidence_threshold"]);
+        _benignIndex = Array.IndexOf(ClassNames.ToArray(), AttackTypes.Benign);
+    }
+
+    public InferenceResult Classify(FlowFeatureVector flow)
+    {
+        var probabilities = Run(flow);
+
+        int best = 0;
+        for (int i = 1; i < ClassNames.Count; i++)
+        {
+            if (probabilities[0, i] > probabilities[0, best])
+            {
+                best = i;
+            }
+        }
+
+        float probability = probabilities[0, best];
+        string label = ClassNames[best];
+
+        if (label == AttackTypes.Benign)
+        {
+            return new InferenceResult { AttackType = AttackTypes.Benign, ConfidenceScore = probability };
+        }
+
+        // The model's class names are external labels; only the categories defined by
+        // the AttackType enum may enter the system.
+        if (!AttackTypes.TryParse(label, out string known))
+        {
+            throw new InvalidOperationException(
+                $"Model emitted unknown class '{label}'. Expected one of: {string.Join(", ", AttackTypes.All)}.");
+        }
+
+        return new InferenceResult
+        {
+            AttackType = known,
+            ConfidenceScore = probability,
+            Description = $"Random Forest classified the flow as {known}."
+        };
+    }
+
+    // True when the classifier reports a known attack above its threshold.
+    public bool ExceedsThreshold(InferenceResult result) =>
+        result.AttackType != AttackTypes.Benign && result.ConfidenceScore >= ConfidenceThreshold;
+
+    public float BenignProbability(FlowFeatureVector flow) => Run(flow)[0, _benignIndex];
+
+    private Tensor<float> Run(FlowFeatureVector flow)
+    {
+        if (flow.Features.Length != FeatureNames.Count)
+        {
+            throw new ArgumentException($"Expected {FeatureNames.Count} features, got {flow.Features.Length}.");
+        }
+
+        var input = new DenseTensor<float>(flow.Features, new int[] { 1, FeatureNames.Count });
+        using var results = _session.Run(
+            new NamedOnnxValue[] { NamedOnnxValue.CreateFromTensor(_inputName, input) });
+        return results.First(r => r.Name == "probabilities").AsTensor<float>();
+    }
+
+    private static double ParseDouble(string value) => double.Parse(value, CultureInfo.InvariantCulture);
+
+    public void Dispose() => _session.Dispose();
+}

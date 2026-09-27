@@ -16,14 +16,14 @@ namespace PolarisSentinel.DataAccess.Data;
 public sealed class SentinelDbInitializer
 {
     private readonly SentinelDbContext _db;
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly AdminSeedOptions _options;
     private readonly ILogger<SentinelDbInitializer> _logger;
 
     public SentinelDbInitializer(
         SentinelDbContext db,
-        UserManager<IdentityUser> userManager,
+        UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole> roleManager,
         IOptions<AdminSeedOptions> options,
         ILogger<SentinelDbInitializer> logger)
@@ -64,11 +64,13 @@ public sealed class SentinelDbInitializer
         var admin = await _userManager.FindByNameAsync(_options.UserName);
         if (admin is null)
         {
-            admin = new IdentityUser
+            admin = new ApplicationUser
             {
                 UserName = _options.UserName,
                 Email = _options.Email,
-                EmailConfirmed = true
+                EmailConfirmed = true,
+                // The seeded password is a known default, so force a change on first login.
+                MustChangePassword = true
             };
 
             var created = await _userManager.CreateAsync(admin, _options.Password);

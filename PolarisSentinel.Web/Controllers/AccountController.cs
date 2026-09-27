@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using PolarisSentinel.DataAccess.Data;
 using PolarisSentinel.Web.Models;
 using System.Threading.Tasks;
 
@@ -8,49 +9,43 @@ namespace PolarisSentinel.Web.Controllers
 {
     public class AccountController : Controller
     {
-        //Sign in manager for handling user authentication
-        private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        //User manager for handling user management
-        private readonly UserManager<IdentityUser> _userManager;
-
-        public AccountController(SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager)
+        public AccountController(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager)
         {
             _signInManager = signInManager;
             _userManager = userManager;
         }
 
-        //Display the login page
         [HttpGet]
-        //Allow Anonymous access to the login page
         [AllowAnonymous]
         public IActionResult Login(string? returnUrl = null)
-        { 
-
-            //Save the return URL in the ViewData dictionary to redirect the user after successful login
+        {
             ViewData["ReturnUrl"] = returnUrl;
             return View();
         }
 
-        //Handle the login form submission
         [HttpPost]
         [AllowAnonymous]
-        //Prevent Cross-Site Request Forgery (CSRF)
         [ValidateAntiForgeryToken]
-
         public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
 
-            //Check model state
             if (ModelState.IsValid)
             {
-                //Attempt to sign in,put '!' after model.Username and model.Password to avoid null reference exception
                 var result = await _signInManager.PasswordSignInAsync(model.Username!, model.Password!, isPersistent: false, lockoutOnFailure: false);
 
-                //successful
-                if(result.Succeeded)
+                if (result.Succeeded)
                 {
+                    // A seeded account must change its password before anything else.
+                    var user = await _userManager.FindByNameAsync(model.Username!);
+                    if (user is { MustChangePassword: true })
+                    {
+                        return RedirectToAction(nameof(ChangePassword));
+                    }
+
                     TempData["success"] = "Login successful.";
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
@@ -59,26 +54,74 @@ namespace PolarisSentinel.Web.Controllers
                 }
                 else
                 {
-                    //if login fails, the error message will be shown.
                     TempData["error"] = "Invalid username or password.";
                 }
-
             }
-            //Return Login view with the validation errors
+
             return View(model);
         }
 
-        //Logout
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction(nameof(Login));
+            }
+
+            return View(new ChangePasswordViewModel());
+        }
+
         [HttpPost]
-        //logout only can happen after login, anonymous access do not needed
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(model);
+            }
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+            {
+                return RedirectToAction(nameof(Login));
+            }
+
+            var result = await _userManager.ChangePasswordAsync(user, model.CurrentPassword!, model.NewPassword!);
+            if (!result.Succeeded)
+            {
+                foreach (var error in result.Errors)
+                {
+                    ModelState.AddModelError(string.Empty, error.Description);
+                }
+                return View(model);
+            }
+
+            user.MustChangePassword = false;
+            await _userManager.UpdateAsync(user);
+            await _signInManager.RefreshSignInAsync(user);
+
+            TempData["success"] = "Password changed.";
+            return RedirectToAction("Index", "Dashboard");
+        }
+
+        [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
-            //Sign out
             await _signInManager.SignOutAsync();
-            return RedirectToAction("Index", "Dashboard");
+            return RedirectToAction(nameof(Login));
         }
-        
+
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult AccessDenied()
+        {
+            return View();
+        }
     }
 }

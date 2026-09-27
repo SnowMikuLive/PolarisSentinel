@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
@@ -45,12 +46,12 @@ namespace PolarisSentinel.Web.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult Create(
-            [Bind("SourceIp,SourcePort,DestinationIp,DestinationPort,Protocol,Action,Enabled")]
+            [Bind("SourceIp,SourcePort,DestinationIp,DestinationPort,Protocol,Action,Status")]
             Rule rule,
             int? durationValue,
             string? durationUnit)
         {
-            ValidateAddresses(rule);
+            Validate(rule);
 
             if (!ModelState.IsValid)
             {
@@ -58,21 +59,12 @@ namespace PolarisSentinel.Web.Controllers
                 return View(rule);
             }
 
-            // Manual rules have no originating alert, so AlertId stays null
-            // (it is a foreign key into Alerts and would otherwise be violated).
-            // A null port / protocol means Any and is normalised to 0.
-            _firewall.Block(
-                rule.SourceIp ?? string.Empty,
-                rule.SourcePort ?? 0,
-                rule.DestinationIp ?? string.Empty,
-                rule.DestinationPort ?? 0,
-                rule.Protocol ?? 0,
-                rule.Action,
-                null,
-                null,
-                null,
-                ResolveDuration(durationValue, durationUnit));
+            // A manual rule has no alert behind it, so the decision carries a synthetic alert
+            // with the 5-tuple the operator entered.
+            var alert = BuildManualAlert(rule);
+            var decision = new PolicyDecision { Alert = alert, Action = rule.Action };
 
+            _firewall.Apply(decision, null, null, null, ResolveDuration(durationValue, durationUnit));
             _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
             TempData["success"] = "Rule created.";
@@ -95,12 +87,12 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult Edit(
             string id,
-            [Bind("SourceIp,SourcePort,DestinationIp,DestinationPort,Protocol,Action,Enabled")]
+            [Bind("SourceIp,SourcePort,DestinationIp,DestinationPort,Protocol,Action,Status")]
             Rule rule,
             int? durationValue,
             string? durationUnit)
         {
-            ValidateAddresses(rule);
+            Validate(rule);
 
             if (!ModelState.IsValid)
             {
@@ -117,7 +109,7 @@ namespace PolarisSentinel.Web.Controllers
                 rule.DestinationPort ?? 0,
                 rule.Protocol ?? 0,
                 rule.Action,
-                rule.Enabled,
+                rule.Status,
                 ResolveDuration(durationValue, durationUnit));
 
             if (updated == null)
@@ -164,11 +156,11 @@ namespace PolarisSentinel.Web.Controllers
 
         private void PopulateLists()
         {
-            ViewBag.Actions = new SelectList(Enum.GetValues<PolicyAction>());
+            ViewBag.Actions = new SelectList(PolicyActions.Blocking);
+            ViewBag.Statuses = new SelectList(Enum.GetValues<RuleStatus>());
         }
 
-        // Empty address = Any. A non-empty address must parse as IP or CIDR.
-        private void ValidateAddresses(Rule rule)
+        private void Validate(Rule rule)
         {
             if (string.IsNullOrWhiteSpace(rule.SourceIp) && string.IsNullOrWhiteSpace(rule.DestinationIp))
             {
@@ -177,6 +169,13 @@ namespace PolarisSentinel.Web.Controllers
 
             ValidateAddress(nameof(Rule.SourceIp), rule.SourceIp);
             ValidateAddress(nameof(Rule.DestinationIp), rule.DestinationIp);
+
+            // ICMP has no ports, so a port-based action cannot be expressed.
+            bool portAction = rule.Action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
+            if (portAction && rule.Protocol == ProtocolNumbers.Icmp)
+            {
+                ModelState.AddModelError(nameof(Rule.Action), "Port actions are not valid for ICMP; use an IP action instead.");
+            }
         }
 
         private void ValidateAddress(string field, string? value)
@@ -191,6 +190,18 @@ namespace PolarisSentinel.Web.Controllers
                 ModelState.AddModelError(field, "Enter a valid IP address or CIDR.");
             }
         }
+
+        // A synthetic alert carrying the operator's 5-tuple; it is never persisted.
+        private static Alert BuildManualAlert(Rule rule) => new()
+        {
+            DetectionSource = DetectionSource.None,
+            AttackType = AttackTypes.Benign,
+            SourceIp = rule.SourceIp ?? string.Empty,
+            SourcePort = rule.SourcePort ?? 0,
+            DestinationIp = rule.DestinationIp ?? string.Empty,
+            DestinationPort = rule.DestinationPort ?? 0,
+            Protocol = rule.Protocol ?? 0
+        };
 
         // Convert value + unit into a duration; default 60 minutes.
         private static TimeSpan ResolveDuration(int? value, string? unit)
