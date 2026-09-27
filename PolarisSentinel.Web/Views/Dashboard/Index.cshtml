@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Dashboard";
 }
 
@@ -41,15 +41,23 @@
         </div>
     </div>
 
-    @* Left: live traffic trend chart *@
+    @* 测试和实时流量共用图表 / Shared test and live traffic chart *@
     <div class="row mt-4 g-3">
         <div class="col-md-6">
             <div class="card shadow-sm border-primary h-100">
                 <div class="card-header bg-primary text-white">
-                    Live Traffic Trend
+                    Traffic Trend
                 </div>
                 <div class="card-body">
-                    <canvas id="trafficChart" height="220"></canvas>
+                    <label for="trafficSource" class="form-label">Chart data</label>
+                    <select id="trafficSource" class="form-select form-select-sm mb-2">
+                        <option value="live">Live traffic</option>
+                        <option value="test">Test sample</option>
+                    </select>
+                    <p id="trafficSourceNote" class="text-muted small" aria-live="polite"></p>
+                    <div style="height: 220px">
+                        <canvas id="trafficChart" aria-label="Traffic trend in packets per second" role="img"></canvas>
+                    </div>
                 </div>   
             </div>
         </div>
@@ -105,16 +113,41 @@
                 scales: {
                     y: { 
                         beginAtZero: true,
+                        title: { display: true, text: 'Packets per second (pps)' },
                         grid:{color:'rgba(37,99,235,0.1)'},
                         ticks:{color:'#2563EB'}
                         },
-                    x: { 
+                    x: {
+                        title: { display: true, text: 'Local time' },
                         grid:{color:'rgba(37,99,235,0.1)'},
                         ticks:{color:'#2563EB'}
                         }
                 }
             }
         });
+
+        // 固定样例仅用于图表展示，不发送数据包。
+        // Fixed samples demonstrate the chart without sending packets.
+        const testRates = [20, 25, 22, 30, 28, 35, 120, 300, 550, 800,
+                           650, 450, 200, 80, 35, 25, 22, 20, 24, 21];
+        const testTimes = testRates.map((_, i) => i * 5);
+        const liveRates = [];
+        const liveTimes = [];
+        const trafficSource = document.getElementById('trafficSource');
+
+        function showTrafficChart() {
+            const isTest = trafficSource.value === 'test';
+            trafficChart.data.labels = (isTest ? testTimes : liveTimes).slice();
+            trafficChart.data.datasets[0].data = (isTest ? testRates : liveRates).slice();
+            trafficChart.data.datasets[0].label = isTest ? 'Test sample (pps)' : 'Live traffic (pps)';
+            trafficChart.options.scales.x.title.text = isTest ? 'Elapsed time (seconds)' : 'Local time';
+            document.getElementById('trafficSourceNote').textContent = isTest
+                ? 'Fixed sample data, 5-second intervals. Cards and alerts still show live data.'
+                : (liveTimes.length ? 'Live capture summaries, latest 20 points.' : 'Waiting for live capture summaries.');
+            trafficChart.update();
+        }
+        trafficSource.addEventListener('change', showTrafficChart);
+        showTrafficChart();
 
         //local counters for SignalR updates
         let cumulativeAlerts=0;
@@ -149,16 +182,15 @@
        
         // Receive live traffic summary: update chart + two live cards
         connection.on("ReceiveLiveTrafficSummary", (summary) => {
-            const now = new Date().toLocaleTimeString();
-            trafficChart.data.labels.push(now);
-            trafficChart.data.datasets[0].data.push(summary.packetsPerSecond);
-
-            if (trafficChart.data.labels.length > 20) {
-                trafficChart.data.labels.shift();
-                trafficChart.data.datasets[0].data.shift();
+            // 测试图显示期间也保留实时数据，切回时不会混入样例。
+            // Keep live data separate while displaying the test sample.
+            liveTimes.push(new Date(summary.timestamp).toLocaleTimeString());
+            liveRates.push(summary.packetsPerSecond);
+            if (liveTimes.length > 20) {
+                liveTimes.shift();
+                liveRates.shift();
             }
-
-            trafficChart.update();
+            if (trafficSource.value === 'live') showTrafficChart();
 
             // Live Traffic card show Kpps
             document.getElementById('c-live-traffic').textContent=(summary.packetsPerSecond/1000).toFixed(1);
