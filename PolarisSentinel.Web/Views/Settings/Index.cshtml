@@ -1,0 +1,124 @@
+﻿@{
+    ViewData["Title"] = "Settings";
+}
+<div class="container-fluid">
+    @* Page header *@
+    <div class="mb-4">
+        <h2 class="text-primary mb-0">Settings</h2>
+        <small class="text-muted">System configuration and account management</small>
+    </div>
+    @* Background Service *@
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-body">
+            <h6 class="fw-bold text-primary mb-2">Background Service</h6>
+            <strong id="serviceState" class="me-3">Loading...</strong>
+         </div>
+    </div>
+
+    @* Account Management *@
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-body">
+            <h6 class="fw-bold text-primary mb-3">Account Management</h6>
+            <div class="row g-4">
+                @* Left:current user info *@
+                <div class="col-md-5">
+                    <div class="mb-3">
+                        <div class="text-muted small">Username</div>
+                        <div class="fw-bold">@User.Identity?.Name</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Role</div>
+                        @* System has only Administrator role;  *@
+                        <div>Administrator</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small">Status</div>
+                        <div class="text-success">Active</div>
+                    </div>
+                    @* the devide line *@
+                    <hr/>
+                    <div class="text-muted small">Default password:<code>Polaris@2026</code></div>
+                    <div class="text-muted small">Password reset requires email or phone verification</div>
+                </div>
+
+                @* Right: link to the existing standalone change-password page*@
+                <div class="col-md-7">
+                    <h6 class="fw-bold mb-3">Change Password</h6>
+                    <p class="text-muted small mb-3">
+                        You will be redirected to a secure page to update your password.
+                    </p>
+                    <a asp-controller="Account" asp-action="ChangePassword" class="btn btn-primary btn-sm">
+                        Change Password
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+@section Scripts{
+    <script>
+        //Background Service status inference
+    // Reuses the existing /api/capture/devices: current!=null means Running, otherwise Stopped.
+    function renderServiceStatus(isRunning){
+        const state=document.getElementById('serviceState');
+        if(isRunning){
+            state.className='text-success';
+            state.textContent='Running';
+        }else{
+            state.className='text-danger';
+            state.textContent='Stopped';
+        }
+    }
+
+    // define handleFetchError
+    function handleFetchError(err){
+        console.error('Failed to Fetch capture status',err)
+        var state=document.getElementById('serviceState');
+        state.className='text-muted';
+        state.textContent='Unknown';
+    }
+
+    function handleFetchData(data){
+        renderServiceStatus(!!data.current);
+    }
+
+    function parseJson(response){
+        return response.json();
+    }
+
+    // Fetch device list once and infer status from the current fiels
+    //     function refreshServiceStatus(){
+    //         fetch('/api/capture/devices')
+    //              .then(r=>r.json())
+    //              .then(data=>renderServiceStatus(!!data.current))
+    //              .catch(err=>{
+    //                  console.error=document.getElementById('serviceState')
+    //                  state.className='text-muted';
+    //                  state.textContent='Unknown';
+    //              }
+        
+    //         function handleFetchData(data){
+    //             renderServiceStatus(!!data.current);
+    //         }
+    //         function parseJson(response){
+    //             return response.json();
+    //         }
+            function refreshServiceStatus(){
+                fetch('/api/capture/devices')
+                    .then(parseJson)
+                    .then(handleFetchData)
+                    .catch(handleFetchError);
+            }
+             refreshServiceStatus();
+            //Poll every 10 seconds
+            setInterval(refreshServiceStatus,10000);
+        </script>
+}
+    
+    

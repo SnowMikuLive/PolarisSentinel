@@ -13,5 +13,5 @@ public sealed class AdminSeedOptions
 
     public string Role { get; set; } = "Administrator";
 
-    public string? Password { get; set; } 
+    public string? Password { get; set; }
 }
