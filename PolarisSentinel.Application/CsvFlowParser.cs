@@ -58,7 +58,9 @@ public static class CsvFlowParser
             for (int i = 0; i < FlowSnapshot.FeatureNames.Length; i++)
             {
                 string raw = cells[index[FlowSnapshot.FeatureNames[i]]];
-                if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
+                // 模型输入必须是有限数值。
+                // Model inputs must be finite numbers.
+                if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) || !float.IsFinite(value))
                 {
                     error = $"Row {row + 1}: '{raw}' is not a valid number for {FlowSnapshot.FeatureNames[i]}.";
                     return false;

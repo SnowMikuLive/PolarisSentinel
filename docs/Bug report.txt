@@ -1,0 +1,92 @@
+PolarisSentinel Black-box Testing and Bug Report
+
+
+
+Black-box test results
+
+I went through the main pages and the Charts upload flow. Opening Charts, Rules, Policies, Settings, or the alert export while logged out redirected to the login page. A wrong password was rejected. The correct password worked, and after the required first-login password change the app entered the Dashboard.
+
+Switching Dashboard between Test and Live changed the charts and the explanatory text. That check passed, but it did not use real attack traffic. Traffic Monitor, Settings, and Policies all returned HTTP 200.
+
+On Charts, clicking Load Dataset without choosing a file showed a validation message. Uploading a file whose header was "wrong,label" reported the missing column names. Replacing the duration in the first data row of the real CSV with NaN or Infinity was rejected after the fix, and the existing 400 rows were left in place. Posting JSON null, an unknown model name, or model number 999 to /Charts/Test returned HTTP 400 after the fix. Requesting rowIndex=-1 or rowIndex=400 against a 400-row dataset also returned HTTP 400.
+
+Uploading ml/artifacts/cic_test_dataset.csv loaded all 400 rows. Running one row for each of the five model combinations, then Evaluate, showed results and charts for every combination, and TP + TN + FP + FN was 400 in each case. Exporting an empty alert table produced a file with headers. Exporting one alert that contained Chinese characters, commas, and quotation marks kept the fields intact and included the correct UTF-8 BOM.
+
+In dry-run mode I created an inbound rule for 203.0.113.66, saw it in the list, and then used Remove All. Creation and rollback both worked. The address shown in the list is wrong; that is B04. Posting to /Rules/RemoveAll without an anti-forgery token returned HTTP 400. After logout, requesting the alert export again redirected to login.
+
+The 400 rows used in Charts are a balanced functional sample. Dashboard Test uses fixed sample data, so switching to Live successfully does not mean acceptance testing for real attack detection has passed. This round did not cover the real firewall, TTL behaviour, Kali attacks, or the deployment environment.
+
+
+
+Bugs
+
+B01. Invalid model request returned HTTP 500. Fixed and retested.
+After login, POST /Charts/Test with a body of null or {"modelCombination":"999","rowIndex":0}. Invalid input should be rejected. Before the fix the server returned HTTP 500. After the fix it returns HTTP 400. The change is only the null-request, model-binding, and enum checks in ChartsController.
+
+B02. Non-finite numbers were accepted as a loaded row. Fixed and retested.
+Change flow_duration_ms in the first data row of the CIC CSV to NaN or Infinity and upload the file. The file should be rejected. Before the fix the app said one row had loaded. After the fix the error names the row and the field, and the dataset already loaded is not replaced. The change is only the finite-number check in CsvFlowParser.
+
+B03. The full test suite does not build. Still open.
+dotnet test PolarisSentinelTestProject --no-restore should run the tests. CaptureFeatureTests still calls the removed ProcessPacket and ExpireIdleFlows overloads, which produces nine CS1061 errors. This blocks the full suite. The capture code and the tests need to be brought back in line.
+
+B04. An inbound rule shows the same address in Source and Destination. Still open.
+In dry-run mode, create a rule with Source 203.0.113.66, Destination 192.168.1.10, protocol TCP, and action BlockInboundIp, then open Rules. The two columns should show the rule's actual scope. Both currently show 203.0.113.66. WindowsFirewallEnforcer.Apply stores spec.RemoteAddress in both SourceIp and DestinationIp. The list should show the real scope of inbound and outbound rules, and an unrestricted address should not look restricted. I did not check what this does on the real firewall.
+
+
+
+Build and regression
+
+The web project built, with the four nullable warnings that were already there. ChartsInputTests adds three non-finite-value cases and three invalid model requests.
+
+Because of B03 I did not get a full-suite run. A temporary test project that references the original source files ran ChartsInputTests, AlertExportTests, and EvaluationMetricsTests on their own: 13 of 13 passed. The real test project was not changed to drop the capture tests. Those 13 passes are not a substitute for the full suite.
+
+Browser retesting covered the normal flows and the bad-input paths above. B04 is still open.
+
+B01 and B02 are fixed and were retested. B03 and B04 are still open. B03 is what is blocking the full test suite.
+
+
+PolarisSentinel 黑盒测试与缺陷报告
+
+
+
+黑盒测试结果
+
+这一轮把主要页面和 Charts 的上传流程过了一遍。未登录时打开 Charts、Rules、Policies、Settings，或者导出告警，都会跳到登录页。错误密码会被拒绝，正确密码可以登录，首次要求修改密码之后能进入 Dashboard。
+
+Dashboard 在 Test 和 Live 之间切换时，图表和说明文字都会跟着变。这一项算通过，但用的不是真实攻击流量。Traffic Monitor、Settings、Policies 都返回了 HTTP 200。
+
+Charts 上不选文件就点 Load Dataset，会给出提示。上传表头为 wrong,label 的文件时，会列出缺少的列名。把真实 CSV 第一条数据的 duration 改成 NaN 或 Infinity 后，修复后的版本会拒绝这次上传，原来的 400 行还在。向 /Charts/Test 提交 JSON null、未知模型名或模型编号 999，修复后返回 HTTP 400。在 400 行数据上请求 rowIndex=-1 或 rowIndex=400，也是 HTTP 400。
+
+上传 ml/artifacts/cic_test_dataset.csv 后，400 行都加载成功。五种模型组合各跑一行，再跑 Evaluate，每组都有结果和图表，而且每组的 TP + TN + FP + FN 都等于 400。导出空告警表时，文件里有表头。导出一条带中文、逗号和引号的告警时，字段保持正确，UTF-8 BOM 也正确。
+
+Dry-run 下创建了 203.0.113.66 的入站规则，列表里能看到，再用 Remove All 清掉。创建和回滚都通过了，但列表里的地址显示不对，见 B04。不带防伪令牌去 POST /Rules/RemoveAll，返回 HTTP 400。退出登录后再请求告警导出，会跳回登录页。
+
+Charts 用的这 400 行是均衡的功能测试样本。Dashboard 的 Test 模式用的是固定示例数据，所以切到 Live 成功，并不等于真实攻击检测已经验收通过。这一轮没有验证真实防火墙、TTL、Kali 攻击，也没有验证部署环境。
+
+
+
+缺陷
+
+B01. 无效模型请求会返回 HTTP 500。已修复并复测。
+登录后向 /Charts/Test 提交 null，或 {"modelCombination":"999","rowIndex":0}。无效输入应当被拒绝。修复前服务器返回 HTTP 500，修复后返回 HTTP 400。改动只在 ChartsController 里，加了空请求、模型绑定和枚举检查。
+
+B02. 非有限数值会被当成一行成功数据加载。已修复并复测。
+把 CIC CSV 第一条数据的 flow_duration_ms 改成 NaN 或 Infinity 再上传。文件应当被拒绝。修复前页面提示成功加载了 1 行。修复后会指出行号和字段，已经加载的数据也不会被换掉。改动只在 CsvFlowParser 里，加了有限数值检查。
+
+B03. 全量测试编译不过。仍未解决。
+运行 dotnet test PolarisSentinelTestProject --no-restore 时，测试应当能跑起来。CaptureFeatureTests 还在调用已经去掉的 ProcessPacket 和 ExpireIdleFlows 重载，因此出现 9 个 CS1061 错误，全量测试被卡住。抓包实现和测试需要对齐。
+
+B04. 入站规则的 Source 和 Destination 显示成同一个地址。仍未解决。
+在 dry-run 模式下新建一条规则：Source 为 203.0.113.66，Destination 为 192.168.1.10，协议 TCP，操作为 BlockInboundIp，然后打开 Rules。两列应当反映这条规则真正的作用范围，现在两列都是 203.0.113.66。WindowsFirewallEnforcer.Apply 把 spec.RemoteAddress 同时写进了 SourceIp 和 DestinationIp。列表应按入站、出站规则的实际范围来显示，没有限制的地址不能看起来像已经被限制。这一轮没有在真实防火墙上验证它的影响。
+
+
+
+构建与回归
+
+Web 项目可以构建成功，仍有原来的 4 个 nullable 警告。ChartsInputTests 新增了 3 个非有限数值用例和 3 个无效模型请求用例。
+
+因为 B03，全量测试没有跑成。我用一个引用原源码的临时测试项目，单独跑了 ChartsInputTests、AlertExportTests 和 EvaluationMetricsTests，13 项全部通过。正式测试项目没有被改成排除抓包测试。这 13 项通过不能代替全量测试结果。
+
+浏览器复测覆盖了上面的正常流程和错误输入。B04 仍然开着。
+
+B01 和 B02 已修复并复测。B03 和 B04 仍未解决，全量测试被 B03 挡住。
