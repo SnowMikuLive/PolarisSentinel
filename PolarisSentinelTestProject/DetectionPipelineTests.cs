@@ -102,6 +102,20 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsNull(outcome.Alert);
         }
 
+        [TestMethod]
+        public void ProcessFlow_UnknownAnomaly_ShouldAlertWithoutFirewallRule()
+        {
+            var detection = CreateDetection(attackType: AttackTypes.UnknownAnomaly, source: DetectionSource.IsolationForest);
+            var pipeline = CreatePipeline(new CountingInferenceEngine(detection), out var firewall);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("test")),
+                new[] { CreatePolicy(DetectionSource.IsolationForest) });
+
+            Assert.IsNotNull(outcome.Alert);
+            Assert.AreEqual(PolicyAction.Monitor, outcome.Decision!.Action);
+            Assert.IsEmpty(firewall.GetAllRules());
+        }
+
         #region Helper Methods
 
         private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)

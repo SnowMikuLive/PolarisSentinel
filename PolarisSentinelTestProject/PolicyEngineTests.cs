@@ -94,6 +94,18 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
+        public void EvaluateUnknownAnomalyShouldNeverBlock()
+        {
+            var policy = CreatePolicy(ifThreshold: 0.6f, source: DetectionSource.IsolationForest);
+            var alert = CreateAlert(confidence: 0.99f, source: DetectionSource.IsolationForest, attackType: AttackTypes.UnknownAnomaly);
+
+            var decision = Evaluate(alert, policy);
+
+            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.AreEqual("unknown_anomaly", decision.Reason);
+        }
+
+        [TestMethod]
         public void EvaluatePreFilterAlertShouldIgnoreThreshold()
         {
             var policy = CreatePolicy(source: DetectionSource.PreFilter);

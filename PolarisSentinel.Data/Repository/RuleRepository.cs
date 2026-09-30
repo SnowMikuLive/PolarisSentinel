@@ -90,7 +90,13 @@ public class RuleRepository : IRuleRepository
 
     public void Remove(Rule rule)
     {
-        _context.Rules.Remove(rule);
+        // 删除已跟踪的记录，避免重复附加同一条规则。
+        // Remove the tracked row to avoid attaching the same rule twice.
+        var existing = _context.Rules.Find(rule.Id);
+        if (existing != null)
+        {
+            _context.Rules.Remove(existing);
+        }
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

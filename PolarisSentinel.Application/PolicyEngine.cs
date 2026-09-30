@@ -28,6 +28,13 @@ public class PolicyEngine : IPolicyEngine
             return PolicyDecision.Monitor(alert, "benign");
         }
 
+        // 未知异常只告警，由人工决定是否封禁。
+        // Unknown anomalies are monitored for a human decision.
+        if (alert.AttackType == AttackTypes.UnknownAnomaly)
+        {
+            return PolicyDecision.Monitor(alert, "unknown_anomaly");
+        }
+
         var match = SelectPolicy(alert, policies);
         if (match == null)
         {
