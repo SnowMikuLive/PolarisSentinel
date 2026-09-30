@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Settings";
 }
 <div class="container-fluid">
@@ -20,27 +20,8 @@
         <div class="card-body">
             <h6 class="fw-bold text-primary mb-3">Account Management</h6>
             <div class="row g-4">
-                @* Left:current user info *@
-                <div class="col-md-5">
-                    <div class="mb-3">
-                        <div class="text-muted small">Username</div>
-                        <div class="fw-bold">@User.Identity?.Name</div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="text-muted small">Role</div>
-                        @* System has only Administrator role;  *@
-                        <div>Administrator</div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="text-muted small">Status</div>
-                        <div class="text-success">Active</div>
-                    </div>
-                    @* the devide line *@
-                    <hr/>
-                </div>
 
-                @* Right: link to the existing standalone change-password page*@
-                <div class="col-md-7">
+                <div class="col-md-7 offset-md-5">
                     <h6 class="fw-bold mb-3">Change Password</h6>
                     <p class="text-muted small mb-3">
                         You will be redirected to a secure page to update your password.
@@ -53,11 +34,6 @@
         </div>
     </div>
 </div>
-
-
-
-
-
 
 @section Scripts{
     <script>
@@ -118,5 +94,3 @@
             setInterval(refreshServiceStatus,10000);
         </script>
 }
-    
-    

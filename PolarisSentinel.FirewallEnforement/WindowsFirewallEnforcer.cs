@@ -85,7 +85,10 @@ namespace PolarisSentinel.FirewallEnforement
                     {
                         existing.ExpiresAt = expiresAt;
                         existing.UpdatedAt = now;
+                        existing.Status = RuleStatus.Active;
                         _rules.Update(existing);
+                        _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                        SaveToWindows(existing, SpecFrom(existing));
                     }
                     return existing;
                 }
@@ -98,10 +101,10 @@ namespace PolarisSentinel.FirewallEnforement
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
                     Action = decision.Action,
                     Status = RuleStatus.Active,
-                    SourceIp = spec.RemoteAddress ?? string.Empty,
-                    SourcePort = spec.RemotePort,
-                    DestinationIp = spec.RemoteAddress ?? string.Empty,
-                    DestinationPort = spec.LocalPort,
+                    SourceIp = spec.Direction == 1 ? spec.RemoteAddress ?? string.Empty : string.Empty,
+                    SourcePort = null,
+                    DestinationIp = spec.Direction == 2 ? spec.RemoteAddress ?? string.Empty : string.Empty,
+                    DestinationPort = spec.LocalPort ?? spec.RemotePort,
                     Protocol = spec.Protocol,
                     CreatedAt = now,
                     UpdatedAt = now,
@@ -200,7 +203,7 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expired = _rules.GetAllAsync().GetAwaiter().GetResult()
-                    .Where(r => r.ExpiresAt != null && r.ExpiresAt <= now)
+                    .Where(r => r.Status == RuleStatus.Active && r.ExpiresAt != null && r.ExpiresAt <= now)
                     .ToList();
 
                 foreach (var rule in expired)
@@ -238,7 +241,8 @@ namespace PolarisSentinel.FirewallEnforement
         private static FirewallRuleSpec SpecFrom(Rule rule) => new()
         {
             Direction = rule.Action is PolicyAction.BlockOutboundIp or PolicyAction.BlockOutboundPort ? 2 : 1,
-            RemoteAddress = rule.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp ? rule.SourceIp : null,
+            RemoteAddress = rule.Action == PolicyAction.BlockInboundIp ? rule.SourceIp :
+                rule.Action == PolicyAction.BlockOutboundIp ? rule.DestinationIp : null,
             LocalPort = rule.Action == PolicyAction.BlockInboundPort ? rule.DestinationPort : null,
             RemotePort = rule.Action == PolicyAction.BlockOutboundPort ? rule.DestinationPort : null,
             Protocol = rule.Protocol ?? 0

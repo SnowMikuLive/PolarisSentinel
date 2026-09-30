@@ -23,6 +23,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(enforcer.IsDryRun);
             Assert.AreEqual("PolarisSentinel_Block_A-RF-1", rule.Name);
             Assert.AreEqual("203.0.113.10", rule.SourceIp);
+            Assert.AreEqual(string.Empty, rule.DestinationIp);
             Assert.IsNull(rule.SourcePort);
             Assert.AreEqual((byte)ProtocolNumbers.Tcp, rule.Protocol);
             Assert.AreEqual("P-1", rule.PolicyId);
@@ -49,7 +50,8 @@ namespace PolarisSentienlUnitTestProject
 
             var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockOutboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual("192.168.1.10", rule.SourceIp);
+            Assert.AreEqual("192.168.1.10", rule.DestinationIp);
+            Assert.AreEqual(string.Empty, rule.SourceIp);
             Assert.AreEqual(PolicyAction.BlockOutboundIp, rule.Action);
         }
 
@@ -155,6 +157,8 @@ namespace PolarisSentienlUnitTestProject
 
             clock.Advance(TimeSpan.FromMinutes(31));
             Assert.AreEqual(1, enforcer.RemoveExpired());
+            Assert.AreEqual(RuleStatus.Expired, enforcer.GetAllRules().Single().Status);
+            Assert.AreEqual(0, enforcer.RemoveExpired());
         }
 
         #region Helper Methods

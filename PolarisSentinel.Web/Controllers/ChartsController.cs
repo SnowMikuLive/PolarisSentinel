@@ -85,9 +85,13 @@ namespace PolarisSentinel.Web.Controllers
         // Runs the selected test row through the selected model combination. Never touches the firewall.
         [HttpPost]
         [IgnoreAntiforgeryToken]
-        public async Task<IActionResult> Test([FromBody] ModelTestRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> Test([FromBody] ModelTestRequest? request, CancellationToken cancellationToken)
         {
-            if (!Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination))
+            // 拒绝空请求和不存在的模型编号。
+            // Reject empty requests and undefined model values.
+            if (request == null || !ModelState.IsValid ||
+                !Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) ||
+                !Enum.IsDefined(combination))
             {
                 return BadRequest(new { error = "Unknown model combination." });
             }

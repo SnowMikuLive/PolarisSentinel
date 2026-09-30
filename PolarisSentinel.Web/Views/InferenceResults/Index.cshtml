@@ -7,6 +7,8 @@
 <div class="container-fluid">
     <h2 class="text-primary">Inference Results</h2>
     <p class="text-muted">AI inference results that produced an alert. Benign flows are not alerted.</p>
+    <a asp-action="Export" class="btn btn-outline-primary mb-2">Export CSV</a>
+    <p class="text-muted small">Exports all saved alerts. Actions and statuses come from currently linked rules; blank means no linked rule.</p>
 
     @if (TempData["success"] != null)
     {
