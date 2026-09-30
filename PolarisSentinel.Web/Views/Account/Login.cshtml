@@ -54,10 +54,14 @@
             </div>
             <div class="modal-body px-4 pb-4">
                 <p class="text-muted small">Enter your registered email address or phone number to receive a reset link.</p>
-                <form>
+                @* From now posts to AccountController.ForgotPassword *@
+                @* modal表单提交后整个页面会POST，modal会关闭，跳转到确认页 *@  
+                <form asp-action="ForgotPassword" asp-controller="Account" method="post">
+
+                    @* Input name must match the ViewModel property: EmailOrUserName *@
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small text-secondary">Email or Phone Number</label>
-                        <input type="text" class="form-control" style="height:36px;border-color:#E6EAF0;" placeholder="Enter your email or phone number">
+                        <label class="form-label fw-semibold small text-secondary">Email or Username</label>
+                        <input name="EmailOrUserName" type="text" class="form-control" style="height:36px;border-color:#E6EAF0;" placeholder="Enter your email or username" required>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 fw-bold" style="height:36px;">Send Reset Link</button>
                 </form>
