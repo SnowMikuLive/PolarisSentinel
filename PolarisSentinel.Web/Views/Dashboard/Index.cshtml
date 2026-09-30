@@ -58,7 +58,10 @@
                     Traffic Classification
                 </div>
                 <div class="card-body">
-                    <canvas id="verdictChart" height="240"></canvas>
+                    @* 固定图表高度 / Keep the chart height fixed. *@
+                    <div style="position: relative; height: 240px;">
+                        <canvas id="verdictChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -75,7 +78,9 @@
                         <option value="test">Test sample</option>
                     </select>
                     <p id="trafficSourceNote" class="text-muted small" aria-live="polite"></p>
-                    <canvas id="trafficChart" height="240"></canvas>
+                    <div style="position: relative; height: 240px;">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>

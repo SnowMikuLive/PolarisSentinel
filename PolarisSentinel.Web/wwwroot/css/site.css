@@ -77,9 +77,3 @@ a {
 a:hover {
     color: #1D4ED8;
 }
-
-/*traffic chart Styles in the middle just for temporary use. It will change after AI reference card finish*/
-#trafficChart{
-    width:100% !important;
-    height:auto !important;
-}
