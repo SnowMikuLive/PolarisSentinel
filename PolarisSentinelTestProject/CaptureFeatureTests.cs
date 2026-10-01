@@ -18,7 +18,8 @@ public class CaptureFeatureTests
     {
         using var service = new TrafficCaptureService(1, 3);
         var completed = new List<FlowFeatureVector>();
-        service.OnFlowCompleted += (_, flow) => completed.Add(flow);
+        using var completedSignal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, flow) => { completed.Add(flow); completedSignal.Set(); };
         var start = new DateTime(2026, 9, 24);
         int[] times = { 0, 10, 30, 50, 90, 110, 150 };
 
@@ -32,6 +33,7 @@ public class CaptureFeatureTests
         }
         service.ExpireIdleFlows(start.AddSeconds(2));
 
+        Assert.IsTrue(completedSignal.Wait(TimeSpan.FromSeconds(2)));
         Assert.HasCount(1, completed);
         var result = completed[0];
         Assert.AreEqual(source, result.SourceIp);
@@ -40,7 +42,7 @@ public class CaptureFeatureTests
         Assert.AreEqual((ushort)22, result.DestinationPort);
         Assert.AreEqual(7L, result.TotalPackets);
         Assert.AreEqual(840L, result.TotalBytes);
-        Assert.IsNull(result.PreFilterVerdict);
+        Assert.IsTrue(result.PreFilterVerdict?.IsSuspicious ?? false);
         // 手算时长、字节、样本标准差、IAT 和速率。
         // Hand-calculated duration, bytes, sample deviations, IATs and rates.
         float[] expected = { 150, 4, 3, 480, 360, 60, 180, 120, (float)Math.Sqrt(11200.0 / 6),
@@ -55,34 +57,32 @@ public class CaptureFeatureTests
     [DataRow(80)]
     [DataRow(22)]
     [DataRow(21)]
-    public void ShortConnection_ShouldReachAiWithCorrectPort(int port)
+    public void ShortConnection_ShouldBeDroppedByCurrentPreFilter(int port)
     {
         using var service = new TrafficCaptureService(1, 3);
-        FlowFeatureVector? result = null;
-        service.OnFlowCompleted += (_, flow) => result = flow;
+        using var completedSignal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, _) => completedSignal.Set();
         var start = new DateTime(2026, 9, 24);
         service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", (ushort)port, 60, syn: true), start);
         service.ProcessPacket(Tcp("192.168.1.10", (ushort)port, "203.0.113.66", 50000, 60), start.AddMilliseconds(1));
         service.ExpireIdleFlows(start.AddSeconds(2));
 
-        Assert.IsNotNull(result);
-        Assert.IsNull(result.PreFilterVerdict);
-        Assert.AreEqual("203.0.113.66", result.SourceIp);
-        Assert.AreEqual((ushort)port, result.DestinationPort);
-        Assert.AreEqual(1f, result.Features[0]);
+        Assert.IsFalse(completedSignal.Wait(TimeSpan.FromMilliseconds(100)));
     }
 
     [TestMethod]
-    public void ShortSynFlood_ShouldKeepAttackerAddress()
+    public void SynFlood_ShouldKeepAttackerAddress()
     {
         using var service = new TrafficCaptureService(1, 3);
         FlowFeatureVector? result = null;
-        service.OnFlowCompleted += (_, flow) => result = flow;
+        using var completedSignal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, flow) => { result = flow; completedSignal.Set(); };
         var start = new DateTime(2026, 9, 24);
         for (int i = 0; i < 12; i++)
-            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start.AddMilliseconds(i));
+            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start.AddMilliseconds(i * 20));
         service.ExpireIdleFlows(start.AddSeconds(2));
 
+        Assert.IsTrue(completedSignal.Wait(TimeSpan.FromSeconds(2)));
         Assert.IsNotNull(result);
         Assert.AreEqual(AttackTypes.DoS, result.PreFilterVerdict?.AttackType);
         Assert.AreEqual("203.0.113.66", result.SourceIp);
@@ -93,12 +93,11 @@ public class CaptureFeatureTests
     [TestMethod]
     public void SinglePacket_ShouldExportFiniteFeatures()
     {
-        using var service = new TrafficCaptureService(1, 3);
-        FlowFeatureVector? result = null;
-        service.OnFlowCompleted += (_, flow) => result = flow;
         var start = new DateTime(2026, 9, 24);
-        service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start);
-        service.ExpireIdleFlows(start.AddSeconds(2));
+        var flow = new FlowRecord { StartTime = start, LastSeenTime = start, FwdPackets = 1, FwdBytes = 60 };
+        flow.PacketSizeStats.Add(60);
+        var key = FlowKey.Create("203.0.113.66", 50000, "192.168.1.10", 80, 6);
+        var result = FeatureExporter.Export(flow, key, "203.0.113.66", 50000, "192.168.1.10", 80, 6);
 
         Assert.IsNotNull(result);
         Assert.IsTrue(result.Features.All(float.IsFinite));

@@ -236,7 +236,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     {
         RawCapture rawPacket = e.GetPacket();
         Packet parsed = Packet.ParsePacket(rawPacket.LinkLayerType, rawPacket.Data);
+        ProcessPacket(parsed, DateTime.Now);
+    }
 
+    // 分开解析和处理，测试可以直接传入样本包。
+    // Separate parsing from processing so tests can pass sample packets.
+    internal void ProcessPacket(Packet parsed, DateTime now)
+    {
         IPPacket? ipPacket = parsed.Extract<IPPacket>();
         if (ipPacket is null) return; // not IPv4/IPv6, nothing we track
 
@@ -249,8 +255,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         ushort dstPort = tcpPacket?.DestinationPort ?? udpPacket?.DestinationPort ?? 0;
         byte protocol = (byte)ipPacket.Protocol;
         int packetSize = ipPacket.TotalLength;
-        DateTime now = DateTime.Now;
-
         UpdateFastPathCounters(packetSize, protocol);
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
@@ -268,10 +272,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             StartTime = now,
             LastSeenTime = now,
             Protocol = protocol,
-            DestinationPort = dstPort
+            DestinationPort = dstPort,
+            SourceIp = srcIp,
+            SourcePort = srcPort,
+            DestinationIp = dstIp
         });
 
-        bool isForward = srcIp == key.IpA && srcPort == key.PortA;
+        bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
 
         lock (flow) // packets for the same flow can arrive back-to-back on the capture thread
         {
@@ -344,8 +351,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private void ExpireIdleFlows()
     {
-        
-        DateTime now = DateTime.Now;
+        ExpireIdleFlows(DateTime.Now);
+    }
+
+    internal void ExpireIdleFlows(DateTime now)
+    {
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
 
         // A flood can leave tens of thousands of idle flows at once. Processing them
@@ -372,8 +382,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             var featureVector = Internal.FeatureExporter.Export(
                 flow, key,
-                sourceIp: key.IpA, sourcePort: key.PortA,
-                destinationIp: key.IpB, destinationPort: key.PortB,
+                sourceIp: flow.SourceIp, sourcePort: flow.SourcePort,
+                destinationIp: flow.DestinationIp, destinationPort: (ushort)flow.DestinationPort,
                 protocol: key.Protocol);
 
             var completed = new FlowFeatureVector
