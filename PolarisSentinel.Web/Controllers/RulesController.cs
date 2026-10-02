@@ -5,6 +5,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using System.Linq;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -21,9 +22,47 @@ namespace PolarisSentinel.Web.Controllers
             _unitOfWork = unitOfWork;
         }
 
-        public IActionResult Index()
+        public IActionResult Index(
+            RuleStatus?status=null,
+            byte?protocol=null,
+            PolicyAction? actionFliter=null)
         {
-            return View(_firewall.GetAllRules());
+            // Start from the full list, then apply filter in turn
+            var rules = _firewall.GetAllRules();
+
+            if (status.HasValue)
+            {
+                rules = rules.Where(r => r.Status == status.Value).ToList();
+            }
+
+            if (protocol.HasValue)
+            {
+                rules = rules.Where(r => r.Protocol == protocol.Value).ToList();
+            }
+
+            if (actionFliter.HasValue)
+            {
+                rules = rules.Where(r => r.Action == actionFliter.Value).ToList();
+            }
+
+            //Build dropdown option lists. The 3rd SelectList argument is selectedValue, which auto-marks the matching item as selected.
+            ViewBag.StatusList = new SelectList(
+                Enum.GetValues<RuleStatus>().Select(v => new { Value = v.ToString(), Text = v.ToString() }),
+                "Value","Text",status?.ToString());
+            ViewBag.ProtocolList = new SelectList(
+                new[]
+                {
+                    new { Value = "6", Text = "TCP" },
+                    new { Value = "17", Text = "UDP" },
+                    new { Value = "1", Text = "ICMP" }
+                },
+                "Value","Text",protocol?.ToString());
+
+            ViewBag.ActionList=new SelectList(
+                PolicyActions.Blocking.Select(v => new { Value = v.ToString(), Text = v.ToString() }),
+                "Value","Text",actionFliter?.ToString());
+
+            return View(rules);
         }
 
         public IActionResult Details(string? id)
