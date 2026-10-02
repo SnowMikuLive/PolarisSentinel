@@ -20,18 +20,19 @@ internal sealed class PreFilter
         if (flow.TotalPackets < _minPacketsForAnalysis)
             return PreFilterResult.Normal();
 
-        // Short-lived flow, likely a handshake fragment.
-        if (flow.DurationSeconds < 0.1)
-            return PreFilterResult.Normal();
-
         // FlowKey orders endpoints by IP string, not by who sent first, so the
         // attacker may be on either side. Normalise so the dominant sender is forward.
         var direction = Normalise(flow);
 
-        // Attack signatures run before the benign filters because floods are one-directional.
+        // Attack signatures run before the benign filters because floods are one-directional
+        // and can be very short-lived, so they must not be discarded by the duration guard.
         var attack = DetectFlood(direction) ?? DetectScan(direction) ?? DetectBruteForce(direction);
         if (attack is not null)
             return attack;
+
+        // Short-lived flow, likely a handshake fragment.
+        if (flow.DurationSeconds < 0.1)
+            return PreFilterResult.Normal();
 
         // Unidirectional traffic, typical of broadcast/multicast.
         if (direction.FwdPackets == 0 || direction.BwdPackets == 0)

@@ -12,8 +12,8 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
-    [Migration("20260930110518_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20261002012617_Inital")]
+    partial class Inital
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

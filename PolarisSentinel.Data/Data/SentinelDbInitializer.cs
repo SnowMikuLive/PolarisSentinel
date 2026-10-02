@@ -37,7 +37,6 @@ public sealed class SentinelDbInitializer
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await MigrateDatabaseAsync(_db, cancellationToken);
 
         if (!_options.Enabled)
         {
@@ -91,20 +90,4 @@ public sealed class SentinelDbInitializer
         }
     }
 
-    //先校验__EFMigrationsHistory；未知迁移ID则抛错，不自动删库。
-    //Validate __EFMigrationsHistory first;unknown ids throw without dropping data.
-    public static async Task MigrateDatabaseAsync(SentinelDbContext db, CancellationToken cancellationToken = default)
-    {
-        var known = db.Database.GetMigrations().ToHashSet();
-        var applied = await db.Database.GetAppliedMigrationsAsync(cancellationToken);
-        var unknown = applied.Where(id => !known.Contains(id)).ToArray();
-        if (unknown.Length > 0)
-        {
-            throw new InvalidOperationException(
-                "Database uses a different migration history: " + string.Join(", ", unknown) +
-                ". Keep a backup and use a separate database for this version, or migrate the old data explicitly.");
-        }
-
-        await db.Database.MigrateAsync(cancellationToken);
-    }
 }
