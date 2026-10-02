@@ -13,16 +13,55 @@
         <div class="alert alert-success">@TempData["success"]</div>
     }
 
-    <div class="d-flex gap-2 mb-3">
-        <a asp-action="Create" class="btn btn-primary">Create New</a>
-        <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
-            <button type="submit" class="btn btn-outline-danger">Remove All</button>
-        </form>
+<div class="d-flex gap-2 mb-3">
+    <a asp-action="Create" class="btn btn-primary">Create New</a>
+    <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">
+        <button type="submit" class="btn btn-outline-danger">Remove All</button>
+    </form>
+</div>
+
+@* Uses GET so filter conditions appear in the URL and can be bookmarked/shared *@
+<form asp-action="Index" method="get" class="card shadow-sm border-primary mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+
+            @* Filter by status *@
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Status</label>
+                <select name="status" class="form-select form-select-sm" asp-items="ViewBag.StatusList">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            @* Filter by protocol *@
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Protocol</label>
+                <select name="protocol" class="form-select form-select-sm" asp-items="ViewBag.ProtocolList">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            @* Filter by action *@
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Action</label>
+                <select name="actionFliter" class="form-select form-select-sm" asp-items="ViewBag.ActionList">
+                    <option value="">All</option>
+                </select>
+            </div>
+
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Clear</a>    
+            </div>
+        </div>
     </div>
+</form>
 
     <div class="card shadow-sm border-primary">
         <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0 align-middle">
+            @* Add the horizontal scroll container for narrow screens *@
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0 align-middle">
                 <thead>
                     <tr>
                         <th>Rule ID</th>
@@ -101,9 +140,14 @@
                     }
                 </tbody>
             </table>
+            </div>
         </div>
         <div class="card-footer small text-muted">
             Total: @Model.Count rule(s)
+            @if (Context.Request.Query.Count>0)
+            {
+                <span class="ms-2 badge bg-info text-dark">Filtered</span>
+            }
         </div>
     </div>
 </div>
