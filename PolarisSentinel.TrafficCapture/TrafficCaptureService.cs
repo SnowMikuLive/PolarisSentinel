@@ -443,6 +443,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             Timestamp = now,
             PacketsPerSecond = packets / elapsedSeconds,
             BytesPerSecond = bytes / elapsedSeconds,
+            Bytes = bytes,
             ActiveFlowCount = _flows.Count,
             TcpShare = (double)tcp / total,
             UdpShare = (double)udp / total,

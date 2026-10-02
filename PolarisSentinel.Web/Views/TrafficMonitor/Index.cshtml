@@ -173,8 +173,9 @@
             }
             document.getElementById('peakRate').innerText=peakPps.toFixed(1);
 
-            //Total data cumulative approximation
-            totalBytes+=summary.bytesPerSecond;
+            // 累计本次摘要中的实际字节数。
+            // Add the bytes captured in this summary.
+            totalBytes+=summary.bytes;
             document.getElementById('totalData').innerText=(totalBytes/1024/1024).toFixed(2)+' MB';
 
             //active flows

@@ -79,12 +79,13 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
         return results.First(r => r.Name == "scores").AsEnumerable<float>().First();
     }
 
-    // Maps the raw score between the model's two calibration points onto 0.60..0.99.
+    // 两个校准点对应 0.60 和 0.95；最终置信度上限仍为 0.99。
+    // The calibration points map to 0.60 and 0.95; confidence remains capped at 0.99.
     private float Normalize(double score)
     {
         double span = _scoreAtAlertConfidence - _scoreAtHighConfidence;
         double t = span > 0 ? (_scoreAtAlertConfidence - score) / span : 1.0;
-        double confidence = MinConfidence + (MaxConfidence - MinConfidence) * t;
+        double confidence = MinConfidence + (0.95f - MinConfidence) * t;
         return (float)Math.Clamp(confidence, MinConfidence, MaxConfidence);
     }
 

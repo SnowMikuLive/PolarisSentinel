@@ -53,10 +53,10 @@ public class OnnxInferenceEngineTests
         // A benign alert carries no score; only malicious results are scored.
         if (result.AttackType != "Benign")
         {
-            // The IF score is calibrated from a float32 ONNX output, so allow the same
-            // tolerance the Python export uses when comparing scores (SCORE_DIFF_SANITY).
+            // 同一 ONNX 模型的置信度应一致，只容许小量浮点差异。
+            // Confidence from the same ONNX model should match within float rounding.
             double expectedConfidence = sample.GetProperty("confidence").GetDouble();
-            Assert.AreEqual(expectedConfidence, result.ConfidenceScore ?? 0, 0.02);
+            Assert.AreEqual(expectedConfidence, result.ConfidenceScore ?? 0, 0.001);
         }
 
         Assert.AreEqual(flow.SourceIp, result.SourceIp);
