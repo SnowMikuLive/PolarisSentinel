@@ -4,6 +4,7 @@
   <Project Path="PolarisSentinel.Data/PolarisSentinel.DataAccess.csproj" />
   <Project Path="PolarisSentinel.FirewallEnforement/PolarisSentinel.Firewall.csproj" />
   <Project Path="PolarisSentinel.Inference/PolarisSentinel.Inference.csproj" />
+  <Project Path="PolarisSentinel.PolicyDecision/PolarisSentinel.PolicyDecision.csproj" />
   <Project Path="PolarisSentinel.TrafficCapture/PolarisSentinel.TrafficCapture.csproj" />
   <Project Path="PolarisSentinel.Web/PolarisSentinel.Web.csproj" />
   <Project Path="PolarisSentinelTestProject/PolarisSentinelTestProject.csproj" Id="b5bc8ca6-ba30-4d1e-b689-b5307ddfa28d" />

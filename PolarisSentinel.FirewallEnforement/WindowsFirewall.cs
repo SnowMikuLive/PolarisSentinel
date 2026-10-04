@@ -26,20 +26,9 @@ namespace PolarisSentinel.FirewallEnforement
         {
             CheckName(rule.Name);
 
-            // "*" means Any; otherwise a single remote IP is required.
-            string remoteAddresses;
-            if (rule.RemoteAddress == "*")
-            {
-                remoteAddresses = "*";
-            }
-            else if (IPAddress.TryParse(rule.RemoteAddress, out var address))
-            {
-                remoteAddresses = address.ToString();
-            }
-            else
-            {
-                throw new ArgumentException("A single remote IP address is required.");
-            }
+            // "*" means Any; otherwise one or more comma-separated addresses or CIDR
+            // subnets are allowed (Windows Firewall accepts both forms).
+            string remoteAddresses = NormalizeRemoteAddresses(rule.RemoteAddress);
 
             object? existing = null;
             foreach (dynamic item in _rules)
@@ -71,8 +60,6 @@ namespace PolarisSentinel.FirewallEnforement
             target.Profiles = int.MaxValue;
             target.Enabled = rule.Enabled;
 
-            // A port of 0 (or a protocol of Any) cannot be expressed, so the port
-            // filter is left unset and the rule matches every port.
             SetPorts(target, rule);
 
             // Update the existing rule when extending; do not Add again.
@@ -82,12 +69,75 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
+        // Accepts "*", a single address, a CIDR subnet, or a comma-separated list of
+        // addresses/subnets. Invalid entries are rejected so a malformed rule never
+        // silently degrades into an "any address" block.
+        internal static string NormalizeRemoteAddresses(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Trim() == "*")
+            {
+                return "*";
+            }
+
+            var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var normalized = new List<string>(parts.Length);
+            foreach (var part in parts)
+            {
+                if (!TryNormalizeAddress(part, out var address))
+                {
+                    throw new ArgumentException($"Invalid remote address '{part}'.");
+                }
+                normalized.Add(address);
+            }
+
+            return normalized.Count == 0 ? "*" : string.Join(",", normalized);
+        }
+
+        // A CIDR subnet keeps its prefix; a bare address keeps its normalized form.
+        private static bool TryNormalizeAddress(string value, out string normalized)
+        {
+            normalized = string.Empty;
+            var segments = value.Split('/');
+            if (segments.Length > 2 || !IPAddress.TryParse(segments[0], out var address))
+            {
+                return false;
+            }
+
+            if (address.IsIPv4MappedToIPv6)
+            {
+                address = address.MapToIPv4();
+            }
+
+            if (segments.Length == 2)
+            {
+                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > 128)
+                {
+                    return false;
+                }
+                normalized = $"{address}/{prefix}";
+            }
+            else
+            {
+                normalized = address.ToString();
+            }
+
+            return true;
+        }
+
         // Windows Firewall uses "*" for every port; 0 means "not specified".
+        // A port filter cannot be combined with the Any protocol, so that combination
+        // is rejected rather than silently widened into an all-port block.
         private static void SetPorts(dynamic target, FirewallStoredRule rule)
         {
             bool anyProtocol = rule.Protocol == 0;
-            target.LocalPorts = anyProtocol || rule.LocalPort == 0 ? "*" : rule.LocalPort.ToString();
-            target.RemotePorts = anyProtocol || rule.RemotePort == 0 ? "*" : rule.RemotePort.ToString();
+            if (anyProtocol && (rule.LocalPort != 0 || rule.RemotePort != 0))
+            {
+                throw new ArgumentException(
+                    "A port filter cannot be applied with the Any protocol; specify TCP or UDP.");
+            }
+
+            target.LocalPorts = rule.LocalPort == 0 ? "*" : rule.LocalPort.ToString();
+            target.RemotePorts = rule.RemotePort == 0 ? "*" : rule.RemotePort.ToString();
         }
 
         public void Remove(string ruleName)

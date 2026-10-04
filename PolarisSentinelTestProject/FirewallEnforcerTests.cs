@@ -66,6 +66,31 @@ namespace PolarisSentienlUnitTestProject
                 enforcer.Apply(Decision(alert, PolicyAction.BlockInboundPort), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60)));
         }
 
+        // The Any protocol cannot carry a port filter, so a port action must be rejected
+        // instead of silently widening into an all-port block.
+        [TestMethod]
+        public void Apply_PortActionOnAnyProtocol_ShouldThrow()
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert(protocol: 0);
+
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                enforcer.Apply(Decision(alert, PolicyAction.BlockInboundPort), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60)));
+        }
+
+        // A CIDR source is a valid inbound scope; the prefix must be preserved.
+        [TestMethod]
+        public void Apply_BlockInboundIpWithCidr_ShouldKeepSourceAddress()
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
+            alert.SourceIp = "203.0.113.0/24";
+
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
+
+            Assert.AreEqual("203.0.113.0/24", rule.SourceIp);
+        }
+
         // A null alert id marks a manual rule with no originating alert.
         [TestMethod]
         public void Apply_ManualRule_ShouldHaveNullAssociations()

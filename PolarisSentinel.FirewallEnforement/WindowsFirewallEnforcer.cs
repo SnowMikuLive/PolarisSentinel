@@ -291,14 +291,28 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 return null;
             }
-            if (!IPAddress.TryParse(value.Split('/')[0], out var address))
+
+            // Keep the CIDR prefix so a subnet block reaches Windows Firewall intact.
+            var segments = value.Split('/');
+            if (segments.Length > 2 || !IPAddress.TryParse(segments[0], out var address))
             {
                 return null;
             }
+
             if (address.IsIPv4MappedToIPv6)
             {
                 address = address.MapToIPv4();
             }
+
+            if (segments.Length == 2)
+            {
+                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > 128)
+                {
+                    return null;
+                }
+                return $"{address}/{prefix}";
+            }
+
             return address.ToString();
         }
     }

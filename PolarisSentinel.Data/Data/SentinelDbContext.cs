@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
@@ -21,6 +22,19 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TrafficRecord> TrafficRecords => Set<TrafficRecord>();
 
+    // Reads a DetectionSource from the database without throwing on legacy or
+    // unknown values. The enum member PreFilter was renamed to HeuristicBased, so
+    // rows written before the rename must still load; anything unrecognised falls
+    // back to None rather than crashing the query.
+    private static readonly ValueConverter<DetectionSource, string> DetectionSourceConverter = new(
+        source => source.ToString(),
+        value => ParseDetectionSource(value));
+
+    private static DetectionSource ParseDetectionSource(string value) =>
+        Enum.TryParse<DetectionSource>(value, ignoreCase: true, out var parsed)
+            ? parsed
+            : DetectionSource.None;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -34,7 +48,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Name).HasMaxLength(128).IsRequired();
             e.Property(x => x.Description).HasMaxLength(512);
             e.Property(x => x.AttackType).HasMaxLength(64);
-            e.Property(x => x.DetectionSource).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.DetectionSource).HasConversion(DetectionSourceConverter).HasMaxLength(32);
             e.Property(x => x.Action).HasConversion<string>().HasMaxLength(32);
         });
 
@@ -47,7 +61,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.DestinationIp).HasMaxLength(45).IsRequired();
             e.Property(x => x.AttackType).HasMaxLength(64).IsRequired();
             e.Property(x => x.Description).HasMaxLength(256);
-            e.Property(x => x.DetectionSource).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.DetectionSource).HasConversion(DetectionSourceConverter).HasMaxLength(32);
             e.HasIndex(x => x.CreatedAt);
             e.HasIndex(x => x.SourceIp);
         });
@@ -99,9 +113,9 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         {
             Id = "P-1",
             UserId = "admin",
-            Name = "Prefilter DoS",
+            Name = "Heuristic DoS",
             Description = "Block the source of any rule-based DoS detection.",
-            DetectionSource = DetectionSource.PreFilter,
+            DetectionSource = DetectionSource.HeuristicBased,
             RfThreshold = null,
             IfThreshold = null,
             AttackType = AttackTypes.DoS,
@@ -150,9 +164,9 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         {
             Id = "P-4",
             UserId = "admin",
-            Name = "Prefilter PortScan",
+            Name = "Heuristic PortScan",
             Description = "Block the source of any rule-based port scan detection.",
-            DetectionSource = DetectionSource.PreFilter,
+            DetectionSource = DetectionSource.HeuristicBased,
             RfThreshold = null,
             IfThreshold = null,
             AttackType = AttackTypes.PortScan,
@@ -167,9 +181,9 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         {
             Id = "P-5",
             UserId = "admin",
-            Name = "Prefilter BruteForce",
+            Name = "Heuristic BruteForce",
             Description = "Block the source of any rule-based brute force detection.",
-            DetectionSource = DetectionSource.PreFilter,
+            DetectionSource = DetectionSource.HeuristicBased,
             RfThreshold = null,
             IfThreshold = null,
             AttackType = AttackTypes.BruteForce,
@@ -189,7 +203,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             DetectionSource = DetectionSource.IsolationForest,
             RfThreshold = null,
             IfThreshold = 0.6f,
-            AttackType = AttackTypes.DoS,
+            AttackType = AttackTypes.UnknownAnomaly,
             Action = PolicyAction.BlockInboundIp,
             BlockDurationMinutes = 60,
             Priority = 80,
@@ -206,7 +220,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             DetectionSource = DetectionSource.IsolationForest,
             RfThreshold = null,
             IfThreshold = 0.6f,
-            AttackType = AttackTypes.PortScan,
+            AttackType = AttackTypes.UnknownAnomaly,
             Action = PolicyAction.BlockInboundIp,
             BlockDurationMinutes = 60,
             Priority = 80,
@@ -223,7 +237,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             DetectionSource = DetectionSource.IsolationForest,
             RfThreshold = null,
             IfThreshold = 0.6f,
-            AttackType = AttackTypes.BruteForce,
+            AttackType = AttackTypes.UnknownAnomaly,
             Action = PolicyAction.BlockInboundIp,
             BlockDurationMinutes = 60,
             Priority = 80,

@@ -3,8 +3,9 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
-namespace PolarisSentinel.Application;
+namespace PolarisSentinel.PolicyDecision;
 
 // Matches an alert against the enabled policies and decides what should happen.
 public class PolicyEngine : IPolicyEngine
@@ -16,41 +17,49 @@ public class PolicyEngine : IPolicyEngine
         _logger = logger;
     }
 
-    public PolicyDecision Evaluate(Alert alert, IReadOnlyList<Policy> policies)
+    public Decision Evaluate(Alert alert, IReadOnlyList<Policy> policies)
     {
         if (alert == null)
         {
             throw new ArgumentNullException(nameof(alert));
         }
 
+        // The Isolation Forest only reports unnamed anomalies, so its attack type is
+        // always Unknown_Anomaly. Normalise here so a mislabelled alert cannot match a
+        // named-attack policy or slip past the monitor-only rule below.
+        if (alert.DetectionSource == DetectionSource.IsolationForest)
+        {
+            alert.AttackType = AttackTypes.UnknownAnomaly;
+        }
+
         if (alert.DetectionSource == DetectionSource.None || alert.AttackType == AttackTypes.Benign)
         {
-            return PolicyDecision.Monitor(alert, "benign");
+            return Decision.Monitor(alert, "benign");
         }
 
         // 未知异常只告警，由人工决定是否封禁。
         // Unknown anomalies are monitored for a human decision.
         if (alert.AttackType == AttackTypes.UnknownAnomaly)
         {
-            return PolicyDecision.Monitor(alert, "unknown_anomaly");
+            return Decision.Monitor(alert, "unknown_anomaly");
         }
 
         var match = SelectPolicy(alert, policies);
         if (match == null)
         {
-            return PolicyDecision.Monitor(alert, "no_matching_policy");
+            return Decision.Monitor(alert, "no_matching_policy");
         }
 
         if (!PolicyActions.IsBlocking(match.Action))
         {
-            return PolicyDecision.Monitor(alert, match.Action == PolicyAction.Allow ? "policy_allow" : "policy_monitor");
+            return Decision.Monitor(alert, match.Action == PolicyAction.Allow ? "policy_allow" : "policy_monitor");
         }
 
         _logger.LogDebug(
             "Policy {PolicyId} blocked {AttackType} from {SourceIp}",
             match.Id, alert.AttackType, alert.SourceIp);
 
-        return PolicyDecision.Block(alert, match, "policy_block");
+        return Decision.Block(alert, match, "policy_block");
     }
 
     // Highest priority wins; ties fall back to the older policy, then the id, for determinism.
@@ -83,7 +92,7 @@ public class PolicyEngine : IPolicyEngine
     // The threshold that applies is the one belonging to the detector that produced the alert.
     private static bool MeetsThreshold(Alert alert, Policy policy)
     {
-        if (alert.DetectionSource == DetectionSource.PreFilter)
+        if (alert.DetectionSource == DetectionSource.HeuristicBased)
         {
             return true;
         }

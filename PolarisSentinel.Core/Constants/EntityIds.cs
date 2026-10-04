@@ -51,7 +51,7 @@ public static class EntityIds
         string tag = source switch
         {
             DetectionSource.IsolationForest => "IF",
-            DetectionSource.PreFilter => "PF",
+            DetectionSource.HeuristicBased => "HB",
             _ => "RF"
         };
         return $"{AlertPrefix}{tag}-{number}";

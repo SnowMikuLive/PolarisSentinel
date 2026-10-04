@@ -15,6 +15,15 @@
             <form asp-action="Create" method="post">
                 <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
+                @if (ViewBag.AlertId != null)
+                {
+                    <input type="hidden" name="alertId" value="@ViewBag.AlertId" />
+                }
+                @if (ViewBag.PolicyId != null)
+                {
+                    <input type="hidden" name="policyId" value="@ViewBag.PolicyId" />
+                }
+
                 <h6 class="text-secondary mb-3">Traffic 5-tuple</h6>
                 <div class="row">
                     <div class="col-md-3 mb-3">

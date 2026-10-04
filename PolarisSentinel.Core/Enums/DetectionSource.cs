@@ -11,6 +11,6 @@ public enum DetectionSource
     //Result came from the unsupervised Isolation Forest anomaly detector.
     IsolationForest,
 
-    //Result came from the rule-based pre-filter in the capture layer.
-    PreFilter
+    //Result came from the rule-based heuristic detector in the capture layer.
+    HeuristicBased
 }

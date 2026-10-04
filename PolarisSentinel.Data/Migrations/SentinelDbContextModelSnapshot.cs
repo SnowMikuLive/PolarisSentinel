@@ -298,9 +298,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of any rule-based DoS detection.",
-                            DetectionSource = "PreFilter",
+                            DetectionSource = "HeuristicBased",
                             IsEnabled = true,
-                            Name = "Prefilter DoS",
+                            Name = "Heuristic DoS",
                             Priority = 100,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
@@ -345,9 +345,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of any rule-based port scan detection.",
-                            DetectionSource = "PreFilter",
+                            DetectionSource = "HeuristicBased",
                             IsEnabled = true,
-                            Name = "Prefilter PortScan",
+                            Name = "Heuristic PortScan",
                             Priority = 100,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
@@ -360,9 +360,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of any rule-based brute force detection.",
-                            DetectionSource = "PreFilter",
+                            DetectionSource = "HeuristicBased",
                             IsEnabled = true,
-                            Name = "Prefilter BruteForce",
+                            Name = "Heuristic BruteForce",
                             Priority = 100,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
@@ -371,7 +371,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                         {
                             Id = "P-6",
                             Action = "BlockInboundIp",
-                            AttackType = "DoS",
+                            AttackType = "Unknown_Anomaly",
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of an Isolation Forest DoS anomaly.",
@@ -387,7 +387,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                         {
                             Id = "P-7",
                             Action = "BlockInboundIp",
-                            AttackType = "PortScan",
+                            AttackType = "Unknown_Anomaly",
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of an Isolation Forest port scan anomaly.",
@@ -403,7 +403,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                         {
                             Id = "P-8",
                             Action = "BlockInboundIp",
-                            AttackType = "BruteForce",
+                            AttackType = "Unknown_Anomaly",
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Block the source of an Isolation Forest brute force anomaly.",

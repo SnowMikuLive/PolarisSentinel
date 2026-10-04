@@ -34,6 +34,14 @@ public class FirewallRuleSpec
             return null;
         }
 
+        // A port filter needs a concrete transport protocol; the Any protocol would
+        // otherwise widen the rule to every port.
+        if (portAction && alert.Protocol == 0)
+        {
+            error = "Port actions require a specific protocol (TCP or UDP), not Any.";
+            return null;
+        }
+
         return action switch
         {
             PolicyAction.BlockInboundIp => new FirewallRuleSpec

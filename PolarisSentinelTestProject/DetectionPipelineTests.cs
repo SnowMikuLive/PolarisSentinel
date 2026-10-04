@@ -8,6 +8,7 @@ using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.FirewallEnforement;
+using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
@@ -36,11 +37,11 @@ namespace PolarisSentienlUnitTestProject
             var pipeline = CreatePipeline(inference, out var firewall);
 
             var flow = CreateFlow(PreFilterResult.KnownAttack(AttackTypes.DoS, "SYN flood"));
-            var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.PreFilter) });
+            var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.HeuristicBased) });
 
             Assert.AreEqual(0, inference.CallCount);
             Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
-            Assert.AreEqual(DetectionSource.PreFilter, outcome.Alert!.DetectionSource);
+            Assert.AreEqual(DetectionSource.HeuristicBased, outcome.Alert!.DetectionSource);
             Assert.IsNull(outcome.Alert.ConfidenceScore);
             Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
             Assert.HasCount(1, firewall.GetAllRules());

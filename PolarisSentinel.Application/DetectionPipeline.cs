@@ -172,7 +172,7 @@ public class DetectionPipeline : IDetectionPipeline
 
     private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict) => new()
     {
-        DetectionSource = DetectionSource.PreFilter,
+        DetectionSource = DetectionSource.HeuristicBased,
         AttackType = verdict.AttackType!,
         ConfidenceScore = null,
         Description = verdict.Description,

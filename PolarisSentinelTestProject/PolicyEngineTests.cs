@@ -4,6 +4,8 @@ using PolarisSentinel.Application;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.PolicyDecision;
+using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
@@ -49,7 +51,7 @@ namespace PolarisSentienlUnitTestProject
         [TestMethod]
         public void EvaluateDetectionSourceMismatchShouldNotMatch()
         {
-            var policy = CreatePolicy(source: DetectionSource.PreFilter);
+            var policy = CreatePolicy(source: DetectionSource.HeuristicBased);
             var alert = CreateAlert(source: DetectionSource.RandomForest);
             var decision = Evaluate(alert, policy);
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
@@ -105,11 +107,26 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("unknown_anomaly", decision.Reason);
         }
 
+        // An Isolation Forest alert can only ever be Unknown_Anomaly: a mislabelled
+        // attack type is normalised so it cannot match a named-attack policy.
+        [TestMethod]
+        public void EvaluateIsolationForestWithNamedAttackTypeShouldNormaliseToUnknownAnomaly()
+        {
+            var policy = CreatePolicy(source: DetectionSource.IsolationForest, attackType: AttackTypes.DoS);
+            var alert = CreateAlert(confidence: 0.99f, source: DetectionSource.IsolationForest, attackType: AttackTypes.DoS);
+
+            var decision = Evaluate(alert, policy);
+
+            Assert.AreEqual(AttackTypes.UnknownAnomaly, alert.AttackType);
+            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
+            Assert.AreEqual("unknown_anomaly", decision.Reason);
+        }
+
         [TestMethod]
         public void EvaluatePreFilterAlertShouldIgnoreThreshold()
         {
-            var policy = CreatePolicy(source: DetectionSource.PreFilter);
-            var alert = CreateAlert(confidence: null, source: DetectionSource.PreFilter);
+            var policy = CreatePolicy(source: DetectionSource.HeuristicBased);
+            var alert = CreateAlert(confidence: null, source: DetectionSource.HeuristicBased);
             var decision = Evaluate(alert, policy);
             Assert.AreEqual(PolicyAction.BlockInboundIp, decision.Action);
         }
@@ -143,7 +160,7 @@ namespace PolarisSentienlUnitTestProject
 
         #region Helper Methods
 
-        private static PolicyDecision Evaluate(Alert alert, params Policy[] policies)
+        private static Decision Evaluate(Alert alert, params Policy[] policies)
         {
             var engine = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
             return engine.Evaluate(alert, policies);

@@ -37,6 +37,10 @@ public sealed class SentinelDbInitializer
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        // Apply pending migrations first; without this the schema and seed data stay
+        // stale and enum values such as the renamed DetectionSource fail to map.
+        await _db.Database.MigrateAsync(cancellationToken);
+        _logger.LogInformation("Database migrations applied.");
 
         if (!_options.Enabled)
         {

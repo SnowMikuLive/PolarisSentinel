@@ -8,6 +8,7 @@ using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.FirewallEnforement;
+using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
@@ -25,7 +26,7 @@ namespace PolarisSentienlUnitTestProject
 
             Assert.AreEqual(0, inference.CallCount);
             Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
-            Assert.AreEqual(DetectionSource.PreFilter, outcome.Alert!.DetectionSource);
+            Assert.AreEqual(DetectionSource.HeuristicBased, outcome.Alert!.DetectionSource);
             Assert.AreEqual("policy_block", outcome.Decision.Reason);
             Assert.HasCount(1, firewall.GetAllRules());
         }
@@ -118,7 +119,7 @@ namespace PolarisSentienlUnitTestProject
             Id = "P-1",
             Name = "P-1",
             UserId = "admin",
-            DetectionSource = DetectionSource.PreFilter,
+            DetectionSource = DetectionSource.HeuristicBased,
             Action = PolicyAction.BlockInboundIp,
             BlockDurationMinutes = 60,
             Priority = 100,

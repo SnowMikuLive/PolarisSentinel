@@ -5,6 +5,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -37,10 +38,33 @@ namespace PolarisSentinel.Web.Controllers
             return View(rule);
         }
 
-        public IActionResult Create()
+        // The optional query values let the Inference Results page open this form with
+        // an alert's 5-tuple already filled in; the operator only has to confirm.
+        // alertId / policyId are carried through so the created rule keeps its origin.
+        public IActionResult Create(
+            string? alertId = null,
+            string? policyId = null,
+            string? sourceIp = null,
+            int? sourcePort = null,
+            string? destinationIp = null,
+            int? destinationPort = null,
+            byte? protocol = null,
+            PolicyAction? action = null)
         {
             PopulateLists();
-            return View(new Rule());
+            ViewBag.AlertId = alertId;
+            ViewBag.PolicyId = policyId;
+            var rule = new Rule
+            {
+                SourceIp = sourceIp ?? string.Empty,
+                SourcePort = sourcePort,
+                DestinationIp = destinationIp ?? string.Empty,
+                DestinationPort = destinationPort,
+                Protocol = protocol,
+                Action = action ?? PolicyAction.BlockInboundIp,
+                Status = RuleStatus.Active
+            };
+            return View(rule);
         }
 
         [HttpPost]
@@ -49,22 +73,30 @@ namespace PolarisSentinel.Web.Controllers
             [Bind("SourceIp,SourcePort,DestinationIp,DestinationPort,Protocol,Action,Status")]
             Rule rule,
             int? durationValue,
-            string? durationUnit)
+            string? durationUnit,
+            string? alertId = null,
+            string? policyId = null)
         {
             Validate(rule);
 
             if (!ModelState.IsValid)
             {
                 PopulateLists();
+                ViewBag.AlertId = alertId;
+                ViewBag.PolicyId = policyId;
                 return View(rule);
             }
 
-            // A manual rule has no alert behind it, so the decision carries a synthetic alert
-            // with the 5-tuple the operator entered.
-            var alert = BuildManualAlert(rule);
-            var decision = new PolicyDecision { Alert = alert, Action = rule.Action };
+            // When the rule was opened from an alert, reuse that alert's real 5-tuple and
+            // keep the AlertId / PolicyId so the rule stays linked to its origin. Otherwise
+            // fall back to a synthetic alert built from the operator's input.
+            var alert = string.IsNullOrEmpty(alertId)
+                ? BuildManualAlert(rule)
+                : _unitOfWork.Alerts.GetByIdAsync(alertId).GetAwaiter().GetResult() ?? BuildManualAlert(rule);
 
-            _firewall.Apply(decision, null, null, null, ResolveDuration(durationValue, durationUnit));
+            var decision = new Decision { Alert = alert, Action = rule.Action };
+
+            _firewall.Apply(decision, policyId, alertId, alert.AttackType, ResolveDuration(durationValue, durationUnit));
             _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
             TempData["success"] = "Rule created.";
