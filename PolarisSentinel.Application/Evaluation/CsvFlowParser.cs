@@ -2,7 +2,7 @@ using System.Globalization;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Models;
 
-namespace PolarisSentinel.Application;
+namespace PolarisSentinel.Application.Evaluation;
 
 // Parses a labeled CIC-IDS-2017 style CSV into flows for offline evaluation.
 public static class CsvFlowParser

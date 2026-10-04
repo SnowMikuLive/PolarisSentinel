@@ -38,4 +38,44 @@ public class Policy
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+    // True when the alert satisfies every condition this policy declares.
+    // Domain logic: both the policy engine and the detection pipeline gate on this.
+    public bool Matches(Alert alert)
+    {
+        if (DetectionSource is { } source && source != alert.DetectionSource)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(AttackType) &&
+            !string.Equals(AttackType, alert.AttackType, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return MeetsThreshold(alert);
+    }
+
+    // The threshold that applies is the one belonging to the detector that produced the alert.
+    // A heuristic alert carries no model score, so it always passes.
+    public bool MeetsThreshold(Alert alert)
+    {
+        if (alert.DetectionSource == Enums.DetectionSource.HeuristicBased)
+        {
+            return true;
+        }
+
+        float? threshold = ThresholdFor(alert.DetectionSource);
+        return threshold is null || alert.ConfidenceScore is { } score && score >= threshold;
+    }
+
+    // The confidence threshold this policy applies to a given detection source,
+    // or null when the source is not threshold-gated.
+    public float? ThresholdFor(Enums.DetectionSource source) => source switch
+    {
+        Enums.DetectionSource.RandomForest => RfThreshold,
+        Enums.DetectionSource.IsolationForest => IfThreshold,
+        _ => null
+    };
 }

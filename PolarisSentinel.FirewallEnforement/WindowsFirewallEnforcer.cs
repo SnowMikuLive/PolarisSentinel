@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security.Principal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,51 +13,87 @@ namespace PolarisSentinel.FirewallEnforement
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
-        private readonly WindowsFirewall? _firewall;
+        private readonly FirewallRuntimeState _state;
+        private WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
         private readonly object _lock = new object();
 
         public bool IsDryRun => _firewall == null;
 
+        public string? DryRunReason { get; private set; }
+
         public WindowsFirewallEnforcer(
             IRuleRepository rules,
             IOptions<FirewallOptions> options,
+            FirewallRuntimeState state,
             TimeProvider timeProvider,
             ILogger<WindowsFirewallEnforcer> logger)
         {
             _rules = rules;
+            _state = state;
             _timeProvider = timeProvider;
             _logger = logger;
 
-            if (options.Value.DryRun)
-            {
-                _logger.LogInformation("Firewall dry-run enabled");
-                return;
-            }
+            // The runtime state (seeded from config) is the source of truth; it can be
+            // toggled from the dashboard after startup.
+            EvaluateEnforcement();
+        }
 
-            try
+        // Opens or releases the real Windows Firewall handle to match the runtime DryRun flag.
+        // Called at construction and whenever the dashboard toggles the setting.
+        private void EvaluateEnforcement()
+        {
+            lock (_lock)
             {
-                if (!OperatingSystem.IsWindows())
+                if (_state.DryRun)
                 {
-                    _logger.LogError("Windows Firewall is unavailable; using dry-run");
+                    _firewall = null;
+                    DryRunReason = "disabled (dry-run enabled from the dashboard)";
+                    _logger.LogWarning("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
                     return;
                 }
-                using var identity = WindowsIdentity.GetCurrent();
-                var principal = new WindowsPrincipal(identity);
-                // Writing the system firewall needs administrator rights.
-                if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
+
+                try
                 {
-                    _logger.LogError("Administrator rights are required; using dry-run");
-                    return;
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        _firewall = null;
+                        DryRunReason = "Windows Firewall is unavailable on this platform";
+                        _logger.LogError("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
+                        return;
+                    }
+
+                    using var identity = WindowsIdentity.GetCurrent();
+                    var principal = new WindowsPrincipal(identity);
+                    // Writing the system firewall needs administrator rights.
+                    if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
+                    {
+                        _firewall = null;
+                        DryRunReason = "administrator rights are required";
+                        _logger.LogError("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
+                        return;
+                    }
+
+                    _firewall = new WindowsFirewall();
+                    DryRunReason = null;
+                    _logger.LogInformation("Real Windows Firewall execution enabled");
                 }
-                _firewall = new WindowsFirewall();
-                _logger.LogInformation("Real Windows Firewall execution enabled");
+                catch (Exception ex)
+                {
+                    _firewall = null;
+                    DryRunReason = "Windows Firewall could not be opened";
+                    _logger.LogError(ex, "Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Cannot open Windows Firewall; using dry-run");
-            }
+        }
+
+        // Turns dry-run on/off at runtime and returns the resulting enforcement status.
+        public (bool DryRun, string? Reason) SetDryRun(bool dryRun)
+        {
+            _state.DryRun = dryRun;
+            EvaluateEnforcement();
+            return (IsDryRun, DryRunReason);
         }
 
         public Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration)
@@ -293,27 +328,7 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             // Keep the CIDR prefix so a subnet block reaches Windows Firewall intact.
-            var segments = value.Split('/');
-            if (segments.Length > 2 || !IPAddress.TryParse(segments[0], out var address))
-            {
-                return null;
-            }
-
-            if (address.IsIPv4MappedToIPv6)
-            {
-                address = address.MapToIPv4();
-            }
-
-            if (segments.Length == 2)
-            {
-                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > 128)
-                {
-                    return null;
-                }
-                return $"{address}/{prefix}";
-            }
-
-            return address.ToString();
+            return AddressNormalizer.TryNormalizeAddress(value, out var normalized) ? normalized : null;
         }
     }
 }

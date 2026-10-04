@@ -66,44 +66,10 @@ public class PolicyEngine : IPolicyEngine
     private static Policy? SelectPolicy(Alert alert, IReadOnlyList<Policy> policies)
     {
         return policies
-            .Where(p => p.IsEnabled && Matches(alert, p))
+            .Where(p => p.IsEnabled && p.Matches(alert))
             .OrderByDescending(p => p.Priority)
             .ThenBy(p => p.CreatedAt)
             .ThenBy(p => p.Id, StringComparer.Ordinal)
             .FirstOrDefault();
-    }
-
-    private static bool Matches(Alert alert, Policy policy)
-    {
-        if (policy.DetectionSource is { } source && source != alert.DetectionSource)
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(policy.AttackType) &&
-            !string.Equals(policy.AttackType, alert.AttackType, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return MeetsThreshold(alert, policy);
-    }
-
-    // The threshold that applies is the one belonging to the detector that produced the alert.
-    private static bool MeetsThreshold(Alert alert, Policy policy)
-    {
-        if (alert.DetectionSource == DetectionSource.HeuristicBased)
-        {
-            return true;
-        }
-
-        float? threshold = alert.DetectionSource switch
-        {
-            DetectionSource.RandomForest => policy.RfThreshold,
-            DetectionSource.IsolationForest => policy.IfThreshold,
-            _ => null
-        };
-
-        return threshold is null || alert.ConfidenceScore is { } score && score >= threshold;
     }
 }

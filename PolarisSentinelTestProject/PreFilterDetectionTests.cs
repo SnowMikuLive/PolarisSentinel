@@ -107,7 +107,7 @@ namespace PolarisSentienlUnitTestProject
         {
             var clock = new FakeTimeProvider();
             firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(),
-                Options.Create(new FirewallOptions()), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
+                Options.Create(new FirewallOptions()), new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
             var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
             return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),

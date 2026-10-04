@@ -4,6 +4,7 @@ using SharpPcap;
 using SharpPcap.LibPcap;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Services;
 
 
 namespace PolarisSentinel.TrafficCapture;
@@ -11,7 +12,8 @@ namespace PolarisSentinel.TrafficCapture;
 public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 {
     private readonly ConcurrentDictionary<Internal.FlowKey, Internal.FlowRecord> _flows = new();
-    private readonly Internal.PreFilter _preFilter;
+    private readonly PreFilter _preFilter;
+    private readonly SourceBehaviorTracker _behavior;
 
     private readonly int _flowIdleTimeoutSeconds;
     private readonly System.Threading.Timer _expiryTimer;
@@ -35,11 +37,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private const int MaxFlowCount = 100000;
 
-    // Upper bound on flows exported per expiry tick, so a flood cannot stall the timer.
-    private const int MaxFlowsPerExpiryCycle = 500;
+    // Expiry runs on a timer thread; cap each cycle by wall-clock time so a flood of
+    // tens of thousands of idle flows cannot stall the timer indefinitely. The
+    // remainder is picked up on the next tick.
+    private static readonly TimeSpan ExpiryTimeBudget = TimeSpan.FromMilliseconds(200);
 
-    // Flows rejected because the table was full; surfaced so a flood is visible.
-    private long _droppedFlows;
+    // Behavioural detection window: a source is judged on the last N seconds of activity.
+    private static readonly TimeSpan BehaviorWindow = TimeSpan.FromSeconds(10);
 
     public event EventHandler<FlowFeatureVector>? OnFlowCompleted;
     public event EventHandler<LiveTrafficSummary>? OnLiveTrafficSummary;
@@ -53,7 +57,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int liveSummaryIntervalSeconds = 5)
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
-        _preFilter = new Internal.PreFilter(preFilterMinPackets);
+        _preFilter = new PreFilter(preFilterMinPackets);
+        _behavior = new SourceBehaviorTracker(BehaviorWindow);
 
         // Both timers are created suspended (Timeout.Infinite due time) and
         // only actually start ticking once Start(deviceName) is called.
@@ -257,13 +262,23 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
+        // Behavioural detection sees every packet, independent of flow aggregation, so a
+        // scan or brute-force run that spreads across many short flows is still caught.
+        _behavior.Observe(new PacketObservation(
+            SourceIp: srcIp,
+            DestinationPort: dstPort,
+            Protocol: protocol,
+            IsSyn: tcpPacket?.Synchronize ?? false,
+            IsRst: tcpPacket?.Reset ?? false,
+            PacketSize: packetSize,
+            Timestamp: now));
+
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
 
         // A flood (or a spoofed-source scan) can create flows faster than they expire.
         // Cap the table so memory stays bounded; the expiry timer drains it afterwards.
         if (_flows.Count >= MaxFlowCount && !_flows.ContainsKey(key))
         {
-            Interlocked.Increment(ref _droppedFlows);
             return;
         }
 
@@ -357,15 +372,17 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     internal void ExpireIdleFlows(DateTime now)
     {
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
+        var deadline = DateTime.UtcNow + ExpiryTimeBudget;
+
+        // Drop behavioural windows that have gone quiet so the tracker does not grow.
+        _behavior.Prune(now);
 
         // A flood can leave tens of thousands of idle flows at once. Processing them
-        // all in one cycle would block this timer thread for a long time, so the work
-        // is capped per cycle; the remainder is picked up on the next tick.
-        int processed = 0;
-
+        // all in one cycle would block this timer thread, so each cycle runs until a
+        // wall-clock budget is spent; the remainder is picked up on the next tick.
         foreach (var (key, flow) in _flows)
         {
-            if (processed >= MaxFlowsPerExpiryCycle) break;
+            if (DateTime.UtcNow >= deadline) break;
 
             bool isIdle;
             lock (flow) { isIdle = now - flow.LastSeenTime > timeout; }
@@ -373,11 +390,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            processed++;
+            // Behavioural detection first: a scan or brute-force run is invisible to a
+            // single flow but obvious across the source's recent activity.
+            var verdict = _behavior.Evaluate(flow.SourceIp, now);
 
-            // Rule-based pre-filter runs first: attack verdicts are emitted, benign flows are dropped,
-            // and only flows that no rule could classify are exported for AI inference.
-            var verdict = _preFilter.Classify(flow);
+            // Otherwise fall back to the per-flow pre-filter: attack verdicts are emitted,
+            // benign flows are dropped, and only unclassified flows reach AI inference.
+            verdict ??= _preFilter.Classify(ToStatistics(flow));
             if (!verdict.IsKnownAttack && !verdict.IsSuspicious) continue;
 
             var featureVector = Internal.FeatureExporter.Export(
@@ -411,6 +430,26 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));
         }
     }
+
+    // Projects the capture adapter's mutable flow record onto the immutable domain
+    // statistics the pre-filter classifies, so the detection rules stay capture-agnostic.
+    private static FlowStatistics ToStatistics(Internal.FlowRecord flow) => new()
+    {
+        Protocol = flow.Protocol,
+        DestinationPort = flow.DestinationPort,
+        FwdPackets = flow.FwdPackets,
+        BwdPackets = flow.BwdPackets,
+        FwdBytes = flow.FwdBytes,
+        BwdBytes = flow.BwdBytes,
+        SynCount = flow.SynCount,
+        AckCount = flow.AckCount,
+        FinCount = flow.FinCount,
+        RstCount = flow.RstCount,
+        PshCount = flow.PshCount,
+        DurationSeconds = flow.DurationSeconds,
+        PacketSizeMean = flow.PacketSizeStats.Mean,
+        PacketSizeStdDev = flow.PacketSizeStats.StdDev
+    };
 
     private void RaiseFlowCompleted(FlowFeatureVector flow)
     {
@@ -447,8 +486,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             ActiveFlowCount = _flows.Count,
             TcpShare = (double)tcp / total,
             UdpShare = (double)udp / total,
-            IcmpShare = (double)icmp / total,
-            DroppedFlowCount = (int)Interlocked.Read(ref _droppedFlows)
+            IcmpShare = (double)icmp / total
         });
     }
 

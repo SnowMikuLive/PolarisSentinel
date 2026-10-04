@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PolarisSentinel.Core\PolarisSentinel.Core.csproj" />
-    <ProjectReference Include="..\PolarisSentinel.PolicyDecision\PolarisSentinel.PolicyDecision.csproj" />
   </ItemGroup>
 
 </Project>

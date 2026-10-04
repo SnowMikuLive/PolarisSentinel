@@ -2,7 +2,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using PolarisSentinel.Inference;
+using PolarisSentinel.Application;
 
 namespace PolarisSentienlUnitTestProject;
 

@@ -3,7 +3,7 @@ using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 
-namespace PolarisSentinel.Application;
+namespace PolarisSentinel.Application.Evaluation;
 
 // Compares the five AI model combinations on a labeled test set.
 public class EvaluationService

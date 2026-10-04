@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PolarisSentinel.Application;
+using PolarisSentinel.Application.Evaluation;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -166,12 +167,7 @@ namespace PolarisSentinel.Web.Controllers
                     continue;
                 }
 
-                return source switch
-                {
-                    DetectionSource.RandomForest => policy.RfThreshold,
-                    DetectionSource.IsolationForest => policy.IfThreshold,
-                    _ => null
-                };
+                return policy.ThresholdFor(source);
             }
 
             return null;

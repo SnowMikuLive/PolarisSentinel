@@ -1,15 +1,8 @@
-using PolarisSentinel.Core.Enums;
-
 namespace PolarisSentinel.Core.Constants;
 
-//保留旧P-/R-/A-编号；新告警与规则主键用NewId()。
-//Keep legacy P-/R-/A- builders;new alert and rule rows use NewId().
+// Sequential P-/R-/A- id builders for policies, rules, and alerts.
 public static class EntityIds
 {
-    //32字符GUID主键，避免重启、并发与删后重建时序号冲突。
-    //32-char GUID keys avoid collisions across restarts,concurrency,and re-create.
-    public static string NewId() => Guid.NewGuid().ToString("N");
-
     public const string PolicyPrefix = "P-";
     public const string RulePrefix = "R-";
     public const string AlertPrefix = "A-";
@@ -17,12 +10,6 @@ public static class EntityIds
     //托管防火墙规则名前缀
     //Prefix for managed Windows Firewall rule names
     public const string FirewallRulePrefix = "PolarisSentinel_";
-
-    //五元组全通配时的共享规则键（非单条告警ID）
-    //Shared rule key when scope is unconstrained (not a single alert id)
-    public const string AnyTrafficRuleName = "ANY";
-
-    public static string Policy(int number) => $"{PolicyPrefix}{number}";
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
 
@@ -42,19 +29,6 @@ public static class EntityIds
             }
         }
         return max;
-    }
-
-    //历史告警编号：RF/IF/PF来源标签+序号（仅旧数据/测试）
-    //Legacy alert id:RF/IF/PF tag plus counter (old rows and tests only)
-    public static string Alert(DetectionSource source, int number)
-    {
-        string tag = source switch
-        {
-            DetectionSource.IsolationForest => "IF",
-            DetectionSource.HeuristicBased => "HB",
-            _ => "RF"
-        };
-        return $"{AlertPrefix}{tag}-{number}";
     }
 
     //由告警主键生成唯一防火墙规则名

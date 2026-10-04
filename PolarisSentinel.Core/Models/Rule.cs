@@ -14,12 +14,8 @@ public class Rule
     // The policy that produced this rule; null for manual rules.
     public string? PolicyId { get; set; }
 
-    public Policy? Policy { get; set; }
-
     // The alert that triggered this rule; null for manual rules.
     public string? AlertId { get; set; }
-
-    public Alert? Alert { get; set; }
 
     public PolicyAction Action { get; set; }
 

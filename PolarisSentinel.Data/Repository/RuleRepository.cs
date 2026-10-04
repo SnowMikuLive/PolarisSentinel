@@ -41,9 +41,6 @@ public class RuleRepository : IRuleRepository
     {
         return await _context.Rules
             .AsNoTracking()
-            //Load the Policy and Alert navigation; otherwise, policyName will always be null.
-            .Include(r => r.Policy)
-            .Include(r => r.Alert)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -56,12 +53,9 @@ public class RuleRepository : IRuleRepository
 
     public void Update(Rule rule)
     {
-        // Rules are usually read with AsNoTracking() (and Include(Policy/Alert)), so the
-        // passed-in instance is detached and its navigation properties hold detached
-        // Policy/Alert instances. Attaching that graph would re-attach those principals
-        // and, because Policy/Alert are seed data, EF would try to INSERT them again
-        // (duplicate PK 'P-1'/'A-1'). Instead, load the tracked row and copy only the
-        // scalar columns across, never touching the navigation graph.
+        // Rules are read with AsNoTracking(), so the passed-in instance is detached.
+        // Load the tracked row and copy only the scalar columns across so EF never
+        // tries to re-attach (and re-insert) a principal row.
         var tracked = _context.Rules
             .FirstOrDefault(r => r.Id == rule.Id);
 

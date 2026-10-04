@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using PolarisSentinel.Application;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
@@ -66,17 +67,19 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Runs one completed flow through the pipeline and records the outcome.
+        // Runs one completed flow through the application use case and records the outcome.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var pipeline = scope.ServiceProvider.GetRequiredService<IDetectionPipeline>();
+                var processor = scope.ServiceProvider.GetRequiredService<FlowProcessingService>();
 
-                var policies = await unitOfWork.Policies.GetEnabledAsync();
-                var outcome = pipeline.ProcessFlow(flow, policies);
+                var outcome = await processor.ProcessAsync(flow);
+                if (outcome is null)
+                {
+                    return;
+                }
 
                 var record = _state.Record(outcome);
 

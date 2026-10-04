@@ -1,25 +1,25 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using PolarisSentinel.Application;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
-using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Firewall rule CRUD. All persistence is delegated to the firewall module.
+    // Firewall rule CRUD. Persistence and domain validation are delegated to RuleManagementService.
     [Authorize]
     public class RulesController : Controller
     {
         private readonly IFirewallEnforcer _firewall;
-        private readonly IUnitOfWork _unitOfWork;
+        private readonly RuleManagementService _rules;
 
-        public RulesController(IFirewallEnforcer firewall, IUnitOfWork unitOfWork)
+        public RulesController(IFirewallEnforcer firewall, RuleManagementService rules)
         {
             _firewall = firewall;
-            _unitOfWork = unitOfWork;
+            _rules = rules;
         }
 
         public IActionResult Index(
@@ -115,7 +115,7 @@ namespace PolarisSentinel.Web.Controllers
             string? alertId = null,
             string? policyId = null)
         {
-            Validate(rule);
+            AddValidationErrors(rule);
 
             if (!ModelState.IsValid)
             {
@@ -125,17 +125,7 @@ namespace PolarisSentinel.Web.Controllers
                 return View(rule);
             }
 
-            // When the rule was opened from an alert, reuse that alert's real 5-tuple and
-            // keep the AlertId / PolicyId so the rule stays linked to its origin. Otherwise
-            // fall back to a synthetic alert built from the operator's input.
-            var alert = string.IsNullOrEmpty(alertId)
-                ? BuildManualAlert(rule)
-                : _unitOfWork.Alerts.GetByIdAsync(alertId).GetAwaiter().GetResult() ?? BuildManualAlert(rule);
-
-            var decision = new Decision { Alert = alert, Action = rule.Action };
-
-            _firewall.Apply(decision, policyId, alertId, alert.AttackType, ResolveDuration(durationValue, durationUnit));
-            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+            _rules.Create(rule, alertId, policyId, durationValue, durationUnit);
 
             TempData["success"] = "Rule created.";
             return RedirectToAction(nameof(Index));
@@ -171,23 +161,12 @@ namespace PolarisSentinel.Web.Controllers
                 return View(rule);
             }
 
-            var updated = _firewall.Update(
-                id,
-                rule.SourceIp ?? string.Empty,
-                rule.SourcePort ?? 0,
-                rule.DestinationIp ?? string.Empty,
-                rule.DestinationPort ?? 0,
-                rule.Protocol ?? 0,
-                rule.Action,
-                rule.Status,
-                ResolveDuration(durationValue, durationUnit));
+            var updated = _rules.Update(rule, durationValue, durationUnit);
 
             if (updated == null)
             {
                 return NotFound();
             }
-
-            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
             TempData["success"] = "Rule updated.";
             return RedirectToAction(nameof(Index));
@@ -208,8 +187,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult DeleteConfirmed(string id)
         {
-            _firewall.Remove(id);
-            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+            _rules.Remove(id);
             TempData["success"] = "Rule removed.";
             return RedirectToAction(nameof(Index));
         }
@@ -218,8 +196,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult RemoveAll()
         {
-            int removed = _firewall.RemoveAll();
-            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+            int removed = _rules.RemoveAll();
             TempData["success"] = $"{removed} rule(s) removed.";
             return RedirectToAction(nameof(Index));
         }
@@ -230,63 +207,18 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.Statuses = new SelectList(Enum.GetValues<RuleStatus>());
         }
 
+        // Surfaces the domain validation errors on ModelState for the form.
         private void Validate(Rule rule)
         {
-            if (string.IsNullOrWhiteSpace(rule.SourceIp) && string.IsNullOrWhiteSpace(rule.DestinationIp))
-            {
-                ModelState.AddModelError(nameof(Rule.SourceIp), "Provide at least one address, or pick Any on both sides.");
-            }
-
-            ValidateAddress(nameof(Rule.SourceIp), rule.SourceIp);
-            ValidateAddress(nameof(Rule.DestinationIp), rule.DestinationIp);
-
-            // ICMP has no ports, so a port-based action cannot be expressed.
-            bool portAction = rule.Action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
-            if (portAction && rule.Protocol == ProtocolNumbers.Icmp)
-            {
-                ModelState.AddModelError(nameof(Rule.Action), "Port actions are not valid for ICMP; use an IP action instead.");
-            }
+            AddValidationErrors(rule);
         }
 
-        private void ValidateAddress(string field, string? value)
+        private void AddValidationErrors(Rule rule)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            foreach (var (field, message) in _rules.Validate(rule))
             {
-                return;
+                ModelState.AddModelError(field, message);
             }
-
-            if (!System.Net.IPAddress.TryParse(value.Split('/')[0], out _))
-            {
-                ModelState.AddModelError(field, "Enter a valid IP address or CIDR.");
-            }
-        }
-
-        // A synthetic alert carrying the operator's 5-tuple; it is never persisted.
-        private static Alert BuildManualAlert(Rule rule) => new()
-        {
-            DetectionSource = DetectionSource.None,
-            AttackType = AttackTypes.Benign,
-            SourceIp = rule.SourceIp ?? string.Empty,
-            SourcePort = rule.SourcePort ?? 0,
-            DestinationIp = rule.DestinationIp ?? string.Empty,
-            DestinationPort = rule.DestinationPort ?? 0,
-            Protocol = rule.Protocol ?? 0
-        };
-
-        // Convert value + unit into a duration; default 60 minutes.
-        private static TimeSpan ResolveDuration(int? value, string? unit)
-        {
-            if (!value.HasValue || value.Value <= 0)
-            {
-                return TimeSpan.FromMinutes(60);
-            }
-
-            return unit switch
-            {
-                "hours" => TimeSpan.FromHours(value.Value),
-                "days" => TimeSpan.FromDays(value.Value),
-                _ => TimeSpan.FromMinutes(value.Value)
-            };
         }
     }
 }

@@ -76,11 +76,12 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.SourceIp).HasMaxLength(64);
             e.Property(x => x.DestinationIp).HasMaxLength(64);
-            e.HasOne(x => x.Policy)
+            // Foreign keys only; the Rule model carries no navigation properties.
+            e.HasOne<Policy>()
                 .WithMany()
                 .HasForeignKey(x => x.PolicyId)
                 .OnDelete(DeleteBehavior.SetNull);
-            e.HasOne(x => x.Alert)
+            e.HasOne<Alert>()
                 .WithMany()
                 .HasForeignKey(x => x.AlertId)
                 .OnDelete(DeleteBehavior.SetNull);
@@ -194,19 +195,20 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
         },
+
         new()
         {
             Id = "P-6",
             UserId = "admin",
-            Name = "Isolation Forest DoS",
-            Description = "Block the source of an Isolation Forest DoS anomaly.",
+            Name = "Isolation Forest abnormal",
+            Description = "Block the source of an Isolation Forest abnormal behavior.",
             DetectionSource = DetectionSource.IsolationForest,
             RfThreshold = null,
-            IfThreshold = 0.6f,
+            IfThreshold = 0.7f,
             AttackType = AttackTypes.UnknownAnomaly,
             Action = PolicyAction.BlockInboundIp,
             BlockDurationMinutes = 60,
-            Priority = 80,
+            Priority = 90,
             IsEnabled = true,
             CreatedAt = SeedTimestamp,
             UpdatedAt = SeedTimestamp
@@ -214,40 +216,6 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-7",
-            UserId = "admin",
-            Name = "Isolation Forest PortScan",
-            Description = "Block the source of an Isolation Forest port scan anomaly.",
-            DetectionSource = DetectionSource.IsolationForest,
-            RfThreshold = null,
-            IfThreshold = 0.6f,
-            AttackType = AttackTypes.UnknownAnomaly,
-            Action = PolicyAction.BlockInboundIp,
-            BlockDurationMinutes = 60,
-            Priority = 80,
-            IsEnabled = true,
-            CreatedAt = SeedTimestamp,
-            UpdatedAt = SeedTimestamp
-        },
-        new()
-        {
-            Id = "P-8",
-            UserId = "admin",
-            Name = "Isolation Forest BruteForce",
-            Description = "Block the source of an Isolation Forest brute force anomaly.",
-            DetectionSource = DetectionSource.IsolationForest,
-            RfThreshold = null,
-            IfThreshold = 0.6f,
-            AttackType = AttackTypes.UnknownAnomaly,
-            Action = PolicyAction.BlockInboundIp,
-            BlockDurationMinutes = 60,
-            Priority = 80,
-            IsEnabled = true,
-            CreatedAt = SeedTimestamp,
-            UpdatedAt = SeedTimestamp
-        },
-        new()
-        {
-            Id = "P-9",
             UserId = "admin",
             Name = "Random Forest DoS",
             Description = "Block the source of a Random Forest DoS detection.",

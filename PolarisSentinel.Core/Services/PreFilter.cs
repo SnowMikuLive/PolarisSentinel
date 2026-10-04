@@ -1,10 +1,11 @@
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Models;
 
-namespace PolarisSentinel.TrafficCapture.Internal;
+namespace PolarisSentinel.Core.Services;
 
-// Rule-based pre-filter: detects known attack signatures, drops obvious noise, and forwards the rest to the AI engine.
-internal sealed class PreFilter
+// Rule-based pre-filter: detects known attack signatures, drops obvious noise, and
+// forwards the rest to the AI engine. Domain logic, independent of any capture library.
+public sealed class PreFilter
 {
     private readonly int _minPacketsForAnalysis;
 
@@ -14,7 +15,7 @@ internal sealed class PreFilter
     }
 
     // Classifies a finished flow into a known attack, a suspicious flow for the AI engine, or normal traffic.
-    public PreFilterResult Classify(FlowRecord flow)
+    public PreFilterResult Classify(FlowStatistics flow)
     {
         // Too few packets to compute meaningful statistics.
         if (flow.TotalPackets < _minPacketsForAnalysis)
@@ -63,18 +64,16 @@ internal sealed class PreFilter
     }
 
     // Returns the flow as seen from the dominant sender, so the attack rules can
-    // assume forward = attacker regardless of how FlowKey ordered the endpoints.
-    private static FlowRecord Normalise(FlowRecord flow)
+    // assume forward = attacker regardless of how the flow key ordered the endpoints.
+    private static FlowStatistics Normalise(FlowStatistics flow)
     {
         if (flow.FwdPackets >= flow.BwdPackets)
         {
             return flow;
         }
 
-        return new FlowRecord
+        return new FlowStatistics
         {
-            StartTime = flow.StartTime,
-            LastSeenTime = flow.LastSeenTime,
             Protocol = flow.Protocol,
             DestinationPort = flow.DestinationPort,
             FwdPackets = flow.BwdPackets,
@@ -85,12 +84,15 @@ internal sealed class PreFilter
             AckCount = flow.AckCount,
             FinCount = flow.FinCount,
             RstCount = flow.RstCount,
-            PshCount = flow.PshCount
+            PshCount = flow.PshCount,
+            DurationSeconds = flow.DurationSeconds,
+            PacketSizeMean = flow.PacketSizeMean,
+            PacketSizeStdDev = flow.PacketSizeStdDev
         };
     }
 
     // DoS family: SYN / UDP / ACK / ICMP floods, driven by flag counts and one-way packet volume.
-    private PreFilterResult? DetectFlood(FlowRecord flow)
+    private PreFilterResult? DetectFlood(FlowStatistics flow)
     {
         bool oneWay = flow.BwdPackets <= flow.FwdPackets * 0.1;
 
@@ -137,7 +139,7 @@ internal sealed class PreFilter
     }
 
     // Port scanning family: SYN / connect / FIN-NULL-Xmas / UDP scans and ICMP sweeps.
-    private PreFilterResult? DetectScan(FlowRecord flow)
+    private PreFilterResult? DetectScan(FlowStatistics flow)
     {
         bool shortLived = flow.DurationSeconds < 2.0;
         bool mostlyOutbound = flow.BwdPackets <= flow.FwdPackets * 0.3;
@@ -200,7 +202,7 @@ internal sealed class PreFilter
     }
 
     // Brute force family: many short connections to SSH/FTP with flat, repeating packet sizes.
-    private PreFilterResult? DetectBruteForce(FlowRecord flow)
+    private PreFilterResult? DetectBruteForce(FlowStatistics flow)
     {
         bool isAuthPort = flow.DestinationPort == 22 || flow.DestinationPort == 21;
         if (!isAuthPort)
@@ -208,13 +210,13 @@ internal sealed class PreFilter
 
         // Flat traffic: near-constant packet size and a steady connection cadence.
         bool flatTraffic =
-            flow.PacketSizeStats.StdDev < 10 &&
-            flow.PacketSizeStats.Mean > 0;
+            flow.PacketSizeStdDev < 10 &&
+            flow.PacketSizeMean > 0;
 
         bool repeatedAttempts =
             flow.SynCount > 3 &&
             flow.FwdPackets > 5 &&
-            flow.PacketSizeStats.Mean < 200;
+            flow.PacketSizeMean < 200;
 
         if (!flatTraffic || !repeatedAttempts)
             return null;
@@ -227,4 +229,3 @@ internal sealed class PreFilter
     private static PreFilterResult Verdict(string attackType, string description) =>
         PreFilterResult.KnownAttack(attackType, description);
 }
-

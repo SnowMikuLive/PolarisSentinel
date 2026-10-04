@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Application;
 using PolarisSentinel.Inference;
 
 namespace PolarisSentienlUnitTestProject;

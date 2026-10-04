@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using PolarisSentinel.Application;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -13,10 +14,12 @@ namespace PolarisSentinel.Web.Controllers
     public class PoliciesController : Controller
     {
         private readonly IUnitOfWork _uow;
+        private readonly PolicyManagementService _policies;
 
-        public PoliciesController(IUnitOfWork uow)
+        public PoliciesController(IUnitOfWork uow, PolicyManagementService policies)
         {
             _uow = uow;
+            _policies = policies;
         }
 
         public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -55,7 +58,7 @@ namespace PolarisSentinel.Web.Controllers
                 return View(policy);
             }
 
-            policy.Id = await NextPolicyIdAsync(cancellationToken);
+            policy.Id = await _policies.NextPolicyIdAsync(cancellationToken);
             policy.UserId = User.Identity?.Name ?? string.Empty;
             policy.CreatedAt = DateTime.Now;
             policy.UpdatedAt = DateTime.Now;
@@ -160,56 +163,15 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.AttackTypes = new SelectList(AttackTypes.Selectable);
         }
 
-        // Validates the policy fields against the ranges the policy engine relies on.
+        // Surfaces the domain validation errors on ModelState for the form.
         private bool Validate(Policy policy)
         {
-            if (string.IsNullOrWhiteSpace(policy.Name))
+            foreach (var (field, message) in _policies.Validate(policy))
             {
-                ModelState.AddModelError(nameof(Policy.Name), "Name is required.");
-            }
-
-            if (policy.Priority is < 0 or > 100)
-            {
-                ModelState.AddModelError(nameof(Policy.Priority), "Priority must be between 0 and 100.");
-            }
-
-            if (policy.RfThreshold is { } rf && (rf < 0 || rf > 1))
-            {
-                ModelState.AddModelError(nameof(Policy.RfThreshold), "RF threshold must be between 0 and 1.");
-            }
-
-            if (policy.IfThreshold is { } ift && (ift < 0 || ift > 1))
-            {
-                ModelState.AddModelError(nameof(Policy.IfThreshold), "IF threshold must be between 0 and 1.");
-            }
-
-            if (PolicyActions.IsBlocking(policy.Action) && policy.BlockDurationMinutes <= 0)
-            {
-                ModelState.AddModelError(nameof(Policy.BlockDurationMinutes), "Block duration must be positive for blocking policies.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(policy.AttackType) && !AttackTypes.IsDefined(policy.AttackType))
-            {
-                ModelState.AddModelError(nameof(Policy.AttackType), "Unknown attack type.");
+                ModelState.AddModelError(field, message);
             }
 
             return ModelState.IsValid;
-        }
-
-        // Next "P-n" id, scanned from the stored policies.
-        private async Task<string> NextPolicyIdAsync(CancellationToken cancellationToken)
-        {
-            var policies = await _uow.Policies.GetAllAsync(cancellationToken);
-            int max = 0;
-            foreach (var p in policies)
-            {
-                if (p.Id.StartsWith("P-", StringComparison.Ordinal) &&
-                    int.TryParse(p.Id.AsSpan(2), out int n) && n > max)
-                {
-                    max = n;
-                }
-            }
-            return $"P-{max + 1}";
         }
     }
 }

@@ -49,6 +49,28 @@
                 </div>
             </div>
         </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-secondary shadow-sm h-100">
+                <div class="card-body">
+                    <label for="dryRunSelect" class="form-label text-muted small">Firewall Enforcement</label>
+                    <div class="input-group input-group-sm">
+                        <select id="dryRunSelect" class="form-select form-select-sm">
+                            <option value="false">Enforce (block traffic)</option>
+                            <option value="true">Dry-run (record only)</option>
+                        </select>
+                        <button type="button" class="btn btn-secondary" id="btnSetDryRun">Set</button>
+                    </div>
+                    <div id="dryRunStatus" class="small mt-1 text-muted"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shown only when firewall enforcement is not actually applying rules. -->
+    <div id="dryRunBanner" class="alert alert-danger d-none mt-3 mb-0" role="alert">
+        <strong>&#9888; Enforcement disabled (dry-run).</strong>
+        Detections are recorded but <u>no traffic is actually blocked</u>.
+        <span id="dryRunReason" class="ms-1"></span>
     </div>
 
     <div class="row mt-4 g-3">
@@ -248,6 +270,23 @@
         // Active rule count and the current AI model combination.
         const modelSelect = document.getElementById('modelCombination');
         const modelStatus = document.getElementById('modelStatus');
+        const dryRunSelect = document.getElementById('dryRunSelect');
+        const dryRunStatus = document.getElementById('dryRunStatus');
+
+        // Reflects the enforcement state in the dropdown, status text and banner.
+        function applyDryRun(dryRun, reason) {
+            dryRunSelect.value = dryRun ? 'true' : 'false';
+            dryRunStatus.textContent = dryRun ? 'Dry-run (not blocking)' : 'Enforcing';
+            dryRunStatus.className = 'small mt-1 ' + (dryRun ? 'text-danger' : 'text-success');
+
+            const banner = document.getElementById('dryRunBanner');
+            if (dryRun) {
+                document.getElementById('dryRunReason').textContent = reason ? '(' + reason + ')' : '';
+                banner.classList.remove('d-none');
+            } else {
+                banner.classList.add('d-none');
+            }
+        }
 
         fetch('/api/dashboard/info')
             .then(r => r.json())
@@ -256,8 +295,38 @@
                 // The option values are enum names, so use activeModel (not the display name).
                 modelSelect.value = info.activeModel;
                 modelStatus.textContent = 'Active: ' + info.activeModelDisplay;
+
+                // Sync the enforcement dropdown and warn when not actually blocking.
+                applyDryRun(info.dryRun, info.dryRunReason);
             })
             .catch(err => console.error('Failed to fetch dashboard info', err));
+
+        // Toggle firewall dry-run from the dashboard.
+        document.getElementById('btnSetDryRun').addEventListener('click', function () {
+            const dryRun = dryRunSelect.value === 'true';
+
+            // Optimistic: reflect the choice immediately, then confirm with the server.
+            applyDryRun(dryRun, null);
+
+            fetch('/api/dashboard/dryrun', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dryRun: dryRun })
+            })
+                .then(async r => {
+                    const data = await r.json();
+                    if (!r.ok) { throw new Error(data.error || 'Failed to change enforcement.'); }
+                    return data;
+                })
+                .then(data => {
+                    // The server may stay in dry-run if it lacks admin rights; trust its answer.
+                    applyDryRun(data.dryRun, data.dryRunReason);
+                })
+                .catch(err => {
+                    dryRunStatus.textContent = err.message;
+                    dryRunStatus.className = 'small mt-1 text-danger';
+                });
+        });
 
         // Change the live model combination from the dashboard.
         document.getElementById('btnSetModel').addEventListener('click', function () {

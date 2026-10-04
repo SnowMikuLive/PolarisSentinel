@@ -35,4 +35,15 @@ public interface IFirewallEnforcer
     IReadOnlyList<Rule> GetAllRules();
 
     Rule? GetById(string ruleId);
+
+    // True when rules are only recorded, not written to the OS firewall. The UI must
+    // surface this so an operator never believes traffic is actually being blocked.
+    bool IsDryRun { get; }
+
+    // Why enforcement is in dry-run ("disabled by configuration", "not administrator", ...),
+    // or null when enforcement is live.
+    string? DryRunReason { get; }
+
+    // Turns dry-run on/off at runtime and returns the resulting enforcement status.
+    (bool DryRun, string? Reason) SetDryRun(bool dryRun);
 }

@@ -147,27 +147,10 @@ public class DetectionPipeline : IDetectionPipeline
     // An AI alert only counts when it reaches the threshold of a policy that could act on it.
     private static bool MeetsAlertThreshold(Alert alert, IReadOnlyList<Policy> policies)
     {
-        foreach (var policy in policies.Where(p => p.IsEnabled))
-        {
-            if (policy.DetectionSource is { } source && source != alert.DetectionSource)
-            {
-                continue;
-            }
-
-            float? threshold = alert.DetectionSource switch
-            {
-                DetectionSource.RandomForest => policy.RfThreshold,
-                DetectionSource.IsolationForest => policy.IfThreshold,
-                _ => null
-            };
-
-            if (threshold is null || alert.ConfidenceScore is { } score && score >= threshold)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return policies
+            .Where(p => p.IsEnabled)
+            .Where(p => p.DetectionSource is not { } source || source == alert.DetectionSource)
+            .Any(p => p.MeetsThreshold(alert));
     }
 
     private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict) => new()

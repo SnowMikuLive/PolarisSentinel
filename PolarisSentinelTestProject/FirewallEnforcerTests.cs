@@ -195,6 +195,7 @@ namespace PolarisSentienlUnitTestProject
             var enforcer = new WindowsFirewallEnforcer(
                 repository,
                 Options.Create(new FirewallOptions { DryRun = true }),
+                new FirewallRuntimeState(dryRun: true),
                 clock ?? new FakeTimeProvider(),
                 NullLogger<WindowsFirewallEnforcer>.Instance);
             return (enforcer, repository);

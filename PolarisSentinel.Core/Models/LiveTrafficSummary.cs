@@ -9,7 +9,4 @@ public class LiveTrafficSummary
     public required double TcpShare { get; init; }
     public required double UdpShare { get; init; }
     public required double IcmpShare { get; init; }
-
-    // Flows rejected because the flow table was full (flood protection).
-    public int DroppedFlowCount { get; init; }
 }

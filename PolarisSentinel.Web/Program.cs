@@ -9,9 +9,11 @@ using PolarisSentinel.DataAccess.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PolarisSentinel.Web.Hubs;
+using PolarisSentinel.Web.Middleware;
 using PolarisSentinel.Web.Service;
 using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.Application;
+using PolarisSentinel.Application.Evaluation;
 using PolarisSentinel.PolicyDecision;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using PolarisSentinel.DataAccess.Repository;
@@ -36,6 +38,11 @@ namespace PolarisSentinel
             // Firewall configuration (DryRun, sweep interval).
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
+
+            // Runtime-toggleable enforcement state, seeded from configuration. The dashboard
+            // can flip DryRun after startup; a singleton so every enforcer sees the change.
+            builder.Services.AddSingleton(sp => new FirewallRuntimeState(
+                sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun));
 
             // Traffic capture runs on machine-wide defaults; per-user tuning is applied by the pipeline.
             builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
@@ -142,6 +149,7 @@ namespace PolarisSentinel
                 new WindowsFirewallEnforcer(
                     sp.GetRequiredService<IUnitOfWork>().Rules,
                     sp.GetRequiredService<IOptions<FirewallOptions>>(),
+                    sp.GetRequiredService<FirewallRuntimeState>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
 
@@ -153,6 +161,15 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IFirewallEnforcer>(),
                     sp.GetRequiredService<IUnitOfWork>(),
                     sp.GetRequiredService<ILogger<DetectionPipeline>>()));
+
+            // Application use case: process one completed flow against the enabled policies.
+            builder.Services.AddScoped<FlowProcessingService>();
+
+            // Application use case: manual firewall-rule management.
+            builder.Services.AddScoped<RuleManagementService>();
+
+            // Application use case: policy validation and id assignment.
+            builder.Services.AddScoped<PolicyManagementService>();
 
             // Detection persistence (single transaction boundary over SentinelDbContext)
             builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -179,31 +196,7 @@ namespace PolarisSentinel
             app.UseAuthorization();
 
             // Force a password change before any other page is reachable.
-            app.Use(async (context, next) =>
-            {
-                if (context.User.Identity?.IsAuthenticated == true)
-                {
-                    var path = context.Request.Path.Value ?? string.Empty;
-                    bool allowed = path.StartsWith("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase)
-                        || path.StartsWith("/Account/Logout", StringComparison.OrdinalIgnoreCase)
-                        || path.StartsWith("/lib", StringComparison.OrdinalIgnoreCase)
-                        || path.StartsWith("/css", StringComparison.OrdinalIgnoreCase)
-                        || path.StartsWith("/js", StringComparison.OrdinalIgnoreCase);
-
-                    if (!allowed)
-                    {
-                        var userManager = context.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
-                        var user = await userManager.GetUserAsync(context.User);
-                        if (user is { MustChangePassword: true })
-                        {
-                            context.Response.Redirect("/Account/ChangePassword");
-                            return;
-                        }
-                    }
-                }
-
-                await next();
-            });
+            app.UseMiddleware<MustChangePasswordMiddleware>();
 
             app.MapStaticAssets();
 
@@ -240,43 +233,6 @@ namespace PolarisSentinel
                 app.Logger.LogInformation("No default test dataset at {Path}", defaultDataset);
             }
 
-            // 检测状态 API，页面加载时拉取
-            // Detection state API for page load
-            app.MapGet("/api/detections/state", (DetectionStateService state)=>Results.Json(state.GetSnapshot()))
-                .RequireAuthorization();
-
-            // Per-minute traffic series for the whole day, for the dashboard line chart.
-            app.MapGet("/api/detections/traffic-series", (DetectionStateService state) => Results.Json(state.GetTrafficSeries()))
-                .RequireAuthorization();
-
-            // Dashboard card data: active rule count and the current AI model combination.
-            app.MapGet("/api/dashboard/info", (IFirewallEnforcer firewall, IModelCombinationService combinations) =>
-                Results.Json(new
-                {
-                    activeRules = firewall.GetAllRules().Count(r => r.Status == Core.Enums.RuleStatus.Active),
-                    // The enum name is what the <select> option values use; the display name is for humans.
-                    activeModel = combinations.ActiveCombination.ToString(),
-                    activeModelDisplay = Core.Constants.ModelCombinations.DisplayName(combinations.ActiveCombination)
-                }))
-                .RequireAuthorization();
-
-            // Change the live AI model combination from the dashboard.
-            app.MapPost("/api/dashboard/model", (SetActiveModelRequest request, IModelCombinationService combinations) =>
-            {
-                if (!Enum.TryParse<Core.Enums.ModelCombination>(request.ModelCombination, out var combination))
-                {
-                    return Results.BadRequest(new { error = "Unknown model combination." });
-                }
-
-                combinations.SetActiveCombination(combination);
-                return Results.Json(new
-                {
-                    activeModel = combination.ToString(),
-                    activeModelDisplay = Core.Constants.ModelCombinations.DisplayName(combination)
-                });
-            })
-                .RequireAuthorization();
-
             //应用迁移并创建初始管理员（实现见SentinelDbInitializer）。
             //Apply migrations and provision admin (see SentinelDbInitializer).
             await using (var scope = app.Services.CreateAsyncScope())
@@ -300,11 +256,5 @@ namespace PolarisSentinel
             //Run the application
             app.Run();
         }
-    }
-
-    // Request body for changing the live AI model combination.
-    public class SetActiveModelRequest
-    {
-        public string? ModelCombination { get; set; }
     }
 }
