@@ -32,45 +32,5 @@
         </div>
         @*Sign in button*@
         <button class="btn btn-primary w-100 fw-bold" type="submit" style="height:40px;">Sign In</button>
-        @*Forgot password link*@
-        <div class="text-center mt-3">
-            <a href="#" class="small text-decoration-none text-secondary" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal">Forgot password?</a>
-        </div>
     </form>
-</div>
-
-
-@*Forgot password pop-up window modal*@
-<div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
-        <div class="modal-content" style="border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.12);">
-            <div class="modal-header border-0 pt-4 px-4">
-                <h5 class="modal-title fw-bold" style="color:#1E2B3C;">Reset Password</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            @*line*@
-            <div class="px-4">
-                <hr class="my-0" style="border-color:#E6EAF0;"/>
-            </div>
-            <div class="modal-body px-4 pb-4">
-                <p class="text-muted small">Enter your registered email address or phone number to receive a reset link.</p>
-                @* From now posts to AccountController.ForgotPassword *@
-                @* modal表单提交后整个页面会POST，modal会关闭，跳转到确认页 *@  
-                <form asp-action="ForgotPassword" asp-controller="Account" method="post">
-
-                    @* Input name must match the ViewModel property: EmailOrUserName *@
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-secondary">Email or Username</label>
-                        <input name="EmailOrUserName" type="text" class="form-control" style="height:36px;border-color:#E6EAF0;" placeholder="Enter your email or username" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100 fw-bold" style="height:36px;">Send Reset Link</button>
-                </form>
-                <div class="text-center mt-3">
-                    <a href="#" class="small text-decoration-none text-secondary d-inline-flex align-items-center gap-1" data-bs-dismiss="modal">
-                        Back to Sign In
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
