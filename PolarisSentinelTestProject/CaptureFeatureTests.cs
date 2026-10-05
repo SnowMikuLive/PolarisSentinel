@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using PacketDotNet;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Models;
@@ -41,13 +42,13 @@ public class CaptureFeatureTests
         Assert.AreEqual((ushort)50000, result.SourcePort);
         Assert.AreEqual((ushort)22, result.DestinationPort);
         Assert.AreEqual(7L, result.TotalPackets);
-        Assert.AreEqual(840L, result.TotalBytes);
+        Assert.AreEqual(560L, result.TotalBytes);
         Assert.IsTrue(result.PreFilterVerdict?.IsSuspicious ?? false);
-        // 手算时长、字节、样本标准差、IAT 和速率。
-        // Hand-calculated duration, bytes, sample deviations, IATs and rates.
-        float[] expected = { 150, 4, 3, 480, 360, 60, 180, 120, (float)Math.Sqrt(11200.0 / 6),
+        // 每个 IPv4/TCP 包去掉 40 字节头后，手算 payload、样本标准差、IAT 和速率。
+        // Subtract each 40-byte IPv4/TCP header, then calculate payload statistics, IATs and rates.
+        float[] expected = { 150, 4, 3, 320, 240, 20, 140, 80, (float)Math.Sqrt(11200.0 / 6),
             50, (float)Math.Sqrt(300), 60, 30, 50, (float)Math.Sqrt(200), 60, 40,
-            5.6f, 7f / 150, 0.75f };
+            560f / 150, 7f / 150, 0.75f };
         Assert.HasCount(20, result.Features);
         for (int i = 0; i < expected.Length; i++)
             Assert.AreEqual(expected[i], result.Features[i], 0.0001f, TrafficCaptureService.FeatureNames[i]);
@@ -71,7 +72,9 @@ public class CaptureFeatureTests
     }
 
     [TestMethod]
-    public void SynFlood_ShouldKeepAttackerAddress()
+    [DataRow(40)]
+    [DataRow(60)]
+    public void SynFlood_ShouldKeepAttackerAddressAndCountPayload(int packetSize)
     {
         using var service = new TrafficCaptureService(1, 3);
         FlowFeatureVector? result = null;
@@ -79,7 +82,7 @@ public class CaptureFeatureTests
         service.OnFlowCompleted += (_, flow) => { result = flow; completedSignal.Set(); };
         var start = new DateTime(2026, 9, 24);
         for (int i = 0; i < 12; i++)
-            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start.AddMilliseconds(i * 20));
+            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, packetSize, syn: true), start.AddMilliseconds(i * 20));
         service.ExpireIdleFlows(start.AddSeconds(2));
 
         Assert.IsTrue(completedSignal.Wait(TimeSpan.FromSeconds(2)));
@@ -88,6 +91,43 @@ public class CaptureFeatureTests
         Assert.AreEqual("203.0.113.66", result.SourceIp);
         Assert.AreEqual(12f, result.Features[1]);
         Assert.AreEqual(0f, result.Features[2]);
+        Assert.AreEqual(12L * (packetSize - 40), result.TotalBytes);
+        Assert.AreEqual(packetSize - 40f, result.Features[5]);
+        Assert.AreEqual(packetSize - 40f, result.Features[6]);
+        Assert.IsTrue(result.Features.All(float.IsFinite));
+    }
+
+    [TestMethod]
+    [DataRow(28)]
+    [DataRow(48)]
+    public void UdpFlow_ShouldCountPayloadWhileLiveSummaryCountsIpBytes(int packetSize)
+    {
+        using var service = new TrafficCaptureService(1, 3);
+        FlowFeatureVector? result = null;
+        LiveTrafficSummary? summary = null;
+        using var completedSignal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, flow) => { result = flow; completedSignal.Set(); };
+        service.OnLiveTrafficSummary += (_, live) => summary = live;
+        var start = new DateTime(2026, 9, 24);
+
+        for (int i = 0; i < 6; i++)
+            service.ProcessPacket(Udp("203.0.113.66", 50000, "192.168.1.10", 1234, packetSize), start.AddMilliseconds(i * 40));
+        service.ExpireIdleFlows(start.AddSeconds(2));
+        typeof(TrafficCaptureService).GetMethod("EmitLiveSummary", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(service, null);
+
+        Assert.IsTrue(completedSignal.Wait(TimeSpan.FromSeconds(2)));
+        Assert.IsNotNull(result);
+        Assert.AreEqual(6L, result.TotalPackets);
+        Assert.AreEqual(6L * (packetSize - 28), result.TotalBytes);
+        Assert.AreEqual(6f * (packetSize - 28), result.Features[3]);
+        Assert.AreEqual(packetSize - 28f, result.Features[5]);
+        Assert.AreEqual(packetSize - 28f, result.Features[6]);
+        Assert.AreEqual(packetSize - 28f, result.Features[7]);
+        Assert.AreEqual(6f * (packetSize - 28) / 200, result.Features[17], 0.0001f);
+        Assert.IsTrue(result.Features.All(float.IsFinite));
+        Assert.IsNotNull(summary);
+        Assert.AreEqual(6L * packetSize, summary.Bytes);
     }
 
     [TestMethod]
@@ -128,6 +168,19 @@ public class CaptureFeatureTests
             {
                 PayloadData = new byte[size - 40],
                 Synchronize = syn
+            },
+            TotalLength = (ushort)size
+        };
+        return Packet.ParsePacket(LinkLayers.Raw, packet.Bytes);
+    }
+
+    private static Packet Udp(string source, ushort sourcePort, string destination, ushort destinationPort, int size)
+    {
+        var packet = new IPv4Packet(IPAddress.Parse(source), IPAddress.Parse(destination))
+        {
+            PayloadPacket = new UdpPacket(sourcePort, destinationPort)
+            {
+                PayloadData = new byte[size - 28]
             },
             TotalLength = (ushort)size
         };

@@ -262,6 +262,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
+        // 模型的 TCP/UDP 长度特征只统计 payload；直播仍统计完整 IP 包。
+        // TCP/UDP model features count payload bytes; live counters count the full IP packet.
+        Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
+        int flowPacketSize = transportPacket is null
+            ? packetSize
+            : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
+
         // Behavioural detection sees every packet, independent of flow aggregation, so a
         // scan or brute-force run that spreads across many short flows is still caught.
         _behavior.Observe(new PacketObservation(
@@ -297,12 +304,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         lock (flow) // packets for the same flow can arrive back-to-back on the capture thread
         {
-            flow.PacketSizeStats.Add(packetSize);
+            flow.PacketSizeStats.Add(flowPacketSize);
 
             if (isForward)
             {
                 flow.FwdPackets++;
-                flow.FwdBytes += packetSize;
+                flow.FwdBytes += flowPacketSize;
                 if (flow.LastFwdPacketTime is { } lastFwd)
                     flow.FwdIatStats.Add((now - lastFwd).TotalMilliseconds);
                 flow.LastFwdPacketTime = now;
@@ -310,7 +317,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             else
             {
                 flow.BwdPackets++;
-                flow.BwdBytes += packetSize;
+                flow.BwdBytes += flowPacketSize;
                 if (flow.LastBwdPacketTime is { } lastBwd)
                     flow.BwdIatStats.Add((now - lastBwd).TotalMilliseconds);
                 flow.LastBwdPacketTime = now;

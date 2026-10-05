@@ -9,7 +9,7 @@ using PolarisSentinel.Core.Models;
 namespace PolarisSentinel.FirewallEnforement
 {
     // Applies firewall rules to Windows Firewall and mirrors them into the rule repository.
-    // DryRun keeps the Windows side untouched; the repository is always written.
+    // DryRun skips new Windows blocks; existing rules are still removed when requested or expired.
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
@@ -241,19 +241,29 @@ namespace PolarisSentinel.FirewallEnforement
                     .Where(r => r.Status == RuleStatus.Active && r.ExpiresAt != null && r.ExpiresAt <= now)
                     .ToList();
 
+                int removed = 0;
                 foreach (var rule in expired)
                 {
-                    RemoveFromWindows(rule.Name);
+                    try
+                    {
+                        RemoveFromWindows(rule.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to remove expired firewall rule {RuleName}; will retry", rule.Name);
+                        continue;
+                    }
                     rule.Status = RuleStatus.Expired;
                     rule.UpdatedAt = now;
                     _rules.Update(rule);
+                    removed++;
                 }
-                if (expired.Count > 0)
+                if (removed > 0)
                 {
                     _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                    _logger.LogInformation("Expired {Count} firewall rule(s)", expired.Count);
+                    _logger.LogInformation("Expired {Count} firewall rule(s)", removed);
                 }
-                return expired.Count;
+                return removed;
             }
         }
 
@@ -314,10 +324,18 @@ namespace PolarisSentinel.FirewallEnforement
 
         private void RemoveFromWindows(string ruleName)
         {
-            if (_firewall != null && OperatingSystem.IsWindows() && !string.IsNullOrEmpty(ruleName))
+            if (!string.IsNullOrEmpty(ruleName))
             {
-                _firewall.Remove(ruleName);
+                RemoveWindowsRule(ruleName);
             }
+        }
+
+        // Cleanup must work in dry-run without enabling new blocks.
+        protected virtual void RemoveWindowsRule(string ruleName)
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            var cleanupFirewall = _firewall ?? new WindowsFirewall();
+            cleanupFirewall.Remove(ruleName);
         }
 
         private static string? NormalizeIp(string value)

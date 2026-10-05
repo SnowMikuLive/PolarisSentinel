@@ -87,7 +87,14 @@ namespace PolarisSentinel.FirewallEnforement
         public void Remove(string ruleName)
         {
             CheckName(ruleName);
-            _rules.Remove(ruleName);
+            foreach (dynamic rule in _rules)
+            {
+                if (string.Equals((string)rule.Name, ruleName, StringComparison.Ordinal))
+                {
+                    _rules.Remove(ruleName);
+                    return;
+                }
+            }
         }
 
         private static void CheckName(string name)
