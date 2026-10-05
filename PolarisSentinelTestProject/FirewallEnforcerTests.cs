@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using PolarisSentinel.Application;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
@@ -80,15 +81,34 @@ namespace PolarisSentienlUnitTestProject
 
         // A CIDR source is a valid inbound scope; the prefix must be preserved.
         [TestMethod]
-        public void Apply_BlockInboundIpWithCidr_ShouldKeepSourceAddress()
+        [DataRow("203.0.113.0/24")]
+        [DataRow("2001:db8::/64")]
+        public void Apply_BlockInboundIpWithCidr_ShouldKeepSourceAddress(string address)
         {
             var (enforcer, _) = CreateEnforcer();
             var alert = CreateAlert();
-            alert.SourceIp = "203.0.113.0/24";
+            alert.SourceIp = address;
 
             var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual("203.0.113.0/24", rule.SourceIp);
+            Assert.AreEqual(address, rule.SourceIp);
+        }
+
+        [TestMethod]
+        [DataRow("203.0.113.0/24", true)]
+        [DataRow("2001:db8::/64", true)]
+        [DataRow("203.0.113.0/33", false)]
+        [DataRow("2001:db8::/129", false)]
+        [DataRow("203.0.113.0/abc", false)]
+        public void Validate_Cidr_ShouldCheckPrefix(string address, bool valid)
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var service = new RuleManagementService(enforcer, new FakeUnitOfWork());
+            var rule = new Rule { SourceIp = address, Action = PolicyAction.BlockInboundIp };
+
+            var errors = service.Validate(rule);
+
+            Assert.AreEqual(valid, !errors.ContainsKey(nameof(Rule.SourceIp)));
         }
 
         // A null alert id marks a manual rule with no originating alert.

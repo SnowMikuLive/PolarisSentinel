@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -139,6 +140,15 @@ public class RuleManagementService
             return true;
         }
 
-        return IPAddress.TryParse(value.Split('/')[0], out _);
+        var parts = value.Split('/');
+        if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var address))
+        {
+            return false;
+        }
+
+        // 检查完整 CIDR / Validate the address and its prefix.
+        int maxPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+        return parts.Length == 1 ||
+            (int.TryParse(parts[1], out int prefix) && prefix >= 0 && prefix <= maxPrefix);
     }
 }
