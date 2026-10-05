@@ -1,3 +1,10 @@
-﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\FirewallOptions.cs
+﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\AddressNormalizer.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\FirewallOptions.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\FirewallRuntimeState.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\WindowsFirewall.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\WindowsFirewallEnforcer.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\bin_old\Debug\net10.0\PolarisSentinel.Core.dll
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\bin_old\Debug\net10.0\PolarisSentinel.Core.pdb
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\bin_old\Debug\net10.0\PolarisSentinel.Firewall.deps.json
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\bin_old\Debug\net10.0\PolarisSentinel.Firewall.dll
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\bin_old\Debug\net10.0\PolarisSentinel.Firewall.pdb

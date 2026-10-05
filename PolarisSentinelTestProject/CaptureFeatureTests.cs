@@ -1,6 +1,5 @@
 using System.Net;
 using PacketDotNet;
-using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.TrafficCapture;
 using PolarisSentinel.TrafficCapture.Internal;
@@ -84,7 +83,9 @@ public class CaptureFeatureTests
 
         Assert.IsTrue(completedSignal.Wait(TimeSpan.FromSeconds(2)));
         Assert.IsNotNull(result);
-        Assert.AreEqual(AttackTypes.DoS, result.PreFilterVerdict?.AttackType);
+        // Single-flow signatures are forwarded as Suspicious for AI confirmation, not blocked outright.
+        Assert.IsTrue(result.PreFilterVerdict?.IsSuspicious ?? false);
+        Assert.IsFalse(result.PreFilterVerdict?.IsKnownAttack ?? true);
         Assert.AreEqual("203.0.113.66", result.SourceIp);
         Assert.AreEqual(12f, result.Features[1]);
         Assert.AreEqual(0f, result.Features[2]);

@@ -1,4 +1,0 @@
-﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\CsvFlowParser.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\DetectionPipeline.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\EvaluationService.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\PolicyEngine.cs

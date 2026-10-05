@@ -1,3 +1,0 @@
-﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\FirewallOptions.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\WindowsFirewall.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.FirewallEnforement\WindowsFirewallEnforcer.cs

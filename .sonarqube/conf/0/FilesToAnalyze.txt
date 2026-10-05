@@ -27,6 +27,7 @@ C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\FirewallRuleSpec.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\FlowFeatureVector.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\FlowSnapshot.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\FlowStatistics.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\InferenceResult.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\LiveTrafficSummary.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\ModelEvaluationResult.cs
@@ -36,3 +37,5 @@ C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\PreFilterResult.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\Rule.cs
 C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Models\TrafficRecord.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Services\PreFilter.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Core\Services\SourceBehaviorTracker.cs

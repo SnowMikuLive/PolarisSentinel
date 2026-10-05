@@ -1,6 +1,3 @@
-﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\internal\FeatureExporter.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\internal\FlowKey.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\internal\FlowRecord.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\internal\PreFilter.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\internal\RunningStats.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.TrafficCapture\TrafficCaptureService.cs
+﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\IsolationForestModel.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\OnnxInferenceEngine.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\RandomForestModel.cs

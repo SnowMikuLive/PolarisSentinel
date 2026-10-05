@@ -85,7 +85,7 @@ namespace PolarisSentinel.Web.Controllers
 
         // Runs the selected test row through the selected model combination. Never touches the firewall.
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Test([FromBody] ModelTestRequest? request, CancellationToken cancellationToken)
         {
             // 拒绝空请求和不存在的模型编号。
@@ -97,7 +97,7 @@ namespace PolarisSentinel.Web.Controllers
                 return BadRequest(new { error = "Unknown model combination." });
             }
 
-            var row = _dataset.Get(request.RowIndex);
+            var row = request.RowIndex is int rowIndex ? _dataset.Get(rowIndex) : null;
             if (row == null)
             {
                 return BadRequest(new { error = "No test row selected. Load a dataset first." });
@@ -178,6 +178,6 @@ namespace PolarisSentinel.Web.Controllers
     {
         public string? ModelCombination { get; set; }
 
-        public int RowIndex { get; set; }
+        public int? RowIndex { get; set; }
     }
 }

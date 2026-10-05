@@ -3,8 +3,14 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// Rule-based pre-filter: detects known attack signatures, drops obvious noise, and
+// Rule-based pre-filter: detects attack signatures, drops obvious noise, and
 // forwards the rest to the AI engine. Domain logic, independent of any capture library.
+//
+// Single-flow signatures are deliberately reported as Suspicious rather than KnownAttack:
+// the per-flow thresholds are low enough that legitimate traffic (health checks, retries,
+// NAT-shared sources) can trip them, so the AI engine re-checks before any block. Only the
+// cross-flow SourceBehaviorTracker, which aggregates evidence across many flows, escalates
+// straight to KnownAttack.
 public sealed class PreFilter
 {
     private readonly int _minPacketsForAnalysis;
@@ -27,6 +33,7 @@ public sealed class PreFilter
 
         // Attack signatures run before the benign filters because floods are one-directional
         // and can be very short-lived, so they must not be discarded by the duration guard.
+        // A match is forwarded as Suspicious (not KnownAttack) so the AI engine confirms it.
         var attack = DetectFlood(direction) ?? DetectScan(direction) ?? DetectBruteForce(direction);
         if (attack is not null)
             return attack;
@@ -226,6 +233,8 @@ public sealed class PreFilter
             : Verdict(AttackTypes.BruteForce, "FTP brute force");
     }
 
+    // Single-flow signatures are downgraded to Suspicious: the low per-flow thresholds make
+    // them prone to false positives, so the AI engine re-checks before any policy action.
     private static PreFilterResult Verdict(string attackType, string description) =>
-        PreFilterResult.KnownAttack(attackType, description);
+        PreFilterResult.Suspicious($"{attackType}: {description}");
 }

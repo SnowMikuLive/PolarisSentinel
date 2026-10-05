@@ -12,7 +12,7 @@
   <HasBeginStepCommandLineTruststorePassword>false</HasBeginStepCommandLineTruststorePassword>
   <SonarQubeHostUrl>http://localhost:9000</SonarQubeHostUrl>
   <SonarQubeVersion>26.9.0.129388</SonarQubeVersion>
-  <SonarProjectKey>PolarisSentinel</SonarProjectKey>
+  <SonarProjectKey>SecondSAST</SonarProjectKey>
   <AdditionalConfig>
     <ConfigSetting Id="BuildUri" />
     <ConfigSetting Id="TfsUri" />
@@ -166,8 +166,8 @@
     <Property Name="sonaranalyzer-vbnet.pluginKey">vbnet</Property>
     <Property Name="sonar.java.jvmframeworkconfig.activate">true</Property>
     <Property Name="sonar.updatecenter.url">https://downloads.sonarsource.com/sonarqube/update/update-center.properties</Property>
-    <Property Name="sonar.core.startTime">10/4/2026 10:25:42 AM</Property>
     <Property Name="sonar.core.id">147B411E-AaEDqJnok6vPD2e8bZOJ</Property>
+    <Property Name="sonar.core.startTime">10/4/2026 11:46:42 PM</Property>
   </ServerSettings>
   <LocalSettings>
     <Property Name="sonar.host.url">http://localhost:9000</Property>

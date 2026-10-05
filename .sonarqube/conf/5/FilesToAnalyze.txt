@@ -1,4 +1,7 @@
-﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\IsolationForestModel.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\ModelCombinationService.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\OnnxInferenceEngine.cs
-C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Inference\RandomForestModel.cs
+﻿C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\DetectionPipeline.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\Evaluation\CsvFlowParser.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\Evaluation\EvaluationService.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\FlowProcessingService.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\ModelCombinationService.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\PolicyManagementService.cs
+C:\Users\admin\source\repos\NullPointer776\PolarisSentinel\PolarisSentinel.Application\RuleManagementService.cs
