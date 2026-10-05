@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 
 namespace PolarisSentinel.FirewallEnforement
 {
@@ -41,14 +42,11 @@ namespace PolarisSentinel.FirewallEnforement
                 return false;
             }
 
-            if (address.IsIPv4MappedToIPv6)
-            {
-                address = address.MapToIPv4();
-            }
-
             if (segments.Length == 2)
             {
-                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > 128)
+                // IPv4 最多 32 位，IPv6 最多 128 位 / IPv4 has 32 bits; IPv6 has 128.
+                int maxPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > maxPrefix)
                 {
                     return false;
                 }
@@ -56,6 +54,10 @@ namespace PolarisSentinel.FirewallEnforement
             }
             else
             {
+                if (address.IsIPv4MappedToIPv6)
+                {
+                    address = address.MapToIPv4();
+                }
                 normalized = address.ToString();
             }
 

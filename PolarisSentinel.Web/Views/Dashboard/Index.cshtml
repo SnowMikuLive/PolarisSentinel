@@ -207,7 +207,8 @@
 
         trafficSource.addEventListener('change', showTrafficChart);
 
-        // Reloads the whole-day traffic series (used on load and after new flows).
+        // 实时和历史曲线统一使用每分钟流数。
+        // Use flows per minute for both live updates and history.
         function loadTrafficSeries() {
             return fetch('/api/detections/traffic-series')
                 .then(r => r.json())
@@ -355,16 +356,6 @@
                     modelStatus.textContent = err.message;
                     modelStatus.className = 'small mt-1 text-danger';
                 });
-        });
-
-        polarisHub.on('ReceiveLiveTrafficSummary', summary => {
-            liveTimes.push(new Date(summary.timestamp).toLocaleTimeString());
-            liveRates.push(summary.packetsPerSecond);
-            if (liveTimes.length > 20) {
-                liveTimes.shift();
-                liveRates.shift();
-            }
-            if (trafficSource.value === 'live') showTrafficChart();
         });
 
         // Refresh the counters and the day's traffic series whenever a flow is classified.

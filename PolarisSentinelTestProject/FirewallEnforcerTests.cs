@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using PolarisSentinel.Application;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
@@ -80,15 +81,34 @@ namespace PolarisSentienlUnitTestProject
 
         // A CIDR source is a valid inbound scope; the prefix must be preserved.
         [TestMethod]
-        public void Apply_BlockInboundIpWithCidr_ShouldKeepSourceAddress()
+        [DataRow("203.0.113.0/24")]
+        [DataRow("2001:db8::/64")]
+        public void Apply_BlockInboundIpWithCidr_ShouldKeepSourceAddress(string address)
         {
             var (enforcer, _) = CreateEnforcer();
             var alert = CreateAlert();
-            alert.SourceIp = "203.0.113.0/24";
+            alert.SourceIp = address;
 
             var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-            Assert.AreEqual("203.0.113.0/24", rule.SourceIp);
+            Assert.AreEqual(address, rule.SourceIp);
+        }
+
+        [TestMethod]
+        [DataRow("203.0.113.0/24", true)]
+        [DataRow("2001:db8::/64", true)]
+        [DataRow("203.0.113.0/33", false)]
+        [DataRow("2001:db8::/129", false)]
+        [DataRow("203.0.113.0/abc", false)]
+        public void Validate_Cidr_ShouldCheckPrefix(string address, bool valid)
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var service = new RuleManagementService(enforcer, new FakeUnitOfWork());
+            var rule = new Rule { SourceIp = address, Action = PolicyAction.BlockInboundIp };
+
+            var errors = service.Validate(rule);
+
+            Assert.AreEqual(valid, !errors.ContainsKey(nameof(Rule.SourceIp)));
         }
 
         // A null alert id marks a manual rule with no originating alert.
@@ -186,19 +206,119 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual(0, enforcer.RemoveExpired());
         }
 
+        [TestMethod]
+        [DataRow("Remove")]
+        [DataRow("RemoveAll")]
+        [DataRow("Expire")]
+        [DataRow("Deactivate")]
+        public void DryRun_ShouldStillRemoveExistingWindowsRule(string operation)
+        {
+            var clock = new FakeTimeProvider();
+            var (enforcer, _) = CreateEnforcer(clock);
+            var alert = CreateAlert();
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            // Simulate a Windows rule left from earlier real enforcement.
+            enforcer.WindowsRules.Add(rule.Name);
+            enforcer.SetDryRun(true);
+
+            switch (operation)
+            {
+                case "Remove":
+                    Assert.IsTrue(enforcer.Remove(rule.Id));
+                    Assert.IsEmpty(enforcer.GetAllRules());
+                    break;
+                case "RemoveAll":
+                    Assert.AreEqual(1, enforcer.RemoveAll());
+                    Assert.IsEmpty(enforcer.GetAllRules());
+                    break;
+                case "Expire":
+                    clock.Advance(TimeSpan.FromMinutes(61));
+                    Assert.AreEqual(1, enforcer.RemoveExpired());
+                    Assert.AreEqual(RuleStatus.Expired, enforcer.GetById(rule.Id)!.Status);
+                    break;
+                case "Deactivate":
+                    var updated = enforcer.Update(rule.Id, rule.SourceIp ?? string.Empty, 0, rule.DestinationIp ?? string.Empty, 0,
+                        ProtocolNumbers.Tcp, rule.Action, RuleStatus.Inactive, TimeSpan.FromMinutes(60));
+                    Assert.AreEqual(RuleStatus.Inactive, updated!.Status);
+                    break;
+            }
+
+            Assert.IsEmpty(enforcer.WindowsRules);
+            Assert.IsTrue(enforcer.IsDryRun);
+        }
+
+        [TestMethod]
+        [DataRow(false)]
+        [DataRow(true)]
+        public void FailedCleanup_ShouldKeepRuleRecord(bool deactivate)
+        {
+            var (enforcer, _) = CreateEnforcer();
+            var alert = CreateAlert();
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            enforcer.WindowsRules.Add(rule.Name);
+            enforcer.FailRemoval = true;
+
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                if (deactivate)
+                    enforcer.Update(rule.Id, rule.SourceIp ?? string.Empty, 0, rule.DestinationIp ?? string.Empty, 0,
+                        ProtocolNumbers.Tcp, rule.Action, RuleStatus.Inactive, TimeSpan.FromMinutes(60));
+                else
+                    enforcer.Remove(rule.Id);
+            });
+
+            Assert.HasCount(1, enforcer.GetAllRules());
+            Assert.AreEqual(RuleStatus.Active, enforcer.GetById(rule.Id)!.Status);
+            Assert.Contains(rule.Name, enforcer.WindowsRules);
+        }
+
+        [TestMethod]
+        public void FailedExpiryCleanup_ShouldKeepRuleActiveAndRetry()
+        {
+            var clock = new FakeTimeProvider();
+            var (enforcer, _) = CreateEnforcer(clock);
+            var alert = CreateAlert();
+            var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            enforcer.WindowsRules.Add(rule.Name);
+            clock.Advance(TimeSpan.FromMinutes(61));
+            enforcer.FailRemoval = true;
+
+            Assert.AreEqual(0, enforcer.RemoveExpired());
+            Assert.AreEqual(RuleStatus.Active, enforcer.GetById(rule.Id)!.Status);
+            Assert.Contains(rule.Name, enforcer.WindowsRules);
+
+            enforcer.FailRemoval = false;
+            Assert.AreEqual(1, enforcer.RemoveExpired());
+            Assert.AreEqual(RuleStatus.Expired, enforcer.GetById(rule.Id)!.Status);
+            Assert.IsEmpty(enforcer.WindowsRules);
+        }
+
         #region Helper Methods
 
-        private static (WindowsFirewallEnforcer Enforcer, FakeRuleRepository Repository) CreateEnforcer(
+        private static (TestFirewallEnforcer Enforcer, FakeRuleRepository Repository) CreateEnforcer(
             FakeTimeProvider? clock = null)
         {
             var repository = new FakeRuleRepository();
-            var enforcer = new WindowsFirewallEnforcer(
-                repository,
-                Options.Create(new FirewallOptions { DryRun = true }),
-                new FirewallRuntimeState(dryRun: true),
-                clock ?? new FakeTimeProvider(),
-                NullLogger<WindowsFirewallEnforcer>.Instance);
+            var enforcer = new TestFirewallEnforcer(repository, clock ?? new FakeTimeProvider());
             return (enforcer, repository);
+        }
+
+        private sealed class TestFirewallEnforcer : WindowsFirewallEnforcer
+        {
+            public HashSet<string> WindowsRules { get; } = new();
+            public bool FailRemoval { get; set; }
+
+            public TestFirewallEnforcer(FakeRuleRepository repository, FakeTimeProvider clock)
+                : base(repository, Options.Create(new FirewallOptions { DryRun = true }),
+                    new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance)
+            {
+            }
+
+            protected override void RemoveWindowsRule(string ruleName)
+            {
+                if (FailRemoval) throw new InvalidOperationException("Simulated Windows rule removal failure.");
+                WindowsRules.Remove(ruleName);
+            }
         }
 
         private static PolicyDecision Decision(Alert alert, PolicyAction action) =>
