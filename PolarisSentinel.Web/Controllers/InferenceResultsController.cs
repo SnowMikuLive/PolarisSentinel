@@ -25,7 +25,6 @@ namespace PolarisSentinel.Web.Controllers
             return View(alerts);
         }
 
-        // 导出已保存的告警及关联规则，不执行防火墙操作。
         // Export saved alerts and linked rules without changing the firewall.
         [HttpGet]
         public async Task<IActionResult> Export(CancellationToken cancellationToken)
@@ -53,7 +52,6 @@ namespace PolarisSentinel.Web.Controllers
                 csv.AppendLine(string.Join(",", cells.Select(CsvCell)));
             }
 
-            // BOM 方便 Excel 识别中文。
             // The BOM lets Excel recognize UTF-8 text.
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
             return File(bytes, "text/csv; charset=utf-8", $"alerts-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
@@ -61,7 +59,6 @@ namespace PolarisSentinel.Web.Controllers
 
         private static string CsvCell(string value)
         {
-            // 文本不作为表格公式执行。
             // Keep text from being interpreted as spreadsheet formulas.
             var trimmed = value.TrimStart();
             if (trimmed.Length > 0 && "=+-@".Contains(trimmed[0])) value = "'" + value;

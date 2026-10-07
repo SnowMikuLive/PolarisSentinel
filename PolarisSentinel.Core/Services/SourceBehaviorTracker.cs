@@ -3,8 +3,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// One observed packet, reduced to the fields behavioral detection needs. Kept free of
-// capture-library types so the tracker is pure domain logic.
+// One observed packet, reduced to what behavioural detection needs.
 public readonly record struct PacketObservation(
     string SourceIp,
     string DestinationIp,
@@ -15,14 +14,12 @@ public readonly record struct PacketObservation(
     int PacketSize,
     DateTime Timestamp);
 
-// Behavioural detection across many flows from the same source IP. A single flow cannot
-// reveal a port scan or a brute-force run (each attempt is its own short flow), so this
-// tracker keeps a sliding window per source and flags aggregate behaviour instead.
+// Detects aggregate behaviour across many short flows from one source (port scans,
+// brute-force runs, floods) that a single flow cannot reveal. Also tracks a global
+// packet rate so a spoofed/random-source flood is still caught.
 public sealed class SourceBehaviorTracker
 {
-    // How long an observation stays in the window.
     private readonly TimeSpan _window;
-
     private readonly int _portScanDistinctPorts;
     private readonly int _bruteForceConnections;
     private readonly int _icmpFloodPackets;
@@ -34,13 +31,9 @@ public sealed class SourceBehaviorTracker
     private readonly object _lock = new();
     private readonly Dictionary<string, SourceWindow> _sources = new();
 
-    // Global aggregate window, independent of source IP, so a spoofed-source flood
-    // (hping3 --rand-source) is caught even though no single source repeats.
     private readonly Queue<DateTime> _globalPackets = new();
     private DateTime _globalLastFlaggedAt = DateTime.MinValue;
-    private string _globalLastSource = string.Empty;
 
-    // Cap the tracked sources so a spoofed-source flood cannot grow memory without bound.
     private const int MaxTrackedSources = 50000;
 
     public SourceBehaviorTracker(
@@ -63,15 +56,11 @@ public sealed class SourceBehaviorTracker
         _globalFloodPackets = globalFloodPackets;
     }
 
-    // Records one packet against its source's window.
     public void Observe(PacketObservation packet)
     {
         lock (_lock)
         {
-            // Global aggregate: every packet counts, regardless of source, so a
-            // spoofed-source flood is visible even when no source repeats.
             _globalPackets.Enqueue(packet.Timestamp);
-            _globalLastSource = packet.SourceIp;
             TrimGlobal(packet.Timestamp);
 
             if (!_sources.TryGetValue(packet.SourceIp, out var window))
@@ -89,15 +78,11 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Fast-path check run on every packet. Returns a verdict the moment a source (or the
-    // global aggregate) crosses a flood threshold, so blocking does not wait for the flow
-    // to go idle. Returns null when nothing has crossed a threshold yet.
+    // Per-packet check that returns a verdict the moment a threshold is crossed.
     public PreFilterResult? EvaluateFast(PacketObservation packet)
     {
         lock (_lock)
         {
-            // Global flood first: a random/spoofed-source flood shows up here but not in
-            // any single source's window.
             if (_globalPackets.Count >= _globalFloodPackets &&
                 packet.Timestamp - _globalLastFlaggedAt >= _cooldown)
             {
@@ -114,12 +99,7 @@ public sealed class SourceBehaviorTracker
 
             window.Prune(_window);
             var verdict = Classify(window);
-            if (verdict is null)
-            {
-                return null;
-            }
-
-            if (packet.Timestamp - window.LastFlaggedAt < _cooldown)
+            if (verdict is null || packet.Timestamp - window.LastFlaggedAt < _cooldown)
             {
                 return null;
             }
@@ -129,7 +109,6 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Drops observations outside the window from the global aggregate.
     private void TrimGlobal(DateTime now)
     {
         DateTime cutoff = now - _window;
@@ -139,10 +118,7 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Evaluates the current window for a source and returns a known-attack verdict when the
-    // aggregate behaviour matches a scan, brute-force run, or flood. Returns null otherwise.
-    // A source that was just flagged is suppressed for a cooldown so one attack does not
-    // raise an alert for every expiring flow it produced.
+    // Evaluates a source's window on flow expiry. Cooldown-suppressed like EvaluateFast.
     public PreFilterResult? Evaluate(string sourceIp, DateTime now)
     {
         lock (_lock)
@@ -154,14 +130,7 @@ public sealed class SourceBehaviorTracker
 
             window.Prune(_window);
             var verdict = Classify(window);
-            if (verdict is null)
-            {
-                return null;
-            }
-
-            // Suppress repeats within the cooldown; the source stays tracked so the
-            // window keeps accumulating and re-fires after the cooldown if it persists.
-            if (now - window.LastFlaggedAt < _cooldown)
+            if (verdict is null || now - window.LastFlaggedAt < _cooldown)
             {
                 return null;
             }
@@ -171,7 +140,6 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Drops windows that have been empty for a while, so the tracker does not leak.
     public void Prune(DateTime now)
     {
         lock (_lock)
@@ -192,70 +160,54 @@ public sealed class SourceBehaviorTracker
 
     private PreFilterResult? Classify(SourceWindow window)
     {
-        // Volume-based flood rules run first: a high packet count is stronger evidence of a
-        // DoS than the port spread, and a multi-port flood would otherwise be mislabelled
-        // as a port scan (it touches many ports too).
+        var stats = window.Snapshot(_window);
 
-        // Multi-port DoS: one source blasting a high packet volume spread across many
-        // ports (hping3 --flood to a port range). Each port is its own short flow, so the
-        // per-flow pre-filter never sees it; the aggregate packet count does.
+        // Volume rules first: a high packet count is stronger evidence than port spread,
+        // and a multi-port flood would otherwise be mislabelled as a port scan.
         if (window.TotalPackets >= _floodPackets && window.DistinctPorts.Count >= _floodDistinctPorts)
         {
-            return PreFilterResult.KnownAttack(
-                AttackTypes.DoS,
-                $"Multi-port flood: {window.TotalPackets} packets across {window.DistinctPorts.Count} ports from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.DoS,
+                $"Multi-port flood: {window.TotalPackets} packets across {window.DistinctPorts.Count} ports from one source",
+                stats);
         }
 
-        // ICMP flood: one source emitting a sustained burst of ICMP packets (ping flood or
-        // echo-request storm). ICMP has no ports, so the packet count is the only signal;
-        // the threshold is lower than the TCP/UDP floods because a single ping stream is
-        // enough to saturate a link.
         if (window.IcmpCount >= _icmpFloodPackets)
         {
-            return PreFilterResult.KnownAttack(
-                AttackTypes.DoS,
-                $"ICMP flood: {window.IcmpCount} ICMP packets from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.DoS,
+                $"ICMP flood: {window.IcmpCount} ICMP packets from one source", stats);
         }
 
-        // Generic single-source packet flood: a high total packet count from one source,
-        // regardless of protocol or port spread, catches floods the signatures above miss.
         if (window.TotalPackets >= _floodPackets)
         {
-            return PreFilterResult.KnownAttack(
-                AttackTypes.DoS,
-                $"Packet flood: {window.TotalPackets} packets from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.DoS,
+                $"Packet flood: {window.TotalPackets} packets from one source", stats);
         }
 
-        // Port scan: one source touching many distinct destination ports in the window
-        // without the packet volume of a flood.
+        // Port scan: many distinct destination ports probed from one source. Counts any
+        // traffic to distinct ports, so SYN/connect/FIN/UDP nmap scans all trip it even
+        // when replies are reset or suppressed.
         if (window.DistinctPorts.Count >= _portScanDistinctPorts)
         {
-            return PreFilterResult.KnownAttack(
-                AttackTypes.PortScan,
-                $"Port scan: {window.DistinctPorts.Count} distinct ports from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
+                $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", stats);
         }
 
-        // Brute force: many new connections to an authentication port in the window.
         if (window.AuthConnections >= _bruteForceConnections)
         {
             string service = window.LastAuthPort == 22 ? "SSH" : "FTP";
-            return PreFilterResult.KnownAttack(
-                AttackTypes.BruteForce,
-                $"{service} brute force: {window.AuthConnections} connections from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.BruteForce,
+                $"{service} brute force: {window.AuthConnections} connections from one source", stats);
         }
 
-        // SYN flood: many half-open SYNs with no handshake completion.
         if (window.SynCount >= 100 && window.AckCount == 0)
         {
-            return PreFilterResult.KnownAttack(
-                AttackTypes.DoS,
-                $"TCP SYN flood: {window.SynCount} SYNs from one source");
+            return PreFilterResult.KnownAttack(AttackTypes.DoS,
+                $"TCP SYN flood: {window.SynCount} SYNs from one source", stats);
         }
 
         return null;
     }
 
-    // Per-source sliding-window counters.
     private sealed class SourceWindow
     {
         private readonly List<(DateTime Timestamp, string DestinationIp, int Port, bool IsSyn, bool IsRst, byte Protocol)> _observations = new();
@@ -270,15 +222,12 @@ public sealed class SourceBehaviorTracker
         public int TotalPackets { get; private set; }
         public DateTime LastSeen { get; private set; }
 
-        // When this source was last flagged, for the alert cooldown.
         public DateTime LastFlaggedAt { get; set; } = DateTime.MinValue;
 
         public void Add(PacketObservation packet, TimeSpan window)
         {
             LastSeen = packet.Timestamp;
             _observations.Add((packet.Timestamp, packet.DestinationIp, packet.DestinationPort, packet.IsSyn, packet.IsRst, packet.Protocol));
-
-            // Recompute the aggregate counters from the pruned window.
             Prune(window);
         }
 
@@ -303,6 +252,17 @@ public sealed class SourceBehaviorTracker
 
             Recompute();
         }
+
+        public BehaviorWindowStats Snapshot(TimeSpan window) => new(
+            TotalPackets,
+            DistinctPorts.Count,
+            DistinctDestinationIps.Count,
+            SynCount,
+            AckCount,
+            IcmpCount,
+            AuthConnections,
+            window.TotalSeconds,
+            DistinctPorts.OrderBy(p => p).ToList());
 
         private void Recompute()
         {
@@ -329,7 +289,6 @@ public sealed class SourceBehaviorTracker
                 {
                     SynCount++;
 
-                    // A new connection to an authentication port counts as one brute-force attempt.
                     if (port == 22 || port == 21)
                     {
                         AuthConnections++;

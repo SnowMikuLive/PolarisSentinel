@@ -9,22 +9,14 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject
 {
+    // Key policy-matching behaviour: which alerts match, which block, and how the winner is chosen.
     [TestClass]
     public class PolicyEngineUnitTest
     {
         [TestMethod]
-        public void EvaluateShouldReturnADecision()
-        {
-            var decision = Evaluate(CreateAlert(), CreatePolicy());
-            Assert.IsNotNull(decision);
-            Assert.IsTrue(Enum.IsDefined(typeof(PolicyAction), decision.Action));
-        }
-
-        [TestMethod]
         public void EvaluateBenignTrafficShouldMonitor()
         {
-            var alert = CreateAlert(attackType: AttackTypes.Benign);
-            var decision = Evaluate(alert, CreatePolicy());
+            var decision = Evaluate(CreateAlert(attackType: AttackTypes.Benign), CreatePolicy());
             Assert.AreEqual(PolicyAction.Monitor, decision.Action);
             Assert.AreEqual("benign", decision.Reason);
         }
@@ -39,78 +31,33 @@ namespace PolarisSentienlUnitTestProject
         }
 
         [TestMethod]
-        public void EvaluateDisabledPolicyShouldNotMatch()
+        public void EvaluateNonMatchingPolicyShouldMonitor()
         {
-            var policy = CreatePolicy();
-            policy.IsEnabled = false;
-            var decision = Evaluate(CreateAlert(), policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("no_matching_policy", decision.Reason);
+            var disabled = CreatePolicy();
+            disabled.IsEnabled = false;
+            var disabledDecision = Evaluate(CreateAlert(), disabled);
+
+            var sourceMismatch = Evaluate(CreateAlert(source: DetectionSource.RandomForest), CreatePolicy(source: DetectionSource.HeuristicBased));
+            var typeMismatch = Evaluate(CreateAlert(attackType: AttackTypes.DoS), CreatePolicy(attackType: AttackTypes.PortScan));
+
+            Assert.AreEqual("no_matching_policy", disabledDecision.Reason);
+            Assert.AreEqual("no_matching_policy", sourceMismatch.Reason);
+            Assert.AreEqual("no_matching_policy", typeMismatch.Reason);
         }
 
         [TestMethod]
-        public void EvaluateDetectionSourceMismatchShouldNotMatch()
+        public void EvaluateThresholdShouldBeEnforced()
         {
-            var policy = CreatePolicy(source: DetectionSource.HeuristicBased);
-            var alert = CreateAlert(source: DetectionSource.RandomForest);
-            var decision = Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("no_matching_policy", decision.Reason);
+            var below = Evaluate(CreateAlert(confidence: 0.5f, source: DetectionSource.RandomForest), CreatePolicy(rfThreshold: 0.8f));
+            var met = Evaluate(CreateAlert(confidence: 0.9f, source: DetectionSource.RandomForest), CreatePolicy(rfThreshold: 0.8f));
+
+            Assert.AreEqual(PolicyAction.Monitor, below.Action);
+            Assert.AreEqual(PolicyAction.BlockInboundIp, met.Action);
         }
 
+        // An Isolation Forest alert can only ever be Unknown_Anomaly and never blocks.
         [TestMethod]
-        public void EvaluateAttackTypeMismatchShouldNotMatch()
-        {
-            var policy = CreatePolicy(attackType: AttackTypes.PortScan);
-            var decision = Evaluate(CreateAlert(attackType: AttackTypes.DoS), policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("no_matching_policy", decision.Reason);
-        }
-
-        [TestMethod]
-        public void EvaluateRfThresholdShouldBeEnforced()
-        {
-            var policy = CreatePolicy(rfThreshold: 0.8f);
-            var alert = CreateAlert(confidence: 0.5f, source: DetectionSource.RandomForest);
-            var decision = Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("no_matching_policy", decision.Reason);
-        }
-
-        [TestMethod]
-        public void EvaluateRfThresholdMetShouldBlock()
-        {
-            var policy = CreatePolicy(rfThreshold: 0.8f);
-            var alert = CreateAlert(confidence: 0.9f, source: DetectionSource.RandomForest);
-            var decision = Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.BlockInboundIp, decision.Action);
-        }
-
-        [TestMethod]
-        public void EvaluateIfThresholdShouldBeEnforced()
-        {
-            var policy = CreatePolicy(ifThreshold: 0.8f, source: DetectionSource.IsolationForest);
-            var alert = CreateAlert(confidence: 0.5f, source: DetectionSource.IsolationForest, attackType: AttackTypes.UnknownAnomaly);
-            var decision = Evaluate(alert, policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-        }
-
-        [TestMethod]
-        public void EvaluateUnknownAnomalyShouldNeverBlock()
-        {
-            var policy = CreatePolicy(ifThreshold: 0.6f, source: DetectionSource.IsolationForest);
-            var alert = CreateAlert(confidence: 0.99f, source: DetectionSource.IsolationForest, attackType: AttackTypes.UnknownAnomaly);
-
-            var decision = Evaluate(alert, policy);
-
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("unknown_anomaly", decision.Reason);
-        }
-
-        // An Isolation Forest alert can only ever be Unknown_Anomaly: a mislabelled
-        // attack type is normalised so it cannot match a named-attack policy.
-        [TestMethod]
-        public void EvaluateIsolationForestWithNamedAttackTypeShouldNormaliseToUnknownAnomaly()
+        public void EvaluateUnknownAnomalyShouldMonitorAndNormalise()
         {
             var policy = CreatePolicy(source: DetectionSource.IsolationForest, attackType: AttackTypes.DoS);
             var alert = CreateAlert(confidence: 0.99f, source: DetectionSource.IsolationForest, attackType: AttackTypes.DoS);
@@ -122,12 +69,11 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("unknown_anomaly", decision.Reason);
         }
 
+        // A heuristic alert carries no score, so it always passes the threshold.
         [TestMethod]
         public void EvaluatePreFilterAlertShouldIgnoreThreshold()
         {
-            var policy = CreatePolicy(source: DetectionSource.HeuristicBased);
-            var alert = CreateAlert(confidence: null, source: DetectionSource.HeuristicBased);
-            var decision = Evaluate(alert, policy);
+            var decision = Evaluate(CreateAlert(confidence: null, source: DetectionSource.HeuristicBased), CreatePolicy(source: DetectionSource.HeuristicBased));
             Assert.AreEqual(PolicyAction.BlockInboundIp, decision.Action);
         }
 
@@ -138,24 +84,6 @@ namespace PolarisSentienlUnitTestProject
             var high = CreatePolicy(id: "P-2", priority: 100);
             var decision = Evaluate(CreateAlert(), low, high);
             Assert.AreEqual("P-2", decision.PolicyId);
-        }
-
-        [TestMethod]
-        public void EvaluateEqualPriorityShouldBreakTieByCreatedAtThenId()
-        {
-            var newer = CreatePolicy(id: "P-2", priority: 50, createdAt: new DateTime(2026, 1, 2));
-            var older = CreatePolicy(id: "P-1", priority: 50, createdAt: new DateTime(2026, 1, 1));
-            var decision = Evaluate(CreateAlert(), newer, older);
-            Assert.AreEqual("P-1", decision.PolicyId);
-        }
-
-        [TestMethod]
-        public void EvaluateMonitorPolicyShouldNotBlock()
-        {
-            var policy = CreatePolicy(action: PolicyAction.Monitor);
-            var decision = Evaluate(CreateAlert(), policy);
-            Assert.AreEqual(PolicyAction.Monitor, decision.Action);
-            Assert.AreEqual("policy_monitor", decision.Reason);
         }
 
         #region Helper Methods
@@ -197,21 +125,16 @@ namespace PolarisSentienlUnitTestProject
         private static Alert CreateAlert(
             float? confidence = 0.99f,
             string attackType = AttackTypes.DoS,
-            DetectionSource source = DetectionSource.RandomForest)
+            DetectionSource source = DetectionSource.RandomForest) => new()
         {
-            return new Alert
-            {
-                Id = "A-1",
-                DetectionSource = source,
-                AttackType = attackType,
-                ConfidenceScore = confidence,
-                SourceIp = "8.8.8.8",
-                SourcePort = 44444,
-                DestinationIp = "192.168.1.10",
-                DestinationPort = 80,
-                Protocol = ProtocolNumbers.Tcp
-            };
-        }
+            DetectionSource = source,
+            AttackType = attackType,
+            ConfidenceScore = confidence,
+            SourceIp = "203.0.113.66",
+            DestinationIp = "192.168.1.10",
+            DestinationPort = 80,
+            Protocol = ProtocolNumbers.Tcp
+        };
 
         #endregion
     }

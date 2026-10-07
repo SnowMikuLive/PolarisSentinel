@@ -37,7 +37,6 @@ public class PolicyEngine : IPolicyEngine
             return Decision.Monitor(alert, "benign");
         }
 
-        // 未知异常只告警，由人工决定是否封禁。
         // Unknown anomalies are monitored for a human decision.
         if (alert.AttackType == AttackTypes.UnknownAnomaly)
         {

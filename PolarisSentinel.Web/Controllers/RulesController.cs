@@ -152,7 +152,7 @@ namespace PolarisSentinel.Web.Controllers
             int? durationValue,
             string? durationUnit)
         {
-            Validate(rule);
+            AddValidationErrors(rule);
 
             if (!ModelState.IsValid)
             {
@@ -208,11 +208,6 @@ namespace PolarisSentinel.Web.Controllers
         }
 
         // Surfaces the domain validation errors on ModelState for the form.
-        private void Validate(Rule rule)
-        {
-            AddValidationErrors(rule);
-        }
-
         private void AddValidationErrors(Rule rule)
         {
             foreach (var (field, message) in _rules.Validate(rule))

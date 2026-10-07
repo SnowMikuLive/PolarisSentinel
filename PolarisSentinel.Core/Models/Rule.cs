@@ -38,9 +38,7 @@ public class Rule
 
     public DateTime? ExpiresAt { get; set; }
 
-    // The address the policy action actually blocks, derived from the action and this
-    // rule's 5-tuple (which mirrors the originating alert). Null when the action blocks a
-    // port rather than an address.
+    // The address the policy action blocks (null when the action blocks a port).
     public string? BlockedIp => Action switch
     {
         PolicyAction.BlockInboundIp => SourceIp,
@@ -48,8 +46,7 @@ public class Rule
         _ => null
     };
 
-    // The port the policy action actually blocks, derived from the action and this rule's
-    // 5-tuple. Null when the action blocks an address rather than a port.
+    // The port the policy action blocks (null when the action blocks an address).
     public int? BlockedPort => Action switch
     {
         PolicyAction.BlockInboundPort => DestinationPort,
@@ -57,6 +54,7 @@ public class Rule
         _ => null
     };
 
-    // True when the action blocks a specific address rather than a port.
     public bool BlocksAddress => Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp;
+
+    public bool BlocksOutbound => Action is PolicyAction.BlockOutboundIp or PolicyAction.BlockOutboundPort;
 }

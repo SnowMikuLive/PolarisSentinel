@@ -32,16 +32,16 @@
                 <dd class="col-sm-9">
                     @if (Model.BlocksAddress)
                     {
-                        <span class="badge bg-danger">IP @(string.IsNullOrEmpty(Model.BlockedIp) ? "Any" : Model.BlockedIp)</span>
+                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") IP @(string.IsNullOrEmpty(Model.BlockedIp) ? "Any" : Model.BlockedIp)</span>
                     }
                     else
                     {
-                        <span class="badge bg-danger">Port @(Model.BlockedPort is null or 0 ? "Any" : Model.BlockedPort.ToString())</span>
+                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") port @(Model.BlockedPort is null or 0 ? "Any" : Model.BlockedPort.ToString())</span>
                     }
                 </dd>
 
                 <dt class="col-sm-3">Protocol</dt>
-                <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
+                <dd class="col-sm-9">@PolarisSentinel.Core.Constants.ProtocolNumbers.Name(Model.Protocol)</dd>
 
                 <dt class="col-sm-3">Action</dt>
                 <dd class="col-sm-9"><span class="badge bg-secondary">@Model.Action</span></dd>
@@ -104,16 +104,3 @@
         <a asp-action="Index" class="btn btn-outline-secondary">Back to List</a>
     </div>
 </div>
-
-@functions {
-    // Map an IP protocol number to a readable name.
-    static string ProtocolName(byte? protocol) => protocol switch
-    {
-        1 => "ICMP",
-        6 => "TCP",
-        17 => "UDP",
-        0 => "Any",
-        null => "Any",
-        _ => protocol.Value.ToString()
-    };
-}

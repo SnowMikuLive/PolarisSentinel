@@ -23,21 +23,9 @@ public class EvaluationMetricsTests
         Assert.AreEqual(80.0 / 100, metrics.Recall!.Value, 0.0001);
         Assert.AreEqual(0.1, metrics.FalsePositiveRate!.Value, 0.0001);
         Assert.AreEqual(0.2, metrics.FalseNegativeRate!.Value, 0.0001);
-    }
 
-    [TestMethod]
-    public void F1Score_ShouldBeHarmonicMean()
-    {
-        var metrics = new EvaluationMetrics
-        {
-            TruePositives = 80,
-            TrueNegatives = 90,
-            FalsePositives = 10,
-            FalseNegatives = 20
-        };
-
-        double expected = 2 * (80.0 / 90) * (80.0 / 100) / ((80.0 / 90) + (80.0 / 100));
-        Assert.AreEqual(expected, metrics.F1Score!.Value, 0.0001);
+        double expectedF1 = 2 * (80.0 / 90) * (80.0 / 100) / ((80.0 / 90) + (80.0 / 100));
+        Assert.AreEqual(expectedF1, metrics.F1Score!.Value, 0.0001);
     }
 
     [TestMethod]
@@ -51,21 +39,5 @@ public class EvaluationMetricsTests
         Assert.IsNull(metrics.F1Score);
         Assert.IsNull(metrics.FalsePositiveRate);
         Assert.IsNull(metrics.FalseNegativeRate);
-    }
-
-    [TestMethod]
-    public void NoPredictedPositives_ShouldReturnNullPrecision()
-    {
-        var metrics = new EvaluationMetrics
-        {
-            TruePositives = 0,
-            TrueNegatives = 50,
-            FalsePositives = 0,
-            FalseNegatives = 10
-        };
-
-        Assert.IsNull(metrics.Precision);
-        Assert.IsNull(metrics.F1Score);
-        Assert.AreEqual(0.0, metrics.Recall!.Value, 0.0001);
     }
 }

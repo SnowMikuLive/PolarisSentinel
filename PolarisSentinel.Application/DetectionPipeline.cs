@@ -178,6 +178,7 @@ public class DetectionPipeline : IDetectionPipeline
             RstCount = flow.RstCount,
             PshCount = flow.PshCount,
             FlowSnapshotJson = FlowSnapshot.Create(flow),
+            BehaviorSnapshotJson = verdict.Aggregate is { } aggregate ? BehaviorSnapshot.Create(aggregate) : null,
             CreatedAt = flow.FlowEndTime
         };
     }

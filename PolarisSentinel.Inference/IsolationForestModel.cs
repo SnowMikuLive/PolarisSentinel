@@ -22,7 +22,7 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
     public IReadOnlyList<string> FeatureNames { get; }
 
     // Raw decision_function value below which the flow is considered anomalous.
-    public double AnomalyThreshold { get; }
+    private double AnomalyThreshold { get; }
 
     public IsolationForestModel(string modelPath, IReadOnlyList<string> classifierFeatureNames)
     {
@@ -79,8 +79,7 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
         return results.First(r => r.Name == "scores").AsEnumerable<float>().First();
     }
 
-    // 两个校准点对应 0.60 和 0.95；最终置信度上限仍为 0.99。
-    // The calibration points map to 0.60 and 0.95; confidence remains capped at 0.99.
+    // The calibration points map to 0.60 and 0.95; confidence stays capped at 0.99.
     private float Normalize(double score)
     {
         double span = _scoreAtAlertConfidence - _scoreAtHighConfidence;

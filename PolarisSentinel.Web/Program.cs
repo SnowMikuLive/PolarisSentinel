@@ -23,12 +23,11 @@ namespace PolarisSentinel
     {
         public static async Task Main(string[] args)
         {
-            //builder.Service
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddControllersWithViews();
 
-            //Add SignalR with camelCase JSON so frontend JS can read properties directly
+            // camelCase JSON so frontend JS can read properties directly.
             builder.Services.AddSignalR()
                 .AddJsonProtocol(options =>
                 {
@@ -53,15 +52,14 @@ namespace PolarisSentinel
                 int flowIdleTimeoutSeconds = (section.GetValue<int?>("FlowIdleTimeoutMilliseconds") ?? 120000) / 1000;
                 int preFilterMinPackets = section.GetValue<int?>("PreFilterMinPackets") ?? 3;
                 int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
+                int portScanDistinctPorts = section.GetValue<int?>("PortScanDistinctPorts") ?? 6;
 
-                return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds);
+                return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds, portScanDistinctPorts);
             });
 
-            // 先清理遗留规则，再启动抓包
-            // Clean up old rules before capture starts
+            // Clean up old rules before capture starts.
             builder.Services.AddHostedService<FirewallRuleSweeper>();
 
-            //add the registe background broadcast service
             builder.Services.AddHostedService<TrafficBroadcastService>();
 
             // Clears the live traffic window every 24 hours.
@@ -85,15 +83,13 @@ namespace PolarisSentinel
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
-            //   dotnet user-secrets set "AdminSeed:Password" "..." --project PolarisSentinel.Web
-            // 初始管理员账号配置（密码来自 user-secrets / 环境变量，不硬编码）
-            // Initial admin account configuration (password from user-secrets / env var)
+
+            // Initial admin account (password from user-secrets / env var).
             builder.Services.Configure<AdminSeedOptions>(
                 builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 
             builder.Services.AddScoped<SentinelDbInitializer>();
 
-            //Configure Login path and Access Denied path for the application cookie
             builder.Services.ConfigureApplicationCookie(options =>
             {
                 options.LoginPath = "/Account/Login";
@@ -200,8 +196,7 @@ namespace PolarisSentinel
 
             app.MapStaticAssets();
 
-            // Web API 控制器（含防火墙接口）
-            // Web API controllers (includes firewall endpoints)
+            // Web API controllers (includes firewall endpoints).
             app.MapControllers();
             app.MapControllerRoute(
                 name: "default",
@@ -233,8 +228,7 @@ namespace PolarisSentinel
                 app.Logger.LogInformation("No default test dataset at {Path}", defaultDataset);
             }
 
-            //应用迁移并创建初始管理员（实现见SentinelDbInitializer）。
-            //Apply migrations and provision admin (see SentinelDbInitializer).
+            // Apply migrations and provision admin (see SentinelDbInitializer).
             await using (var scope = app.Services.CreateAsyncScope())
             {
                 try
@@ -247,8 +241,7 @@ namespace PolarisSentinel
                 {
                     app.Logger.LogError(ex,
                         "Database initialisation failed; check the connection and migrations.");
-                    //迁移或种子失败时中止启动，避免无库状态下跑抓包/检测。
-                    //Abort startup on migration/seed failure so capture does not run without DB.
+                    // Abort startup on migration/seed failure so capture does not run without a DB.
                     throw;
                 }
             }

@@ -42,5 +42,8 @@ public class Alert
     // JSON snapshot of the 20 ML features plus the TCP flag counters at detection time.
     public string? FlowSnapshotJson { get; set; }
 
+    // JSON snapshot of the aggregate window stats for a behavioural (Heuristic) verdict.
+    public string? BehaviorSnapshotJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

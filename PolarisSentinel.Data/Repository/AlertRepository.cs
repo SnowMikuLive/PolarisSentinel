@@ -25,16 +25,7 @@ public class AlertRepository : IAlertRepository
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
         var ids = await _context.Alerts.Select(a => a.Id).ToListAsync(cancellationToken);
-        return EntityIds.Alert(EntityIds.MaxNumber(ids, EntityIds.AlertPrefix) + 1);
-    }
-
-    public async Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default)
-    {
-        return await _context.Alerts
-            .AsNoTracking()
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(count)
-            .ToListAsync(cancellationToken);
+        return EntityIds.Next(ids, EntityIds.AlertPrefix, EntityIds.Alert);
     }
 
     public async Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default)

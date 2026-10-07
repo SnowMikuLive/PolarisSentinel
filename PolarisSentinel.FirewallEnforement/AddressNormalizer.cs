@@ -1,11 +1,9 @@
-using System.Net;
-using System.Net.Sockets;
+using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Platform-neutral normalisation of IP addresses and CIDR subnets used by the
-    // firewall layer. Kept separate from WindowsFirewall so address handling is not
-    // tied to the Windows-only COM wrapper.
+    // Normalisation of IP addresses and CIDR subnets for the firewall layer. Parsing lives
+    // in Core's NetworkAddress so the domain and firewall share one implementation.
     internal static class AddressNormalizer
     {
         // Accepts "*", a single address, a CIDR subnet, or a comma-separated list of
@@ -22,7 +20,7 @@ namespace PolarisSentinel.FirewallEnforement
             var normalized = new List<string>(parts.Length);
             foreach (var part in parts)
             {
-                if (!TryNormalizeAddress(part, out var address))
+                if (!NetworkAddress.TryNormalize(part, out var address))
                 {
                     throw new ArgumentException($"Invalid remote address '{part}'.");
                 }
@@ -30,38 +28,6 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             return normalized.Count == 0 ? "*" : string.Join(",", normalized);
-        }
-
-        // A CIDR subnet keeps its prefix; a bare address keeps its normalized form.
-        public static bool TryNormalizeAddress(string value, out string normalized)
-        {
-            normalized = string.Empty;
-            var segments = value.Split('/');
-            if (segments.Length > 2 || !IPAddress.TryParse(segments[0], out var address))
-            {
-                return false;
-            }
-
-            if (segments.Length == 2)
-            {
-                // IPv4 最多 32 位，IPv6 最多 128 位 / IPv4 has 32 bits; IPv6 has 128.
-                int maxPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
-                if (!int.TryParse(segments[1], out int prefix) || prefix < 0 || prefix > maxPrefix)
-                {
-                    return false;
-                }
-                normalized = $"{address}/{prefix}";
-            }
-            else
-            {
-                if (address.IsIPv4MappedToIPv6)
-                {
-                    address = address.MapToIPv4();
-                }
-                normalized = address.ToString();
-            }
-
-            return true;
         }
     }
 }

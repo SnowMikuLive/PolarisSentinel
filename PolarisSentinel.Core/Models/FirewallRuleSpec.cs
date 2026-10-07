@@ -22,13 +22,22 @@ public class FirewallRuleSpec
 
     // Validates a policy action against the alert and returns the rule to apply,
     // or an error message when the combination is not representable.
-    public static FirewallRuleSpec? TryCreate(PolicyAction action, Alert alert, out string? error)
+    public static FirewallRuleSpec? TryCreate(PolicyAction action, Alert alert, out string? error) =>
+        Create(action, alert.SourceIp, alert.DestinationIp, alert.DestinationPort, alert.Protocol, out error);
+
+    // Rebuilds the spec for a persisted rule (its 5-tuple mirrors the originating alert).
+    public static FirewallRuleSpec FromRule(Rule rule) =>
+        Create(rule.Action, rule.SourceIp ?? string.Empty, rule.DestinationIp ?? string.Empty,
+            rule.DestinationPort ?? 0, rule.Protocol ?? 0, out _)!;
+
+    private static FirewallRuleSpec? Create(
+        PolicyAction action, string sourceIp, string destinationIp, int destinationPort, byte protocol, out string? error)
     {
         error = null;
 
         bool portAction = action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
         // ICMP has no ports, so a port-based action cannot be expressed.
-        if (portAction && alert.Protocol == ProtocolNumbers.Icmp)
+        if (portAction && protocol == ProtocolNumbers.Icmp)
         {
             error = "Port actions are not valid for ICMP; use an IP action instead.";
             return null;
@@ -36,7 +45,7 @@ public class FirewallRuleSpec
 
         // A port filter needs a concrete transport protocol; the Any protocol would
         // otherwise widen the rule to every port.
-        if (portAction && alert.Protocol == 0)
+        if (portAction && protocol == 0)
         {
             error = "Port actions require a specific protocol (TCP or UDP), not Any.";
             return null;
@@ -44,30 +53,10 @@ public class FirewallRuleSpec
 
         return action switch
         {
-            PolicyAction.BlockInboundIp => new FirewallRuleSpec
-            {
-                Direction = 1,
-                RemoteAddress = alert.SourceIp,
-                Protocol = alert.Protocol
-            },
-            PolicyAction.BlockInboundPort => new FirewallRuleSpec
-            {
-                Direction = 1,
-                LocalPort = alert.DestinationPort,
-                Protocol = alert.Protocol
-            },
-            PolicyAction.BlockOutboundIp => new FirewallRuleSpec
-            {
-                Direction = 2,
-                RemoteAddress = alert.DestinationIp,
-                Protocol = alert.Protocol
-            },
-            PolicyAction.BlockOutboundPort => new FirewallRuleSpec
-            {
-                Direction = 2,
-                RemotePort = alert.DestinationPort,
-                Protocol = alert.Protocol
-            },
+            PolicyAction.BlockInboundIp => new FirewallRuleSpec { Direction = 1, RemoteAddress = sourceIp, Protocol = protocol },
+            PolicyAction.BlockInboundPort => new FirewallRuleSpec { Direction = 1, LocalPort = destinationPort, Protocol = protocol },
+            PolicyAction.BlockOutboundIp => new FirewallRuleSpec { Direction = 2, RemoteAddress = destinationIp, Protocol = protocol },
+            PolicyAction.BlockOutboundPort => new FirewallRuleSpec { Direction = 2, RemotePort = destinationPort, Protocol = protocol },
             _ => null
         };
     }

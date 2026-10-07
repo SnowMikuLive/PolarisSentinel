@@ -1,15 +1,12 @@
 namespace PolarisSentinel.FirewallEnforement
 {
-    //防火墙执行配置，绑定appsettings Firewall节
-    //Firewall execution settings bound to appsettings Firewall section
+    // Firewall execution settings bound to the appsettings "Firewall" section.
     public class FirewallOptions
     {
-        //默认只操作内存中的规则
-        //Use in-memory rules by default
+        // Use in-memory rules only (no real Windows Firewall writes).
         public bool DryRun { get; set; } = true;
 
-        //过期规则清扫间隔（秒）
-        //Interval in seconds for sweeping expired rules
+        // Interval in seconds for sweeping expired rules.
         public int SweepSeconds { get; set; } = 30;
     }
 }

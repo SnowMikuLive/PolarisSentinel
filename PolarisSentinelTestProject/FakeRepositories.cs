@@ -1,5 +1,4 @@
 using PolarisSentinel.Core.Constants;
-using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 
@@ -12,10 +11,7 @@ namespace PolarisSentienlUnitTestProject
         public void Add(Rule rule) => _rules.Add(rule);
 
         public Task<string> NextIdAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(EntityIds.Rule(EntityIds.MaxNumber(_rules.Select(r => r.Id), EntityIds.RulePrefix) + 1));
-
-        public Task<IReadOnlyList<Rule>> GetActiveAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Rule>>(_rules.Where(r => r.Status == RuleStatus.Active).ToList());
+            Task.FromResult(EntityIds.Next(_rules.Select(r => r.Id), EntityIds.RulePrefix, EntityIds.Rule));
 
         public Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Rule>>(_rules.ToList());
@@ -44,10 +40,7 @@ namespace PolarisSentienlUnitTestProject
         public void Add(Alert alert) => _alerts.Add(alert);
 
         public Task<string> NextIdAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(EntityIds.Alert(EntityIds.MaxNumber(_alerts.Select(a => a.Id), EntityIds.AlertPrefix) + 1));
-
-        public Task<IReadOnlyList<Alert>> GetRecentAsync(int count, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Alert>>(_alerts.OrderByDescending(a => a.CreatedAt).Take(count).ToList());
+            Task.FromResult(EntityIds.Next(_alerts.Select(a => a.Id), EntityIds.AlertPrefix, EntityIds.Alert));
 
         public Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Alert>>(_alerts.ToList());

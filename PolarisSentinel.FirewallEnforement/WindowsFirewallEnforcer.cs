@@ -128,10 +128,8 @@ namespace PolarisSentinel.FirewallEnforement
                     return existing;
                 }
 
-                // The rule's 5-tuple mirrors the originating alert exactly. Which address or
-                // port is actually blocked is decided by the policy action and derived from
-                // that 5-tuple (see Rule.BlockedIp / Rule.BlockedPort), so the Rules view can
-                // show both the observed endpoints and the block target.
+                // The rule's 5-tuple mirrors the originating alert. What is blocked is
+                // derived from the action (see Rule.BlockedIp / Rule.BlockedPort).
                 var rule = new Rule
                 {
                     Id = ruleId,
@@ -287,15 +285,7 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        private static FirewallRuleSpec SpecFrom(Rule rule) => new()
-        {
-            Direction = rule.Action is PolicyAction.BlockOutboundIp or PolicyAction.BlockOutboundPort ? 2 : 1,
-            RemoteAddress = rule.Action == PolicyAction.BlockInboundIp ? rule.SourceIp :
-                rule.Action == PolicyAction.BlockOutboundIp ? rule.DestinationIp : null,
-            LocalPort = rule.Action == PolicyAction.BlockInboundPort ? rule.DestinationPort : null,
-            RemotePort = rule.Action == PolicyAction.BlockOutboundPort ? rule.DestinationPort : null,
-            Protocol = rule.Protocol ?? 0
-        };
+        private static FirewallRuleSpec SpecFrom(Rule rule) => FirewallRuleSpec.FromRule(rule);
 
         // Push a rule to the Windows Firewall API (skipped in dry-run).
         private void SaveToWindows(Rule rule, FirewallRuleSpec spec)
@@ -321,7 +311,6 @@ namespace PolarisSentinel.FirewallEnforement
                 RemotePort = spec.RemotePort ?? 0,
                 Protocol = spec.Protocol,
                 Enabled = rule.Status == RuleStatus.Active,
-                IsBlockRule = true,
                 Direction = spec.Direction
             });
         }
@@ -350,7 +339,7 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             // Keep the CIDR prefix so a subnet block reaches Windows Firewall intact.
-            return AddressNormalizer.TryNormalizeAddress(value, out var normalized) ? normalized : null;
+            return NetworkAddress.TryNormalize(value, out var normalized) ? normalized : null;
         }
     }
 }

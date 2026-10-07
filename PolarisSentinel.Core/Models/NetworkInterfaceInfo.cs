@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace PolarisSentinel.Core.Models
+﻿namespace PolarisSentinel.Core.Models
 {
     public class NetworkInterfaceInfo
     {

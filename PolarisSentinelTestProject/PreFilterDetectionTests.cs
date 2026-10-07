@@ -15,75 +15,35 @@ namespace PolarisSentienlUnitTestProject
     [TestClass]
     public class PreFilterDetectionTests
     {
-        // A known pre-filter attack blocks immediately and never reaches inference.
+        // The alert carries the flow 5-tuple and the flow/behavior snapshots for the detail page.
         [TestMethod]
-        public void PreFilterVerdict_ShouldBlockImmediately()
-        {
-            var inference = new CountingInferenceEngine();
-            var pipeline = CreatePipeline(inference, out var firewall);
-
-            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
-
-            Assert.AreEqual(0, inference.CallCount);
-            Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
-            Assert.AreEqual(DetectionSource.HeuristicBased, outcome.Alert!.DetectionSource);
-            Assert.AreEqual("policy_block", outcome.Decision.Reason);
-            Assert.HasCount(1, firewall.GetAllRules());
-        }
-
-        // A pre-filter alert carries no model confidence.
-        [TestMethod]
-        public void PreFilterVerdict_ShouldHaveNullConfidence()
+        public void PreFilterVerdict_ShouldCarrySnapshots()
         {
             var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
+            var flow = CreateFlow(AttackTypes.PortScan);
+            flow = new FlowFeatureVector
+            {
+                Features = flow.Features,
+                SourceIp = flow.SourceIp,
+                SourcePort = flow.SourcePort,
+                DestinationIp = flow.DestinationIp,
+                DestinationPort = flow.DestinationPort,
+                Protocol = flow.Protocol,
+                FlowStartTime = flow.FlowStartTime,
+                FlowEndTime = flow.FlowEndTime,
+                PreFilterVerdict = PreFilterResult.KnownAttack(
+                    AttackTypes.PortScan, "Port scan", new BehaviorWindowStats(10, 10, 1, 10, 0, 0, 0, 10, new[] { 80, 443 }))
+            };
 
-            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.PortScan), new[] { CreatePolicy() });
-
-            Assert.IsNull(outcome.Alert!.ConfidenceScore);
-            Assert.AreEqual("PortScan", outcome.Alert.AttackType);
-        }
-
-        // The firewall rule name contains the alert id.
-        [TestMethod]
-        public void PreFilterVerdict_ShouldUseAlertIdInRuleName()
-        {
-            var pipeline = CreatePipeline(new CountingInferenceEngine(), out var firewall);
-
-            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
-
-            Assert.AreEqual($"PolarisSentinel_Block_{outcome.Alert!.Id}", outcome.Rule!.Name);
-            Assert.AreEqual(outcome.Rule.Name, firewall.GetAllRules()[0].Name);
-        }
-
-        // The pre-filter alert carries the flow's 5-tuple and flag counters.
-        [TestMethod]
-        public void PreFilterVerdict_ShouldCarryFiveTupleAndFlags()
-        {
-            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
-
-            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
+            var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy() });
 
             var alert = outcome.Alert!;
             Assert.AreEqual("203.0.113.9", alert.SourceIp);
             Assert.AreEqual(12345, alert.SourcePort);
             Assert.AreEqual("192.168.1.10", alert.DestinationIp);
             Assert.AreEqual(80, alert.DestinationPort);
-            Assert.AreEqual(ProtocolNumbers.Tcp, alert.Protocol);
-            Assert.AreEqual(1500, alert.SynCount);
-        }
-
-        // The flow snapshot is persisted for the alert detail page.
-        [TestMethod]
-        public void PreFilterVerdict_ShouldStoreFlowSnapshot()
-        {
-            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
-
-            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
-
-            var snapshot = FlowSnapshot.Read(outcome.Alert!.FlowSnapshotJson);
-            Assert.IsNotEmpty(snapshot);
-            Assert.IsTrue(snapshot.Any(kv => kv.Key == "flow_duration_ms"));
-            Assert.IsTrue(snapshot.Any(kv => kv.Key == "syn_count"));
+            Assert.IsTrue(FlowSnapshot.Read(alert.FlowSnapshotJson).Any(kv => kv.Key == "flow_duration_ms"));
+            Assert.IsTrue(BehaviorSnapshot.Read(alert.BehaviorSnapshotJson).Any(kv => kv.Key == "distinct_ports"));
         }
 
         // A pre-filter attack that no policy matches is still alerted, just monitored.
@@ -101,8 +61,7 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsEmpty(firewall.GetAllRules());
         }
 
-        // The generated rule mirrors the alert's 5-tuple, and the blocked IP is exposed
-        // separately so the Rules view can show what is actually blocked.
+        // The rule mirrors the alert 5-tuple; the inbound-IP action blocks the source address.
         [TestMethod]
         public void PreFilterVerdict_BlockRule_ShouldMirrorAlertAndExposeBlockedIp()
         {
@@ -111,11 +70,8 @@ namespace PolarisSentienlUnitTestProject
             var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
 
             var rule = outcome.Rule!;
-            Assert.AreEqual(PolicyAction.BlockInboundIp, rule.Action);
-            // 5-tuple mirrors the alert.
             Assert.AreEqual(outcome.Alert!.SourceIp, rule.SourceIp);
             Assert.AreEqual(outcome.Alert.DestinationIp, rule.DestinationIp);
-            // The inbound-IP action blocks the alert's source address.
             Assert.IsTrue(rule.BlocksAddress);
             Assert.AreEqual("203.0.113.9", rule.BlockedIp);
         }

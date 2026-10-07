@@ -5,14 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace PolarisSentinel.DataAccess.Data;
 
-//应用EF迁移并可选创建初始管理员；失败时由宿主中止启动。
-//Apply EF migrations and optionally seed admin;host aborts startup on failure.
-//
-//Why this lives here instead of Program.cs:
-//-The Web project only needs to call one method;schema and identity
-//  bootstrap logic stays next to the DbContext that owns it.
-//-The password is supplied through AdminSeedOptions (config/env var/
-//  user-secrets),so no credential is hardcoded in source.
+// Applies EF migrations and optionally seeds the admin; the host aborts startup on failure.
 public sealed class SentinelDbInitializer
 {
     private readonly SentinelDbContext _db;

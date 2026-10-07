@@ -15,12 +15,12 @@ public class RandomForestModel : IRandomForestModel, IDisposable
     private readonly string _inputName;
     private readonly int _benignIndex;
 
-    public IReadOnlyList<string> ClassNames { get; }
+    private IReadOnlyList<string> ClassNames { get; }
 
     public IReadOnlyList<string> FeatureNames { get; }
 
     // Minimum probability for the classifier to report a known attack.
-    public double ConfidenceThreshold { get; }
+    private double ConfidenceThreshold { get; }
 
     public RandomForestModel(string modelPath)
     {

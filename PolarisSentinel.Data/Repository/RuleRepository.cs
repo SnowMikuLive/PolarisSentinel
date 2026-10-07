@@ -25,16 +25,7 @@ public class RuleRepository : IRuleRepository
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
         var ids = await _context.Rules.Select(r => r.Id).ToListAsync(cancellationToken);
-        return EntityIds.Rule(EntityIds.MaxNumber(ids, EntityIds.RulePrefix) + 1);
-    }
-
-    public async Task<IReadOnlyList<Rule>> GetActiveAsync(CancellationToken cancellationToken = default)
-    {
-        var now = DateTime.Now;
-        return await _context.Rules
-            .AsNoTracking()
-            .Where(r => r.ExpiresAt == null || r.ExpiresAt > now)
-            .ToListAsync(cancellationToken);
+        return EntityIds.Next(ids, EntityIds.RulePrefix, EntityIds.Rule);
     }
 
     public async Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -84,7 +75,6 @@ public class RuleRepository : IRuleRepository
 
     public void Remove(Rule rule)
     {
-        // 删除已跟踪的记录，避免重复附加同一条规则。
         // Remove the tracked row to avoid attaching the same rule twice.
         var existing = _context.Rules.Find(rule.Id);
         if (existing != null)

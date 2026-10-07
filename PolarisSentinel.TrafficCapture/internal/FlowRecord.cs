@@ -1,11 +1,10 @@
 namespace PolarisSentinel.TrafficCapture.Internal;
 
-//For store flow records
+// Mutable per-flow counters accumulated during capture.
 internal sealed class FlowRecord
 {
     public required DateTime StartTime { get; init; }
     public DateTime LastSeenTime { get; set; }
-    // 首包固定方向，回复包不改变源和目的地址。
     // The first packet fixes the endpoints for this flow.
     public string SourceIp { get; init; } = string.Empty;
     public ushort SourcePort { get; init; }
@@ -16,14 +15,6 @@ internal sealed class FlowRecord
     public long FwdBytes { get; set; }
     public long BwdBytes { get; set; }
     public long TotalBytes => FwdBytes + BwdBytes;
-
-    public double FwdIatMin => FwdIatStats.Min;
-    public double FwdIatMax => FwdIatStats.Max;
-    public double BwdIatMin => BwdIatStats.Min;
-    public double BwdIatMax => BwdIatStats.Max;
-
-    public double PktLenMin => PacketSizeStats.Min;
-    public double PktLenMax => PacketSizeStats.Max;
 
     public RunningStats PacketSizeStats { get; } = new();
     public RunningStats FwdIatStats { get; } = new();
@@ -38,12 +29,8 @@ internal sealed class FlowRecord
     public int RstCount { get; set; }
     public int PshCount { get; set; }
 
-    public double DownUpRatio => BwdBytes > 0 ? (double)FwdBytes / BwdBytes : (FwdBytes > 0 ? double.MaxValue : 1.0);
     public double DurationSeconds => (LastSeenTime - StartTime).TotalSeconds;
     public long TotalPackets => FwdPackets + BwdPackets;
-
-    // Outbound packet rate, used by the pre-filter to spot floods.
-    public double FwdPacketsPerSecond => DurationSeconds > 0 ? FwdPackets / DurationSeconds : 0;
 
     public int DestinationPort { get; internal set; }
 

@@ -3,8 +3,7 @@ using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Windows 防火墙 COM 封装
-    // COM wrapper for Windows Firewall
+    // Windows Firewall COM wrapper
     [SupportedOSPlatform("windows")]
     internal class WindowsFirewall
     {
@@ -114,7 +113,6 @@ namespace PolarisSentinel.FirewallEnforement
         public int RemotePort { get; set; }
         public byte Protocol { get; set; }
         public bool Enabled { get; set; } = true;
-        public bool IsBlockRule { get; set; } = true;
         public int Direction { get; set; } = 1;
     }
 }

@@ -1,8 +1,6 @@
-using System.Text.Json;
-
 namespace PolarisSentinel.Core.Models;
 
-// Serializes the 20 ML features plus the TCP flag counters into the alert's snapshot column.
+// The 20 ML features plus TCP flag counters stored in the alert's snapshot column.
 public static class FlowSnapshot
 {
     // The 20 ML feature names in the order the models expect.
@@ -44,18 +42,13 @@ public static class FlowSnapshot
         values["rst_count"] = flow.RstCount;
         values["psh_count"] = flow.PshCount;
 
-        return JsonSerializer.Serialize(values);
+        return SnapshotJson.Serialize(values);
     }
 
-    // Returns the stored snapshot as an ordered list for the alert detail page.
+    // The stored snapshot ordered as feature list then flags, for the alert detail page.
     public static IReadOnlyList<KeyValuePair<string, float>> Read(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return Array.Empty<KeyValuePair<string, float>>();
-        }
-
-        var values = JsonSerializer.Deserialize<Dictionary<string, float>>(json) ?? new();
+        var values = SnapshotJson.Read(json);
         var ordered = new List<KeyValuePair<string, float>>();
         foreach (string name in FeatureNames)
         {

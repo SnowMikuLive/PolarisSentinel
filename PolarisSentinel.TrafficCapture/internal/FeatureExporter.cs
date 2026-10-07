@@ -1,12 +1,10 @@
 ﻿using PolarisSentinel.Core.Models;
-using System.Diagnostics;
 
 namespace PolarisSentinel.TrafficCapture.Internal;
 
 internal static class FeatureExporter
 {
-    //Human readable list of each index in Features means
-   
+    // Human-readable name of each index in FlowFeatureVector.Features.
     public static readonly string[] FeatureNames =
     {
         "flow_duration_ms",
@@ -44,8 +42,7 @@ internal static class FeatureExporter
             ? (float)(flow.TotalPackets / durationMs)
             : 0;
 
-        //与训练脚本一致：down_up_ratio =下行包数/上行包数
-        //Matches the training script:down_up_ratio = bwd_pkts / fwd_pkts
+        // Matches the training script: down_up_ratio = bwd_pkts / fwd_pkts
         float downUpRatio = flow.FwdPackets > 0
             ? (float)((double)flow.BwdPackets / flow.FwdPackets)
             : 0;

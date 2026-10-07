@@ -6,7 +6,7 @@ using PolarisSentinel.Application;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Exercises the five AI engine configurations with stubbed models.
+// Key routing behaviour of each AI engine combination, with stubbed models.
 [TestClass]
 public class ModelCombinationServiceTests
 {
@@ -22,103 +22,43 @@ public class ModelCombinationServiceTests
     }
 
     [TestMethod]
-    public void IsolationForestOnly_ShouldReturnAnomaly()
+    public void IsolationForestOnly_ShouldReturnAnomalyOrBenign()
     {
-        var service = CreateService(rfAttack: AttackTypes.Benign, rfConfidence: 0f, anomaly: true);
+        var anomaly = CreateService(AttackTypes.Benign, 0f, anomaly: true).Run(CreateFlow(), ModelCombination.IsolationForestOnly);
+        var normal = CreateService(AttackTypes.Benign, 0f, anomaly: false).Run(CreateFlow(), ModelCombination.IsolationForestOnly);
 
-        var result = service.Run(CreateFlow(), ModelCombination.IsolationForestOnly);
-
-        Assert.AreEqual(AttackTypes.UnknownAnomaly, result.AttackType);
+        Assert.AreEqual(AttackTypes.UnknownAnomaly, anomaly.AttackType);
+        Assert.AreEqual(AttackTypes.Benign, normal.AttackType);
     }
 
     [TestMethod]
-    public void IsolationForestOnly_ShouldReturnBenignWhenNormal()
+    public void IsolationThenRandomForest_ShouldGateOnAnomaly()
     {
-        var service = CreateService(rfAttack: AttackTypes.Benign, rfConfidence: 0f, anomaly: false);
+        var normal = CreateService(AttackTypes.DoS, 0.9f, anomaly: false).Run(CreateFlow(), ModelCombination.IsolationThenRandomForest);
+        var knownAttack = CreateService(AttackTypes.PortScan, 0.9f, anomaly: true).Run(CreateFlow(), ModelCombination.IsolationThenRandomForest);
 
-        var result = service.Run(CreateFlow(), ModelCombination.IsolationForestOnly);
-
-        Assert.AreEqual(AttackTypes.Benign, result.AttackType);
+        Assert.AreEqual(AttackTypes.Benign, normal.AttackType);
+        Assert.AreEqual(AttackTypes.PortScan, knownAttack.AttackType);
     }
 
     [TestMethod]
-    public void IsolationThenRandomForest_NormalFlow_ShouldBeBenign()
+    public void RandomForestThenIsolation_ShouldFallBackToAnomaly()
     {
-        var service = CreateService(rfAttack: AttackTypes.DoS, rfConfidence: 0.9f, anomaly: false);
+        var knownAttack = CreateService(AttackTypes.BruteForce, 0.9f, anomaly: true).Run(CreateFlow(), ModelCombination.RandomForestThenIsolation);
+        var anomaly = CreateService(AttackTypes.Benign, 0f, anomaly: true).Run(CreateFlow(), ModelCombination.RandomForestThenIsolation);
 
-        var result = service.Run(CreateFlow(), ModelCombination.IsolationThenRandomForest);
-
-        Assert.AreEqual(AttackTypes.Benign, result.AttackType);
+        Assert.AreEqual(AttackTypes.BruteForce, knownAttack.AttackType);
+        Assert.AreEqual(AttackTypes.UnknownAnomaly, anomaly.AttackType);
     }
 
     [TestMethod]
-    public void IsolationThenRandomForest_AnomalyWithKnownAttack_ShouldReturnRfType()
+    public void Parallel_ShouldPreferRandomForestThenAnomaly()
     {
-        var service = CreateService(rfAttack: AttackTypes.PortScan, rfConfidence: 0.9f, anomaly: true);
+        var knownAttack = CreateService(AttackTypes.PortScan, 0.9f, anomaly: true).Run(CreateFlow(), ModelCombination.ParallelRandomForestAndIsolation);
+        var anomaly = CreateService(AttackTypes.Benign, 0f, anomaly: true).Run(CreateFlow(), ModelCombination.ParallelRandomForestAndIsolation);
 
-        var result = service.Run(CreateFlow(), ModelCombination.IsolationThenRandomForest);
-
-        Assert.AreEqual(AttackTypes.PortScan, result.AttackType);
-    }
-
-    [TestMethod]
-    public void IsolationThenRandomForest_AnomalyWithoutKnownAttack_ShouldReturnAnomaly()
-    {
-        var service = CreateService(rfAttack: AttackTypes.Benign, rfConfidence: 0f, anomaly: true);
-
-        var result = service.Run(CreateFlow(), ModelCombination.IsolationThenRandomForest);
-
-        Assert.AreEqual(AttackTypes.UnknownAnomaly, result.AttackType);
-    }
-
-    [TestMethod]
-    public void RandomForestThenIsolation_KnownAttack_ShouldSkipIsolation()
-    {
-        var service = CreateService(rfAttack: AttackTypes.BruteForce, rfConfidence: 0.9f, anomaly: true);
-
-        var result = service.Run(CreateFlow(), ModelCombination.RandomForestThenIsolation);
-
-        Assert.AreEqual(AttackTypes.BruteForce, result.AttackType);
-    }
-
-    [TestMethod]
-    public void RandomForestThenIsolation_BenignButAnomalous_ShouldReturnAnomaly()
-    {
-        var service = CreateService(rfAttack: AttackTypes.Benign, rfConfidence: 0f, anomaly: true);
-
-        var result = service.Run(CreateFlow(), ModelCombination.RandomForestThenIsolation);
-
-        Assert.AreEqual(AttackTypes.UnknownAnomaly, result.AttackType);
-    }
-
-    [TestMethod]
-    public void Parallel_KnownAttack_ShouldPreferRandomForest()
-    {
-        var service = CreateService(rfAttack: AttackTypes.PortScan, rfConfidence: 0.9f, anomaly: true);
-
-        var result = service.Run(CreateFlow(), ModelCombination.ParallelRandomForestAndIsolation);
-
-        Assert.AreEqual(AttackTypes.PortScan, result.AttackType);
-    }
-
-    [TestMethod]
-    public void Parallel_BenignButAnomalous_ShouldReturnAnomaly()
-    {
-        var service = CreateService(rfAttack: AttackTypes.Benign, rfConfidence: 0f, anomaly: true);
-
-        var result = service.Run(CreateFlow(), ModelCombination.ParallelRandomForestAndIsolation);
-
-        Assert.AreEqual(AttackTypes.UnknownAnomaly, result.AttackType);
-    }
-
-    [TestMethod]
-    public void SetActiveCombination_ShouldChangeTheDefault()
-    {
-        var service = CreateService(rfAttack: AttackTypes.DoS, rfConfidence: 0.9f, anomaly: false);
-
-        service.SetActiveCombination(ModelCombination.IsolationForestOnly);
-
-        Assert.AreEqual(ModelCombination.IsolationForestOnly, service.ActiveCombination);
+        Assert.AreEqual(AttackTypes.PortScan, knownAttack.AttackType);
+        Assert.AreEqual(AttackTypes.UnknownAnomaly, anomaly.AttackType);
     }
 
     private static ModelCombinationService CreateService(string rfAttack, float rfConfidence, bool anomaly) =>

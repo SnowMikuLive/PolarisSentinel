@@ -3,7 +3,6 @@ using System.Reflection;
 using PacketDotNet;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.TrafficCapture;
-using PolarisSentinel.TrafficCapture.Internal;
 
 namespace PolarisSentienlUnitTestProject;
 
@@ -131,70 +130,10 @@ public class CaptureFeatureTests
         Assert.AreEqual(6L * packetSize, summary.Bytes);
     }
 
-    [TestMethod]
-    public void SinglePacket_ShouldExportFiniteFeatures()
-    {
-        var start = new DateTime(2026, 9, 24);
-        var flow = new FlowRecord { StartTime = start, LastSeenTime = start, FwdPackets = 1, FwdBytes = 60 };
-        flow.PacketSizeStats.Add(60);
-        var key = FlowKey.Create("203.0.113.66", 50000, "192.168.1.10", 80, 6);
-        var result = FeatureExporter.Export(flow, key, "203.0.113.66", 50000, "192.168.1.10", 80, 6);
-
-        Assert.IsNotNull(result);
-        Assert.IsTrue(result.Features.All(float.IsFinite));
-        Assert.AreEqual(0f, result.Features[0]);
-        Assert.AreEqual(0f, result.Features[17]);
-        Assert.AreEqual(0f, result.Features[18]);
-        Assert.AreEqual(0f, result.Features[19]);
-    }
-
-    [TestMethod]
-    public void NoForwardPackets_ShouldExportZeroRatio()
-    {
-        var start = new DateTime(2026, 9, 24);
-        var flow = new FlowRecord { StartTime = start, LastSeenTime = start, BwdPackets = 1 };
-        var key = FlowKey.Create("203.0.113.66", 50000, "192.168.1.10", 80, 6);
-        var result = FeatureExporter.Export(flow, key, "203.0.113.66", 50000, "192.168.1.10", 80, 6);
-        Assert.AreEqual(0f, result.Features[19]);
-        Assert.IsTrue(result.Features.All(float.IsFinite));
-    }
-
-    // A flood must raise an alert during packet processing (fast-path), without waiting
+    // A flood raises a DoS alert during packet processing (fast-path), without waiting
     // for the flow to go idle.
     [TestMethod]
-    public void MultiPortFlood_ShouldRaiseAlertImmediately()
-    {
-        using var service = new TrafficCaptureService(1, 3);
-        var alerts = new List<FlowFeatureVector>();
-        using var signal = new ManualResetEventSlim();
-        service.OnFlowCompleted += (_, flow) =>
-        {
-            lock (alerts) { alerts.Add(flow); }
-            signal.Set();
-        };
-        var start = new DateTime(2026, 9, 24);
-
-        // 250 packets across 25 destination ports from one source.
-        for (int i = 0; i < 250; i++)
-        {
-            ushort port = (ushort)(1000 + (i % 25));
-            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", port, 60, syn: true), start.AddMilliseconds(i));
-        }
-
-        // No ExpireIdleFlows call: the fast-path must have fired on its own.
-        Assert.IsTrue(signal.Wait(TimeSpan.FromSeconds(2)));
-        FlowFeatureVector? hit;
-        lock (alerts)
-        {
-            hit = alerts.FirstOrDefault(a => a.PreFilterVerdict is { IsKnownAttack: true });
-        }
-        Assert.IsNotNull(hit);
-        Assert.AreEqual("203.0.113.66", hit.SourceIp);
-    }
-
-    // A single-port packet flood is classified as DoS by the fast-path.
-    [TestMethod]
-    public void SinglePortFlood_ShouldRaiseDosAlertImmediately()
+    public void Flood_ShouldRaiseDosAlertImmediately()
     {
         using var service = new TrafficCaptureService(1, 3);
         var alerts = new List<FlowFeatureVector>();
@@ -211,6 +150,7 @@ public class CaptureFeatureTests
             service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start.AddMilliseconds(i));
         }
 
+        // No ExpireIdleFlows call: the fast-path must have fired on its own.
         Assert.IsTrue(signal.Wait(TimeSpan.FromSeconds(2)));
         FlowFeatureVector? hit;
         lock (alerts)

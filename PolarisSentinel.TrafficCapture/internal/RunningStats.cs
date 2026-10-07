@@ -22,7 +22,7 @@ internal sealed class RunningStats
         if (value < _min) _min = value;
         if (value > _max) _max = value;
     }
-    //Welford's algorithm for calculate data stram mean and standard devation
+
     public int Count => _count;
     public double Mean => _count > 0 ? _mean : 0;
     public double StdDev => _count > 1 ? Math.Sqrt(_m2 / (_count - 1)) : 0;

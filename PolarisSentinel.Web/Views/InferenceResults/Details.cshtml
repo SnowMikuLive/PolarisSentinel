@@ -6,6 +6,8 @@
     var snapshot = FlowSnapshot.Read(Model.FlowSnapshotJson);
     var features = snapshot.Where(kv => !kv.Key.EndsWith("_count")).ToList();
     var flags = snapshot.Where(kv => kv.Key.EndsWith("_count")).ToList();
+    var aggregate = BehaviorSnapshot.Read(Model.BehaviorSnapshotJson);
+    bool isHeuristic = Model.DetectionSource == PolarisSentinel.Core.Enums.DetectionSource.HeuristicBased;
 }
 
 <div class="container-fluid">
@@ -46,7 +48,7 @@
                 <dd class="col-sm-9">@Model.DestinationIp:@Model.DestinationPort</dd>
 
                 <dt class="col-sm-3">Protocol</dt>
-                <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
+                <dd class="col-sm-9">@PolarisSentinel.Core.Constants.ProtocolNumbers.Name(Model.Protocol)</dd>
             </dl>
 
             <h5 class="mb-3">TCP Flags</h5>
@@ -60,42 +62,87 @@
         </div>
     </div>
 
-    <div class="card shadow-sm border-primary mb-3">
-        <div class="card-header bg-primary text-white">
-            Flow Snapshot
+    @if (isHeuristic)
+    {
+        <div class="card shadow-sm border-primary mb-3">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span>Aggregate Behavior (why Heuristic flagged this)</span>
+                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" data-bs-target="#aggregateBody">
+                    Show / Hide
+                </button>
+            </div>
+            <div class="collapse show" id="aggregateBody">
+                <div class="card-body p-0">
+                    @if (aggregate.Count == 0)
+                    {
+                        <div class="text-center text-muted py-4">No aggregate data recorded for this alert.</div>
+                    }
+                    else
+                    {
+                        <table class="table table-sm table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th class="text-end">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var kv in aggregate)
+                                {
+                                    <tr>
+                                        <td>@MetricLabel(kv.Key)</td>
+                                        <td class="text-end">@kv.Value.ToString("0.######")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
         </div>
-        <div class="card-body p-0">
-            @if (snapshot.Count == 0)
-            {
-                <div class="text-center text-muted py-4">No snapshot recorded for this alert.</div>
-            }
-            else
-            {
-                <table class="table table-sm table-striped mb-0">
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th class="text-end">Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var kv in features)
-                        {
+    }
+
+    <div class="card shadow-sm border-primary mb-3">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>Flow Snapshot</span>
+            <button class="btn btn-sm btn-light" type="button" data-bs-toggle="collapse" data-bs-target="#flowSnapshotBody">
+                Show / Hide
+            </button>
+        </div>
+        <div class="collapse show" id="flowSnapshotBody">
+            <div class="card-body p-0">
+                @if (snapshot.Count == 0)
+                {
+                    <div class="text-center text-muted py-4">No snapshot recorded for this alert.</div>
+                }
+                else
+                {
+                    <table class="table table-sm table-striped mb-0">
+                        <thead>
                             <tr>
-                                <td>@kv.Key</td>
-                                <td class="text-end">@kv.Value.ToString("0.######")</td>
+                                <th>Feature</th>
+                                <th class="text-end">Value</th>
                             </tr>
-                        }
-                        @foreach (var kv in flags)
-                        {
-                            <tr>
-                                <td>@kv.Key</td>
-                                <td class="text-end">@kv.Value.ToString("0")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
+                        </thead>
+                        <tbody>
+                            @foreach (var kv in features)
+                            {
+                                <tr>
+                                    <td>@kv.Key</td>
+                                    <td class="text-end">@kv.Value.ToString("0.######")</td>
+                                </tr>
+                            }
+                            @foreach (var kv in flags)
+                            {
+                                <tr>
+                                    <td>@kv.Key</td>
+                                    <td class="text-end">@kv.Value.ToString("0")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
         </div>
     </div>
 
@@ -103,12 +150,18 @@
 </div>
 
 @functions {
-    static string ProtocolName(byte protocol) => protocol switch
+    // Friendly label for an aggregate metric key.
+    static string MetricLabel(string key) => key switch
     {
-        1 => "ICMP",
-        6 => "TCP",
-        17 => "UDP",
-        0 => "Any",
-        _ => protocol.ToString()
+        "packets" => "Packets in window",
+        "distinct_ports" => "Distinct destination ports",
+        "distinct_destinations" => "Distinct destinations",
+        "syn" => "SYN packets",
+        "ack" => "ACK packets",
+        "icmp" => "ICMP packets",
+        "auth_connections" => "Auth-port connections",
+        "window_seconds" => "Window (seconds)",
+        "sample_ports" => "Sample ports",
+        _ => key
     };
 }

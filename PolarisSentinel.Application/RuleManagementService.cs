@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -32,12 +30,12 @@ public class RuleManagementService
             errors[nameof(Rule.SourceIp)] = "Provide at least one address, or pick Any on both sides.";
         }
 
-        if (!IsValidAddress(rule.SourceIp))
+        if (!NetworkAddress.IsValidOrEmpty(rule.SourceIp))
         {
             errors[nameof(Rule.SourceIp)] = "Enter a valid IP address or CIDR.";
         }
 
-        if (!IsValidAddress(rule.DestinationIp))
+        if (!NetworkAddress.IsValidOrEmpty(rule.DestinationIp))
         {
             errors[nameof(Rule.DestinationIp)] = "Enter a valid IP address or CIDR.";
         }
@@ -132,23 +130,4 @@ public class RuleManagementService
         DestinationPort = rule.DestinationPort ?? 0,
         Protocol = rule.Protocol ?? 0
     };
-
-    private static bool IsValidAddress(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return true;
-        }
-
-        var parts = value.Split('/');
-        if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var address))
-        {
-            return false;
-        }
-
-        // 检查完整 CIDR / Validate the address and its prefix.
-        int maxPrefix = address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
-        return parts.Length == 1 ||
-            (int.TryParse(parts[1], out int prefix) && prefix >= 0 && prefix <= maxPrefix);
-    }
 }

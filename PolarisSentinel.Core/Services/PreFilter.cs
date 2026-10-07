@@ -3,14 +3,10 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// Rule-based pre-filter: detects attack signatures, drops obvious noise, and
-// forwards the rest to the AI engine. Domain logic, independent of any capture library.
-//
-// Single-flow signatures are deliberately reported as Suspicious rather than KnownAttack:
-// the per-flow thresholds are low enough that legitimate traffic (health checks, retries,
-// NAT-shared sources) can trip them, so the AI engine re-checks before any block. Only the
-// cross-flow SourceBehaviorTracker, which aggregates evidence across many flows, escalates
-// straight to KnownAttack.
+// Rule-based pre-filter: detects attack signatures, drops obvious noise, and forwards
+// the rest to the AI engine. Single-flow signatures are reported as Suspicious (not
+// KnownAttack) because the per-flow thresholds are low enough to trip on legitimate
+// traffic; only the cross-flow SourceBehaviorTracker escalates straight to KnownAttack.
 public sealed class PreFilter
 {
     private readonly int _minPacketsForAnalysis;
@@ -20,20 +16,16 @@ public sealed class PreFilter
         _minPacketsForAnalysis = minPacketsForAnalysis;
     }
 
-    // Classifies a finished flow into a known attack, a suspicious flow for the AI engine, or normal traffic.
+    // Classifies a finished flow as known attack, suspicious (for the AI engine), or normal.
     public PreFilterResult Classify(FlowStatistics flow)
     {
-        // Too few packets to compute meaningful statistics.
         if (flow.TotalPackets < _minPacketsForAnalysis)
             return PreFilterResult.Normal();
 
-        // FlowKey orders endpoints by IP string, not by who sent first, so the
-        // attacker may be on either side. Normalise so the dominant sender is forward.
+        // The flow key orders endpoints by IP string, so normalise the dominant sender forward.
         var direction = Normalise(flow);
 
-        // Attack signatures run before the benign filters because floods are one-directional
-        // and can be very short-lived, so they must not be discarded by the duration guard.
-        // A match is forwarded as Suspicious (not KnownAttack) so the AI engine confirms it.
+        // Attack signatures run before the benign filters: floods can be short-lived.
         var attack = DetectFlood(direction) ?? DetectScan(direction) ?? DetectBruteForce(direction);
         if (attack is not null)
             return attack;
@@ -132,9 +124,8 @@ public sealed class PreFilter
         if (isAckFlood)
             return Verdict(AttackTypes.DoS, "TCP ACK flood");
 
-        // ICMP flood: elevated one-way ICMP packet rate. ICMP carries no ports, so the
-        // thresholds are lower than the TCP/UDP floods; a sustained ping flood (even one
-        // that elicits echo replies) is caught by the packet-rate guard below.
+        // ICMP flood: elevated one-way ICMP packet rate. ICMP has no ports, so thresholds
+        // are lower than the TCP/UDP floods.
         bool isIcmpFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 20 &&
@@ -143,9 +134,7 @@ public sealed class PreFilter
         if (isIcmpFlood)
             return Verdict(AttackTypes.DoS, "ICMP flood");
 
-        // ICMP ping flood: many echo requests with a matching (or near-matching) reply
-        // stream, i.e. a host actively answering pings at an abnormal rate. Distinct from
-        // the one-way flood above, which has no replies at all.
+        // ICMP ping flood: many echo requests with a matching reply stream.
         bool isIcmpPingFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 15 &&
@@ -208,8 +197,7 @@ public sealed class PreFilter
         if (isUdpScan)
             return Verdict(AttackTypes.PortScan, "UDP port scan");
 
-        // ICMP sweep: several one-way echo requests probing hosts, or a burst of echo
-        // requests whose replies are suppressed (a common ping-sweep signature).
+        // ICMP sweep: several one-way echo requests probing hosts (replies suppressed).
         bool isIcmpSweep =
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 3 &&

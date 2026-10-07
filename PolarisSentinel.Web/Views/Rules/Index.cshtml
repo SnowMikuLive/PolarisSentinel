@@ -96,14 +96,14 @@
                                 <td>
                                     @if (item.BlocksAddress)
                                     {
-                                        <span class="badge bg-danger">IP @(string.IsNullOrEmpty(item.BlockedIp) ? "Any" : item.BlockedIp)</span>
+                                        <span class="badge bg-danger">Block @(item.BlocksOutbound ? "outbound" : "inbound") IP @(string.IsNullOrEmpty(item.BlockedIp) ? "Any" : item.BlockedIp)</span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-danger">Port @(item.BlockedPort is null or 0 ? "Any" : item.BlockedPort.ToString())</span>
+                                        <span class="badge bg-danger">Block @(item.BlocksOutbound ? "outbound" : "inbound") port @(item.BlockedPort is null or 0 ? "Any" : item.BlockedPort.ToString())</span>
                                     }
                                 </td>
-                                <td>@ProtocolName(item.Protocol)</td>
+                                <td>@PolarisSentinel.Core.Constants.ProtocolNumbers.Name(item.Protocol)</td>
                                 <td><span class="badge bg-secondary">@item.Action</span></td>
                                 <td>
                                     @if (item.Status == PolarisSentinel.Core.Enums.RuleStatus.Active)
@@ -170,15 +170,4 @@
         string host = string.IsNullOrEmpty(ip) ? "Any" : ip;
         return port > 0 ? $"{host}:{port}" : host;
     }
-
-    // Map an IP protocol number to a readable name.
-    static string ProtocolName(byte? protocol) => protocol switch
-    {
-        1 => "ICMP",
-        6 => "TCP",
-        17 => "UDP",
-        0 => "Any",
-        null => "Any",
-        _ => protocol.Value.ToString()
-    };
 }

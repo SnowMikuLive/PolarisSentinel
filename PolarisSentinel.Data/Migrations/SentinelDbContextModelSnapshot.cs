@@ -173,6 +173,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("BehaviorSnapshotJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<float?>("ConfidenceScore")
                         .HasColumnType("real");
 
@@ -655,19 +658,15 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
                 {
-                    b.HasOne("PolarisSentinel.Core.Models.Alert", "Alert")
+                    b.HasOne("PolarisSentinel.Core.Models.Alert", null)
                         .WithMany()
                         .HasForeignKey("AlertId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("PolarisSentinel.Core.Models.Policy", "Policy")
+                    b.HasOne("PolarisSentinel.Core.Models.Policy", null)
                         .WithMany()
                         .HasForeignKey("PolicyId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Alert");
-
-                    b.Navigation("Policy");
                 });
 #pragma warning restore 612, 618
         }

@@ -7,8 +7,7 @@ public static class EntityIds
     public const string RulePrefix = "R-";
     public const string AlertPrefix = "A-";
 
-    //托管防火墙规则名前缀
-    //Prefix for managed Windows Firewall rule names
+    // Prefix for managed Windows Firewall rule names.
     public const string FirewallRulePrefix = "PolarisSentinel_";
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
@@ -31,7 +30,10 @@ public static class EntityIds
         return max;
     }
 
-    //由告警主键生成唯一防火墙规则名
-    //Build the managed firewall rule name from an alert id
+    // The next sequential id: one past the highest existing number for the prefix.
+    public static string Next(IEnumerable<string> ids, string prefix, Func<int, string> format) =>
+        format(MaxNumber(ids, prefix) + 1);
+
+    // Build the managed firewall rule name from an alert id.
     public static string FirewallRule(string alertId) => $"{FirewallRulePrefix}Block_{alertId}";
 }

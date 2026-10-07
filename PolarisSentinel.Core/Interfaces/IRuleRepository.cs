@@ -9,8 +9,6 @@ public interface IRuleRepository
     // The next sequential rule id, e.g. "R-1".
     Task<string> NextIdAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Rule>> GetActiveAsync(CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default);
 
     Task<Rule?> GetByIdAsync(string id, CancellationToken cancellationToken = default);

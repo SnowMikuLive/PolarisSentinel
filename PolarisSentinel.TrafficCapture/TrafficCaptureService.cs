@@ -48,22 +48,17 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     public event EventHandler<FlowFeatureVector>? OnFlowCompleted;
     public event EventHandler<LiveTrafficSummary>? OnLiveTrafficSummary;
 
-
-    // From PolicySettings.FlowIdleTimeoutSeconds. A flow with no new packets for this many seconds is considered finished and exported.
-
     public TrafficCaptureService(
         int flowIdleTimeoutSeconds,
         int preFilterMinPackets,
-        int liveSummaryIntervalSeconds = 5)
+        int liveSummaryIntervalSeconds = 5,
+        int portScanDistinctPorts = 6)
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
         _preFilter = new PreFilter(preFilterMinPackets);
-        _behavior = new SourceBehaviorTracker(BehaviorWindow);
+        _behavior = new SourceBehaviorTracker(BehaviorWindow, portScanDistinctPorts: portScanDistinctPorts);
 
-        // Both timers are created suspended (Timeout.Infinite due time) and
-        // only actually start ticking once Start(deviceName) is called.
-        // The callbacks swallow exceptions: an unhandled throw on a timer thread
-        // would terminate the whole process.
+        // Both timers start suspended and only tick once Start(deviceName) is called.
         _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
         _liveSummaryTimer = new System.Threading.Timer(_ => SafeEmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
     }
@@ -246,7 +241,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         ProcessPacket(parsed, DateTime.Now);
     }
 
-    // 分开解析和处理，测试可以直接传入样本包。
     // Separate parsing from processing so tests can pass sample packets.
     internal void ProcessPacket(Packet parsed, DateTime now)
     {
@@ -264,15 +258,14 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
-        // 模型的 TCP/UDP 长度特征只统计 payload；直播仍统计完整 IP 包。
         // TCP/UDP model features count payload bytes; live counters count the full IP packet.
         Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
         int flowPacketSize = transportPacket is null
             ? packetSize
             : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
-        // Behavioural detection sees every packet, independent of flow aggregation, so a
-        // scan or brute-force run that spreads across many short flows is still caught.
+        // Behavioural detection sees every packet, so a scan or flood spread across many
+        // short flows is still caught.
         var observation = new PacketObservation(
             SourceIp: srcIp,
             DestinationIp: dstIp,
@@ -284,9 +277,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             Timestamp: now);
         _behavior.Observe(observation);
 
-        // Fast-path: the moment a source (or the global aggregate) crosses a flood
-        // threshold, emit the alert immediately instead of waiting for the flow to go
-        // idle. This is what makes blocking near-instant under a flood.
+        // Emit the alert the instant a threshold is crossed, without waiting for expiry.
         var immediate = _behavior.EvaluateFast(observation);
         if (immediate is not null)
         {
@@ -366,7 +357,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     {
         try
         {
-            ExpireIdleFlows();
+            ExpireIdleFlows(DateTime.Now);
         }
         catch (Exception)
         {
@@ -382,11 +373,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         catch (Exception)
         {
         }
-    }
-
-    private void ExpireIdleFlows()
-    {
-        ExpireIdleFlows(DateTime.Now);
     }
 
     internal void ExpireIdleFlows(DateTime now)
@@ -410,12 +396,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            // Behavioural detection first: a scan or brute-force run is invisible to a
-            // single flow but obvious across the source's recent activity.
+            // Behavioural verdict first (across flows), then the per-flow pre-filter.
             var verdict = _behavior.Evaluate(flow.SourceIp, now);
-
-            // Otherwise fall back to the per-flow pre-filter: attack verdicts are emitted,
-            // benign flows are dropped, and only unclassified flows reach AI inference.
             verdict ??= _preFilter.Classify(ToStatistics(flow));
             if (!verdict.IsKnownAttack && !verdict.IsSuspicious) continue;
 
@@ -483,9 +465,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    // Emits a behavioural verdict the instant it is detected, without waiting for the flow
-    // to expire. The vector carries the offending packet's 5-tuple so the pipeline can
-    // build an alert and block the source immediately.
+    // Emits a behavioural verdict the instant it is detected, without waiting for expiry.
     private void EmitImmediateAlert(
         string sourceIp,
         ushort sourcePort,

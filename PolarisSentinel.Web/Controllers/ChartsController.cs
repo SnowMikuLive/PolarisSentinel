@@ -88,7 +88,6 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Test([FromBody] ModelTestRequest? request, CancellationToken cancellationToken)
         {
-            // 拒绝空请求和不存在的模型编号。
             // Reject empty requests and undefined model values.
             if (request == null || !ModelState.IsValid ||
                 !Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) ||
