@@ -1,0 +1,10 @@
+#停止程序并删除旧库
+Stop-Process -Name PolarisSentinel.Web -ErrorAction SilentlyContinue
+
+& "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\SQLCMD.EXE" -S "(localdb)\Polaris15" -E -C -b -d master -Q "IF DB_ID(N'PolarisSentinel') IS NOT NULL BEGIN ALTER DATABASE [PolarisSentinel] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [PolarisSentinel]; END;"
+
+#建立数据库
+$seedPassword = Read-Host "Adam20020418@" -AsSecureString
+$env:AdminSeed__Password = [System.Net.NetworkCredential]::new("", $seedPassword).Password
+
+dotnet run --project .\PolarisSentinel.Web\PolarisSentinel.Web.csproj --launch-profile http -- --Firewall:DryRun=true --Evaluation:DefaultDatasetPath=../ml/artifacts/cic_test_dataset.csv
