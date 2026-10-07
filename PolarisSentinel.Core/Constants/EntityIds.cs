@@ -34,6 +34,7 @@ public static class EntityIds
     public static string Next(IEnumerable<string> ids, string prefix, Func<int, string> format) =>
         format(MaxNumber(ids, prefix) + 1);
 
-    // Build the managed firewall rule name from an alert id.
-    public static string FirewallRule(string alertId) => $"{FirewallRulePrefix}Block_{alertId}";
+    // Build the managed firewall rule name from the block target (action + address + protocol),
+    // so repeated attacks on the same target reuse one rule.
+    public static string FirewallRule(string targetKey) => $"{FirewallRulePrefix}Block_{targetKey}";
 }

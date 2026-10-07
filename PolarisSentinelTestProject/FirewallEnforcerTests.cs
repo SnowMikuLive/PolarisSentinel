@@ -106,10 +106,31 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsTrue(enforcer.Remove(rule.Id));
             Assert.IsEmpty(enforcer.GetAllRules());
 
-            enforcer.Apply(Decision(CreateAlert("A-RF-1"), PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-            enforcer.Apply(Decision(CreateAlert("A-RF-2"), PolicyAction.BlockInboundIp), "P-1", "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
+            var first = CreateAlert("A-RF-1");
+            first.SourceIp = "203.0.113.1";
+            var second = CreateAlert("A-RF-2");
+            second.SourceIp = "203.0.113.2";
+            enforcer.Apply(Decision(first, PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            enforcer.Apply(Decision(second, PolicyAction.BlockInboundIp), "P-1", "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
             Assert.AreEqual(2, enforcer.RemoveAll());
             Assert.IsEmpty(enforcer.GetAllRules());
+        }
+
+        // Repeated attacks on the same target reuse and extend one rule instead of piling up.
+        [TestMethod]
+        public void Apply_SameTarget_ShouldReuseAndExtendOneRule()
+        {
+            var clock = new FakeTimeProvider();
+            var (enforcer, _) = CreateEnforcer(clock);
+            var first = enforcer.Apply(Decision(CreateAlert("A-RF-1"), PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+            var firstExpiry = first.ExpiresAt;
+
+            clock.Advance(TimeSpan.FromMinutes(10));
+            var second = enforcer.Apply(Decision(CreateAlert("A-RF-2"), PolicyAction.BlockInboundIp), "P-1", "A-RF-2", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+
+            Assert.HasCount(1, enforcer.GetAllRules());
+            Assert.AreEqual(first.Id, second.Id);
+            Assert.IsTrue(second.ExpiresAt > firstExpiry);
         }
 
         [TestMethod]

@@ -29,9 +29,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsNull(outcome.Alert);
         }
 
-        // A known attack is alerted straight from the pre-filter, without inference.
+        // A known attack is blocked from the heuristic verdict; the AI engine still runs and
+        // its opinion is recorded on the alert description.
         [TestMethod]
-        public void ProcessFlow_KnownAttack_ShouldAlertWithoutInference()
+        public void ProcessFlow_KnownAttack_ShouldBlockAndRecordModelOpinion()
         {
             var inference = new CountingInferenceEngine(CreateDetection());
             var pipeline = CreatePipeline(inference, out var firewall);
@@ -39,12 +40,13 @@ namespace PolarisSentienlUnitTestProject
             var flow = CreateFlow(PreFilterResult.KnownAttack(AttackTypes.DoS, "SYN flood"));
             var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.HeuristicBased) });
 
-            Assert.AreEqual(0, inference.CallCount);
+            Assert.AreEqual(1, inference.CallCount);
             Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
             Assert.AreEqual(DetectionSource.HeuristicBased, outcome.Alert!.DetectionSource);
             Assert.IsNull(outcome.Alert.ConfidenceScore);
             Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
             Assert.HasCount(1, firewall.GetAllRules());
+            StringAssert.Contains(outcome.Alert.Description, "Model:");
         }
 
         // A suspicious flow is forwarded to the AI engine.

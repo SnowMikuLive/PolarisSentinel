@@ -110,7 +110,11 @@ namespace PolarisSentinel.FirewallEnforement
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
                 var ruleId = _rules.NextIdAsync().GetAwaiter().GetResult();
-                string ruleName = EntityIds.FirewallRule(string.IsNullOrEmpty(alertId) ? ruleId : alertId);
+
+                // Name the rule after the block target, not the alert, so repeated attacks
+                // from the same source reuse and extend one rule instead of piling up.
+                string target = spec.RemoteAddress ?? string.Empty;
+                string ruleName = EntityIds.FirewallRule($"{decision.Action}_{target}_{spec.Protocol}");
 
                 var existing = _rules.GetAllAsync().GetAwaiter().GetResult()
                     .FirstOrDefault(r => r.Name == ruleName);

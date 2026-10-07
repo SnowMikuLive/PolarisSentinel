@@ -33,11 +33,17 @@ public class DetectionPipeline : IDetectionPipeline
     {
         var verdict = flow.PreFilterVerdict;
 
-        // The pre-filter is upstream of the AI engine: a known attack is alerted immediately,
-        // a normal flow stops here, and only a suspicious flow reaches the models.
+        // A known attack is alerted and blocked from the pre-filter verdict. The AI engine
+        // still runs so its opinion is recorded on the alert (the heuristic verdict stays
+        // authoritative for blocking).
         if (verdict is { IsKnownAttack: true })
         {
             var alert = BuildPreFilterAlert(flow, verdict);
+            var modelOpinion = _inference.Detect(flow);
+            if (modelOpinion.AttackType != AttackTypes.Benign)
+            {
+                alert.Description = $"{alert.Description} | Model: {modelOpinion.AttackType} ({modelOpinion.ConfidenceScore:0.00})";
+            }
             return Evaluate(alert, policies);
         }
 
