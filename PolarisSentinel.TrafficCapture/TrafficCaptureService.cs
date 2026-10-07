@@ -186,8 +186,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         _device.Open(DeviceModes.Promiscuous, 1000);
         _device.StartCapture();
 
-        // Check for idle flows every 5 seconds regardless of the configured timeout itself, so expiry is responsive without busy-polling.
-        _expiryTimer.Change(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        // Check for idle flows every second so a finished flow is exported promptly and
+        // the behavioural tracker is pruned often; the fast-path in ProcessPacket already
+        // raises flood alerts the moment they are detected.
+        _expiryTimer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         _liveSummaryTimer.Change(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
@@ -271,14 +273,25 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         // Behavioural detection sees every packet, independent of flow aggregation, so a
         // scan or brute-force run that spreads across many short flows is still caught.
-        _behavior.Observe(new PacketObservation(
+        var observation = new PacketObservation(
             SourceIp: srcIp,
+            DestinationIp: dstIp,
             DestinationPort: dstPort,
             Protocol: protocol,
             IsSyn: tcpPacket?.Synchronize ?? false,
             IsRst: tcpPacket?.Reset ?? false,
             PacketSize: packetSize,
-            Timestamp: now));
+            Timestamp: now);
+        _behavior.Observe(observation);
+
+        // Fast-path: the moment a source (or the global aggregate) crosses a flood
+        // threshold, emit the alert immediately instead of waiting for the flow to go
+        // idle. This is what makes blocking near-instant under a flood.
+        var immediate = _behavior.EvaluateFast(observation);
+        if (immediate is not null)
+        {
+            EmitImmediateAlert(srcIp, srcPort, dstIp, dstPort, protocol, tcpPacket, immediate, now);
+        }
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
 
@@ -468,6 +481,40 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             // A subscriber fault must not take down the process.
         }
+    }
+
+    // Emits a behavioural verdict the instant it is detected, without waiting for the flow
+    // to expire. The vector carries the offending packet's 5-tuple so the pipeline can
+    // build an alert and block the source immediately.
+    private void EmitImmediateAlert(
+        string sourceIp,
+        ushort sourcePort,
+        string destinationIp,
+        ushort destinationPort,
+        byte protocol,
+        TcpPacket? tcpPacket,
+        PreFilterResult verdict,
+        DateTime now)
+    {
+        var completed = new FlowFeatureVector
+        {
+            Features = new float[Internal.FeatureExporter.FeatureNames.Length],
+            SourceIp = sourceIp,
+            SourcePort = sourcePort,
+            DestinationIp = destinationIp,
+            DestinationPort = destinationPort,
+            Protocol = protocol,
+            FlowStartTime = now,
+            FlowEndTime = now,
+            SynCount = tcpPacket?.Synchronize == true ? 1 : 0,
+            AckCount = tcpPacket?.Acknowledgment == true ? 1 : 0,
+            FinCount = tcpPacket?.Finished == true ? 1 : 0,
+            RstCount = tcpPacket?.Reset == true ? 1 : 0,
+            PshCount = tcpPacket?.Push == true ? 1 : 0,
+            PreFilterVerdict = verdict
+        };
+
+        ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));
     }
 
     private void EmitLiveSummary()

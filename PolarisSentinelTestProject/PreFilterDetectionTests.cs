@@ -116,6 +116,32 @@ namespace PolarisSentienlUnitTestProject
             Assert.AreEqual("203.0.113.9", rule.DestinationIp);
         }
 
+        // A spoofed/random-source flood targets the destination instead of the fake source,
+        // so the inbound-IP policy blocks traffic to the victim.
+        [TestMethod]
+        public void PreFilterVerdict_SpoofedFlood_ShouldBlockDestination()
+        {
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
+            var flow = CreateFlow(AttackTypes.DoS);
+            flow = new FlowFeatureVector
+            {
+                Features = flow.Features,
+                SourceIp = "203.0.113.9",
+                SourcePort = flow.SourcePort,
+                DestinationIp = "192.168.1.10",
+                DestinationPort = flow.DestinationPort,
+                Protocol = flow.Protocol,
+                FlowStartTime = flow.FlowStartTime,
+                FlowEndTime = flow.FlowEndTime,
+                PreFilterVerdict = PreFilterResult.SpoofedFlood(AttackTypes.DoS, "Global flood")
+            };
+
+            var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy() });
+
+            Assert.AreEqual("192.168.1.10", outcome.Alert!.SourceIp);
+            Assert.AreEqual("192.168.1.10", outcome.Rule!.SourceIp);
+        }
+
         #region Helper Methods
 
         private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)

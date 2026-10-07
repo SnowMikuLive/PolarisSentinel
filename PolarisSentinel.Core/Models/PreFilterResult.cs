@@ -15,6 +15,11 @@ public class PreFilterResult
     // Short human-readable explanation, e.g. "SYN flood".
     public string? Description { get; init; }
 
+    // True when the source address cannot be trusted (spoofed/random-source flood). The
+    // pipeline then targets the flooded destination instead of the source, since blocking
+    // a random spoofed IP would be ineffective.
+    public bool IsSpoofedSource { get; init; }
+
     public static PreFilterResult Normal() => new();
 
     public static PreFilterResult Suspicious(string description) =>
@@ -22,4 +27,8 @@ public class PreFilterResult
 
     public static PreFilterResult KnownAttack(string attackType, string description) =>
         new() { IsKnownAttack = true, IsSuspicious = true, AttackType = attackType, Description = description };
+
+    // A flood whose source address is spoofed/random; the destination is the real target.
+    public static PreFilterResult SpoofedFlood(string attackType, string description) =>
+        new() { IsKnownAttack = true, IsSuspicious = true, AttackType = attackType, Description = description, IsSpoofedSource = true };
 }

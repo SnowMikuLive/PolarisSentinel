@@ -153,23 +153,32 @@ public class DetectionPipeline : IDetectionPipeline
             .Any(p => p.MeetsThreshold(alert));
     }
 
-    private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict) => new()
+    private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict)
     {
-        DetectionSource = DetectionSource.HeuristicBased,
-        AttackType = verdict.AttackType!,
-        ConfidenceScore = null,
-        Description = verdict.Description,
-        SourceIp = flow.SourceIp,
-        SourcePort = flow.SourcePort,
-        DestinationIp = flow.DestinationIp,
-        DestinationPort = flow.DestinationPort,
-        Protocol = flow.Protocol,
-        SynCount = flow.SynCount,
-        AckCount = flow.AckCount,
-        FinCount = flow.FinCount,
-        RstCount = flow.RstCount,
-        PshCount = flow.PshCount,
-        FlowSnapshotJson = FlowSnapshot.Create(flow),
-        CreatedAt = flow.FlowEndTime
-    };
+        // A spoofed/random-source flood cannot be stopped by blocking the (fake) source, so
+        // the endpoints are swapped: the alert's source becomes the flooded destination, and
+        // the inbound-IP policy then blocks traffic to the victim instead of a random IP.
+        string sourceIp = verdict.IsSpoofedSource ? flow.DestinationIp : flow.SourceIp;
+        string destinationIp = verdict.IsSpoofedSource ? flow.SourceIp : flow.DestinationIp;
+
+        return new Alert
+        {
+            DetectionSource = DetectionSource.HeuristicBased,
+            AttackType = verdict.AttackType!,
+            ConfidenceScore = null,
+            Description = verdict.Description,
+            SourceIp = sourceIp,
+            SourcePort = flow.SourcePort,
+            DestinationIp = destinationIp,
+            DestinationPort = flow.DestinationPort,
+            Protocol = flow.Protocol,
+            SynCount = flow.SynCount,
+            AckCount = flow.AckCount,
+            FinCount = flow.FinCount,
+            RstCount = flow.RstCount,
+            PshCount = flow.PshCount,
+            FlowSnapshotJson = FlowSnapshot.Create(flow),
+            CreatedAt = flow.FlowEndTime
+        };
+    }
 }

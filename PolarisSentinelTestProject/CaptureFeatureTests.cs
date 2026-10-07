@@ -159,6 +159,69 @@ public class CaptureFeatureTests
         Assert.IsTrue(result.Features.All(float.IsFinite));
     }
 
+    // A flood must raise an alert during packet processing (fast-path), without waiting
+    // for the flow to go idle.
+    [TestMethod]
+    public void MultiPortFlood_ShouldRaiseAlertImmediately()
+    {
+        using var service = new TrafficCaptureService(1, 3);
+        var alerts = new List<FlowFeatureVector>();
+        using var signal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, flow) =>
+        {
+            lock (alerts) { alerts.Add(flow); }
+            signal.Set();
+        };
+        var start = new DateTime(2026, 9, 24);
+
+        // 250 packets across 25 destination ports from one source.
+        for (int i = 0; i < 250; i++)
+        {
+            ushort port = (ushort)(1000 + (i % 25));
+            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", port, 60, syn: true), start.AddMilliseconds(i));
+        }
+
+        // No ExpireIdleFlows call: the fast-path must have fired on its own.
+        Assert.IsTrue(signal.Wait(TimeSpan.FromSeconds(2)));
+        FlowFeatureVector? hit;
+        lock (alerts)
+        {
+            hit = alerts.FirstOrDefault(a => a.PreFilterVerdict is { IsKnownAttack: true });
+        }
+        Assert.IsNotNull(hit);
+        Assert.AreEqual("203.0.113.66", hit.SourceIp);
+    }
+
+    // A single-port packet flood is classified as DoS by the fast-path.
+    [TestMethod]
+    public void SinglePortFlood_ShouldRaiseDosAlertImmediately()
+    {
+        using var service = new TrafficCaptureService(1, 3);
+        var alerts = new List<FlowFeatureVector>();
+        using var signal = new ManualResetEventSlim();
+        service.OnFlowCompleted += (_, flow) =>
+        {
+            lock (alerts) { alerts.Add(flow); }
+            signal.Set();
+        };
+        var start = new DateTime(2026, 9, 24);
+
+        for (int i = 0; i < 250; i++)
+        {
+            service.ProcessPacket(Tcp("203.0.113.66", 50000, "192.168.1.10", 80, 60, syn: true), start.AddMilliseconds(i));
+        }
+
+        Assert.IsTrue(signal.Wait(TimeSpan.FromSeconds(2)));
+        FlowFeatureVector? hit;
+        lock (alerts)
+        {
+            hit = alerts.FirstOrDefault(a => a.PreFilterVerdict is { IsKnownAttack: true });
+        }
+        Assert.IsNotNull(hit);
+        Assert.AreEqual("DoS", hit.PreFilterVerdict!.AttackType);
+        Assert.AreEqual("203.0.113.66", hit.SourceIp);
+    }
+
     // 构造并解析样本包，不依赖 Npcap，也不发送网络流量。
     // Build and parse sample packets without Npcap or network traffic.
     private static Packet Tcp(string source, ushort sourcePort, string destination, ushort destinationPort, int size, bool syn = false)
