@@ -128,6 +128,12 @@ namespace PolarisSentinel.FirewallEnforement
                     return existing;
                 }
 
+                // An IP block constrains a single address. Record it on both endpoints so the
+                // Rules view shows the blocked IP under Source and Destination instead of
+                // "Any"; the direction (inbound vs outbound) still comes from the action.
+                bool ipBlock = decision.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp;
+                string blockedAddress = ipBlock ? spec.RemoteAddress ?? string.Empty : string.Empty;
+
                 var rule = new Rule
                 {
                     Id = ruleId,
@@ -136,9 +142,13 @@ namespace PolarisSentinel.FirewallEnforement
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
                     Action = decision.Action,
                     Status = RuleStatus.Active,
-                    SourceIp = spec.Direction == 1 ? spec.RemoteAddress ?? string.Empty : string.Empty,
+                    SourceIp = ipBlock
+                        ? blockedAddress
+                        : spec.Direction == 1 ? spec.RemoteAddress ?? string.Empty : string.Empty,
                     SourcePort = null,
-                    DestinationIp = spec.Direction == 2 ? spec.RemoteAddress ?? string.Empty : string.Empty,
+                    DestinationIp = ipBlock
+                        ? blockedAddress
+                        : spec.Direction == 2 ? spec.RemoteAddress ?? string.Empty : string.Empty,
                     DestinationPort = spec.LocalPort ?? spec.RemotePort,
                     Protocol = spec.Protocol,
                     CreatedAt = now,

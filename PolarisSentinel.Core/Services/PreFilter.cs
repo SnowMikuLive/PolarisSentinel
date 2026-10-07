@@ -132,15 +132,29 @@ public sealed class PreFilter
         if (isAckFlood)
             return Verdict(AttackTypes.DoS, "TCP ACK flood");
 
-        // ICMP flood: high one-way ICMP packet rate.
+        // ICMP flood: elevated one-way ICMP packet rate. ICMP carries no ports, so the
+        // thresholds are lower than the TCP/UDP floods; a sustained ping flood (even one
+        // that elicits echo replies) is caught by the packet-rate guard below.
         bool isIcmpFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
-            oneWay &&
-            flow.FwdPackets > 50 &&
-            flow.FwdPacketsPerSecond > 100;
+            flow.FwdPackets > 20 &&
+            flow.FwdPacketsPerSecond > 25;
 
         if (isIcmpFlood)
             return Verdict(AttackTypes.DoS, "ICMP flood");
+
+        // ICMP ping flood: many echo requests with a matching (or near-matching) reply
+        // stream, i.e. a host actively answering pings at an abnormal rate. Distinct from
+        // the one-way flood above, which has no replies at all.
+        bool isIcmpPingFlood =
+            flow.Protocol == ProtocolNumbers.Icmp &&
+            flow.FwdPackets > 15 &&
+            flow.BwdPackets > 0 &&
+            flow.FwdPacketsPerSecond > 15 &&
+            flow.FwdPackets > flow.BwdPackets;
+
+        if (isIcmpPingFlood)
+            return Verdict(AttackTypes.DoS, "ICMP ping flood");
 
         return null;
     }
@@ -194,12 +208,13 @@ public sealed class PreFilter
         if (isUdpScan)
             return Verdict(AttackTypes.PortScan, "UDP port scan");
 
-        // ICMP sweep: several one-way echo requests probing hosts.
+        // ICMP sweep: several one-way echo requests probing hosts, or a burst of echo
+        // requests whose replies are suppressed (a common ping-sweep signature).
         bool isIcmpSweep =
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 3 &&
             flow.FwdPackets <= 50 &&
-            flow.BwdPackets == 0 &&
+            flow.BwdPackets <= 1 &&
             shortLived;
 
         if (isIcmpSweep)

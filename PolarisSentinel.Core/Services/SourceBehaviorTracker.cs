@@ -24,6 +24,7 @@ public sealed class SourceBehaviorTracker
 
     private readonly int _portScanDistinctPorts;
     private readonly int _bruteForceConnections;
+    private readonly int _icmpFloodPackets;
     private readonly TimeSpan _cooldown;
 
     private readonly object _lock = new();
@@ -36,12 +37,14 @@ public sealed class SourceBehaviorTracker
         TimeSpan window,
         int portScanDistinctPorts = 8,
         int bruteForceConnections = 5,
-        TimeSpan? cooldown = null)
+        TimeSpan? cooldown = null,
+        int icmpFloodPackets = 50)
     {
         _window = window;
         _portScanDistinctPorts = portScanDistinctPorts;
         _bruteForceConnections = bruteForceConnections;
         _cooldown = cooldown ?? TimeSpan.FromSeconds(30);
+        _icmpFloodPackets = icmpFloodPackets;
     }
 
     // Records one packet against its source's window.
@@ -140,19 +143,31 @@ public sealed class SourceBehaviorTracker
                 $"TCP SYN flood: {window.SynCount} SYNs from one source");
         }
 
+        // ICMP flood: one source emitting a sustained burst of ICMP packets (ping flood or
+        // echo-request storm). ICMP has no ports, so the packet count is the only signal;
+        // the threshold is lower than the TCP/UDP floods because a single ping stream is
+        // enough to saturate a link.
+        if (window.IcmpCount >= _icmpFloodPackets)
+        {
+            return PreFilterResult.KnownAttack(
+                AttackTypes.DoS,
+                $"ICMP flood: {window.IcmpCount} ICMP packets from one source");
+        }
+
         return null;
     }
 
     // Per-source sliding-window counters.
     private sealed class SourceWindow
     {
-        private readonly List<(DateTime Timestamp, int Port, bool IsSyn, bool IsRst)> _observations = new();
+        private readonly List<(DateTime Timestamp, int Port, bool IsSyn, bool IsRst, byte Protocol)> _observations = new();
 
         public HashSet<int> DistinctPorts { get; } = new();
         public int AuthConnections { get; private set; }
         public int LastAuthPort { get; private set; }
         public int SynCount { get; private set; }
         public int AckCount { get; private set; }
+        public int IcmpCount { get; private set; }
         public DateTime LastSeen { get; private set; }
 
         // When this source was last flagged, for the alert cooldown.
@@ -161,7 +176,7 @@ public sealed class SourceBehaviorTracker
         public void Add(PacketObservation packet, TimeSpan window)
         {
             LastSeen = packet.Timestamp;
-            _observations.Add((packet.Timestamp, packet.DestinationPort, packet.IsSyn, packet.IsRst));
+            _observations.Add((packet.Timestamp, packet.DestinationPort, packet.IsSyn, packet.IsRst, packet.Protocol));
 
             // Recompute the aggregate counters from the pruned window.
             Prune(window);
@@ -195,10 +210,17 @@ public sealed class SourceBehaviorTracker
             AuthConnections = 0;
             SynCount = 0;
             AckCount = 0;
+            IcmpCount = 0;
 
-            foreach (var (_, port, isSyn, _) in _observations)
+            foreach (var (_, port, isSyn, _, protocol) in _observations)
             {
                 DistinctPorts.Add(port);
+
+                if (protocol == ProtocolNumbers.Icmp)
+                {
+                    IcmpCount++;
+                    continue;
+                }
 
                 if (isSyn)
                 {

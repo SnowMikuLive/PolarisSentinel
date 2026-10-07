@@ -101,6 +101,21 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsEmpty(firewall.GetAllRules());
         }
 
+        // The generated rule records the blocked address on the destination too, so the
+        // Rules view shows the IP instead of "Any".
+        [TestMethod]
+        public void PreFilterVerdict_BlockRule_ShouldExposeBlockedAddressAsDestination()
+        {
+            var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
+
+            var outcome = pipeline.ProcessFlow(CreateFlow(AttackTypes.DoS), new[] { CreatePolicy() });
+
+            var rule = outcome.Rule!;
+            Assert.AreEqual(PolicyAction.BlockInboundIp, rule.Action);
+            Assert.AreEqual("203.0.113.9", rule.SourceIp);
+            Assert.AreEqual("203.0.113.9", rule.DestinationIp);
+        }
+
         #region Helper Methods
 
         private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)

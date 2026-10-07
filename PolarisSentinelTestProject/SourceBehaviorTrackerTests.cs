@@ -16,6 +16,9 @@ public class SourceBehaviorTrackerTests
     private static PacketObservation Syn(int port, int msOffset) =>
         new(Attacker, port, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset));
 
+    private static PacketObservation Icmp(int msOffset) =>
+        new(Attacker, 0, ProtocolNumbers.Icmp, IsSyn: false, IsRst: false, PacketSize: 64, Start.AddMilliseconds(msOffset));
+
     // A scan touching many distinct ports is caught even though each port is its own flow.
     [TestMethod]
     public void PortScan_ManyDistinctPorts_ShouldBeDetected()
@@ -125,5 +128,38 @@ public class SourceBehaviorTrackerTests
         tracker.Observe(Syn(port: 22, msOffset: 0));
 
         Assert.IsNull(tracker.Evaluate("198.51.100.9", Start.AddSeconds(1)));
+    }
+
+    // A sustained ICMP burst from one source is an aggregate ICMP flood.
+    [TestMethod]
+    public void IcmpFlood_ManyIcmpPackets_ShouldBeDetected()
+    {
+        var tracker = CreateTracker();
+
+        for (int i = 0; i < 60; i++)
+        {
+            tracker.Observe(Icmp(msOffset: i));
+        }
+
+        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
+
+        Assert.IsNotNull(verdict);
+        Assert.IsTrue(verdict.IsKnownAttack);
+        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
+        StringAssert.Contains(verdict.Description, "ICMP");
+    }
+
+    // A normal handful of pings must not be flagged as a flood.
+    [TestMethod]
+    public void FewIcmpPackets_ShouldNotBeDetected()
+    {
+        var tracker = CreateTracker();
+
+        for (int i = 0; i < 5; i++)
+        {
+            tracker.Observe(Icmp(msOffset: i * 1000));
+        }
+
+        Assert.IsNull(tracker.Evaluate(Attacker, Start.AddSeconds(6)));
     }
 }
