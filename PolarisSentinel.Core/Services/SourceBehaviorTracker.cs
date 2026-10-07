@@ -21,46 +21,56 @@ public sealed class SourceBehaviorTracker
 {
     private readonly TimeSpan _window;
     private readonly int _portScanDistinctPorts;
+    private readonly int _portScanMaxPacketsPerPort;
     private readonly int _bruteForceConnections;
+    private readonly int _bruteForceMaxPacketsPerAttempt;
     private readonly int _icmpFloodPackets;
     private readonly int _floodPackets;
     private readonly int _floodDistinctPorts;
     private readonly int _globalFloodPackets;
+    private readonly int _globalFloodDistinctSources;
+    private readonly int _hostSweepDistinctIps;
+    private readonly int _synFloodSyns;
     private readonly TimeSpan _cooldown;
 
     private readonly object _lock = new();
     private readonly Dictionary<string, SourceWindow> _sources = new();
 
-    private readonly Queue<DateTime> _globalPackets = new();
+    // Global window of every observed packet, so a flood spread across many spoofed sources
+    // (where no single source window accumulates) is still visible. Each entry keeps its
+    // source IP so the rule can require genuine source diversity, not just raw volume.
+    private readonly Queue<(DateTime Timestamp, string SourceIp)> _globalPackets = new();
+    private readonly Dictionary<string, int> _globalSourceCounts = new();
     private DateTime _globalLastFlaggedAt = DateTime.MinValue;
 
     private const int MaxTrackedSources = 50000;
 
     public SourceBehaviorTracker(
         TimeSpan window,
-        int portScanDistinctPorts = 8,
-        int bruteForceConnections = 5,
-        TimeSpan? cooldown = null,
-        int icmpFloodPackets = 50,
-        int floodPackets = 200,
-        int floodDistinctPorts = 20,
-        int globalFloodPackets = 1000)
+        DetectionThresholds thresholds,
+        TimeSpan? cooldown = null)
     {
         _window = window;
-        _portScanDistinctPorts = portScanDistinctPorts;
-        _bruteForceConnections = bruteForceConnections;
+        _portScanDistinctPorts = thresholds.PortScanDistinctPorts;
+        _portScanMaxPacketsPerPort = thresholds.PortScanMaxPacketsPerPort;
+        _bruteForceConnections = thresholds.BruteForceConnections;
+        _bruteForceMaxPacketsPerAttempt = thresholds.BruteForceMaxPacketsPerAttempt;
+        _icmpFloodPackets = thresholds.IcmpFloodSourcePackets;
+        _floodPackets = thresholds.FloodPackets;
+        _floodDistinctPorts = thresholds.FloodDistinctPorts;
+        _globalFloodPackets = thresholds.GlobalFloodPackets;
+        _globalFloodDistinctSources = thresholds.GlobalFloodDistinctSources;
+        _hostSweepDistinctIps = thresholds.HostSweepDistinctIps;
+        _synFloodSyns = thresholds.SynFloodSourceSyns;
         _cooldown = cooldown ?? TimeSpan.FromSeconds(30);
-        _icmpFloodPackets = icmpFloodPackets;
-        _floodPackets = floodPackets;
-        _floodDistinctPorts = floodDistinctPorts;
-        _globalFloodPackets = globalFloodPackets;
     }
 
     public void Observe(PacketObservation packet)
     {
         lock (_lock)
         {
-            _globalPackets.Enqueue(packet.Timestamp);
+            _globalPackets.Enqueue((packet.Timestamp, packet.SourceIp));
+            _globalSourceCounts[packet.SourceIp] = _globalSourceCounts.GetValueOrDefault(packet.SourceIp) + 1;
             TrimGlobal(packet.Timestamp);
 
             if (!_sources.TryGetValue(packet.SourceIp, out var window))
@@ -84,12 +94,13 @@ public sealed class SourceBehaviorTracker
         lock (_lock)
         {
             if (_globalPackets.Count >= _globalFloodPackets &&
+                _globalSourceCounts.Count >= _globalFloodDistinctSources &&
                 packet.Timestamp - _globalLastFlaggedAt >= _cooldown)
             {
                 _globalLastFlaggedAt = packet.Timestamp;
                 return PreFilterResult.SpoofedFlood(
                     AttackTypes.DoS,
-                    $"Global flood: {_globalPackets.Count} packets in {_window.TotalSeconds:0}s across many sources");
+                    $"Distributed flood: {_globalPackets.Count} packets from {_globalSourceCounts.Count} sources in {_window.TotalSeconds:0}s");
             }
 
             if (!_sources.TryGetValue(packet.SourceIp, out var window))
@@ -98,8 +109,13 @@ public sealed class SourceBehaviorTracker
             }
 
             window.Prune(_window);
+            if (packet.Timestamp - window.LastFlaggedAt < _cooldown)
+            {
+                return null;
+            }
+
             var verdict = Classify(window);
-            if (verdict is null || packet.Timestamp - window.LastFlaggedAt < _cooldown)
+            if (verdict is null)
             {
                 return null;
             }
@@ -112,9 +128,20 @@ public sealed class SourceBehaviorTracker
     private void TrimGlobal(DateTime now)
     {
         DateTime cutoff = now - _window;
-        while (_globalPackets.Count > 0 && _globalPackets.Peek() < cutoff)
+        while (_globalPackets.Count > 0 && _globalPackets.Peek().Timestamp < cutoff)
         {
-            _globalPackets.Dequeue();
+            var (_, sourceIp) = _globalPackets.Dequeue();
+            if (_globalSourceCounts.TryGetValue(sourceIp, out int count))
+            {
+                if (count <= 1)
+                {
+                    _globalSourceCounts.Remove(sourceIp);
+                }
+                else
+                {
+                    _globalSourceCounts[sourceIp] = count - 1;
+                }
+            }
         }
     }
 
@@ -129,8 +156,13 @@ public sealed class SourceBehaviorTracker
             }
 
             window.Prune(_window);
+            if (now - window.LastFlaggedAt < _cooldown)
+            {
+                return null;
+            }
+
             var verdict = Classify(window);
-            if (verdict is null || now - window.LastFlaggedAt < _cooldown)
+            if (verdict is null)
             {
                 return null;
             }
@@ -160,7 +192,9 @@ public sealed class SourceBehaviorTracker
 
     private PreFilterResult? Classify(SourceWindow window)
     {
-        var stats = window.Snapshot(_window);
+        // The snapshot is only built for the verdict that actually fires, so the per-packet
+        // fast-path does not allocate on every observation.
+        BehaviorWindowStats Build() => window.Snapshot(_window);
 
         // Volume rules first: a high packet count is stronger evidence than port spread,
         // and a multi-port flood would otherwise be mislabelled as a port scan.
@@ -168,41 +202,57 @@ public sealed class SourceBehaviorTracker
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
                 $"Multi-port flood: {window.TotalPackets} packets across {window.DistinctPorts.Count} ports from one source",
-                stats);
+                Build());
         }
 
         if (window.IcmpCount >= _icmpFloodPackets)
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
-                $"ICMP flood: {window.IcmpCount} ICMP packets from one source", stats);
+                $"ICMP flood: {window.IcmpCount} ICMP packets from one source", Build());
         }
 
         if (window.TotalPackets >= _floodPackets)
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
-                $"Packet flood: {window.TotalPackets} packets from one source", stats);
+                $"Packet flood: {window.TotalPackets} packets from one source", Build());
         }
 
-        // Port scan: many distinct destination ports probed from one source. Counts any
-        // traffic to distinct ports, so SYN/connect/FIN/UDP nmap scans all trip it even
-        // when replies are reset or suppressed.
-        if (window.DistinctPorts.Count >= _portScanDistinctPorts)
+        // Horizontal sweep: one source probing many hosts on the same port (or two). The
+        // packets-per-host guard keeps ordinary fan-out (a few packets per host) distinct
+        // from a sweep, which fires a single probe at each target.
+        if (window.DistinctDestinationIps.Count >= _hostSweepDistinctIps &&
+            window.DistinctPorts.Count <= 2 &&
+            window.TotalPackets <= window.DistinctDestinationIps.Count * 2)
         {
             return PreFilterResult.KnownAttack(AttackTypes.PortScan,
-                $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", stats);
+                $"Host sweep: {window.DistinctDestinationIps.Count} hosts probed from one source", Build());
         }
 
-        if (window.AuthConnections >= _bruteForceConnections)
+        // Port scan: many distinct destination ports, each probed with only a handful of
+        // packets. The packets-per-port guard stops a client with several real sessions
+        // (many packets per port) from being mistaken for a scanner.
+        if (window.DistinctPorts.Count >= _portScanDistinctPorts &&
+            window.TotalPackets <= window.DistinctPorts.Count * _portScanMaxPacketsPerPort)
+        {
+            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
+                $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", Build());
+        }
+
+        // Brute force: repeated new connections to an authentication port, each a small
+        // number of packets. Long-lived legitimate sessions send far more packets per
+        // connection, so the packets-per-attempt guard keeps them out of this rule.
+        if (window.AuthConnections >= _bruteForceConnections &&
+            window.TotalPackets <= window.AuthConnections * _bruteForceMaxPacketsPerAttempt)
         {
             string service = window.LastAuthPort == 22 ? "SSH" : "FTP";
             return PreFilterResult.KnownAttack(AttackTypes.BruteForce,
-                $"{service} brute force: {window.AuthConnections} connections from one source", stats);
+                $"{service} brute force: {window.AuthConnections} connections from one source", Build());
         }
 
-        if (window.SynCount >= 100 && window.AckCount == 0)
+        if (window.SynCount >= _synFloodSyns && window.AckCount == 0)
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
-                $"TCP SYN flood: {window.SynCount} SYNs from one source", stats);
+                $"TCP SYN flood: {window.SynCount} SYNs from one source", Build());
         }
 
         return null;

@@ -50,13 +50,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     public TrafficCaptureService(
         int flowIdleTimeoutSeconds,
-        int preFilterMinPackets,
-        int liveSummaryIntervalSeconds = 5,
-        int portScanDistinctPorts = 6)
+        DetectionThresholds thresholds,
+        int liveSummaryIntervalSeconds = 5)
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
-        _preFilter = new PreFilter(preFilterMinPackets);
-        _behavior = new SourceBehaviorTracker(BehaviorWindow, portScanDistinctPorts: portScanDistinctPorts);
+        _preFilter = new PreFilter(thresholds);
+        _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds);
 
         // Both timers start suspended and only tick once Start(deviceName) is called.
         _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);

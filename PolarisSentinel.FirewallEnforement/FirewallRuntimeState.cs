@@ -1,3 +1,5 @@
+using PolarisSentinel.Core.Interfaces;
+
 namespace PolarisSentinel.FirewallEnforement
 {
     // Live, runtime-toggleable firewall enforcement state. Seeded from FirewallOptions at
@@ -6,11 +8,14 @@ namespace PolarisSentinel.FirewallEnforement
     public sealed class FirewallRuntimeState
     {
         private readonly object _lock = new();
+        private readonly IUserSettingsStore? _settings;
         private bool _dryRun;
 
-        public FirewallRuntimeState(bool dryRun)
+        public FirewallRuntimeState(bool dryRun, IUserSettingsStore? settings = null)
         {
-            _dryRun = dryRun;
+            _settings = settings;
+            // A saved user choice wins over the configured default, so it survives a restart.
+            _dryRun = settings?.Read().DryRun ?? dryRun;
         }
 
         // True when rules are only recorded, not written to the OS firewall.
@@ -29,6 +34,9 @@ namespace PolarisSentinel.FirewallEnforement
                 {
                     _dryRun = value;
                 }
+
+                // Only a user toggle reaches this setter, so this is the setting to persist.
+                _settings?.Update(s => s.DryRun = value);
             }
         }
     }

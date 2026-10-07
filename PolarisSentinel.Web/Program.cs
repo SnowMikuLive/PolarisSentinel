@@ -1,5 +1,6 @@
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Inference;
 using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
@@ -38,10 +39,17 @@ namespace PolarisSentinel
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
 
-            // Runtime-toggleable enforcement state, seeded from configuration. The dashboard
-            // can flip DryRun after startup; a singleton so every enforcer sees the change.
+            // Persisted user choices (dry-run, model combination, capture device): they follow
+            // the user across restarts and only change when the user changes them.
+            builder.Services.AddSingleton<IUserSettingsStore>(sp =>
+                new JsonUserSettingsStore(sp.GetRequiredService<ILogger<JsonUserSettingsStore>>()));
+
+            // Runtime-toggleable enforcement state, seeded from configuration or the user's
+            // saved choice. The dashboard can flip DryRun after startup; a singleton so every
+            // enforcer sees the change.
             builder.Services.AddSingleton(sp => new FirewallRuntimeState(
-                sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun));
+                sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun,
+                sp.GetRequiredService<IUserSettingsStore>()));
 
             // Traffic capture runs on machine-wide defaults; per-user tuning is applied by the pipeline.
             builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
@@ -50,11 +58,20 @@ namespace PolarisSentinel
                 var section = config.GetSection("PolicySettings");
 
                 int flowIdleTimeoutSeconds = (section.GetValue<int?>("FlowIdleTimeoutMilliseconds") ?? 120000) / 1000;
-                int preFilterMinPackets = section.GetValue<int?>("PreFilterMinPackets") ?? 3;
                 int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
-                int portScanDistinctPorts = section.GetValue<int?>("PortScanDistinctPorts") ?? 6;
 
-                return new TrafficCaptureService(flowIdleTimeoutSeconds, preFilterMinPackets, liveSummaryIntervalSeconds, portScanDistinctPorts);
+                // Detection sensitivity preset (High/Balanced/Low). Individual thresholds
+                // may still be overridden here; null keeps the preset value.
+                var sensitivity = DetectionThresholds.ParseSensitivity(section.GetValue<string>("Sensitivity"));
+                var thresholds = DetectionThresholds.Resolve(
+                    sensitivity,
+                    minPackets: section.GetValue<int?>("PreFilterMinPackets"),
+                    portScanDistinctPorts: section.GetValue<int?>("PortScanDistinctPorts"),
+                    portScanMaxPacketsPerPort: section.GetValue<int?>("PortScanMaxPacketsPerPort"),
+                    globalFloodPackets: section.GetValue<int?>("GlobalFloodPackets"),
+                    globalFloodDistinctSources: section.GetValue<int?>("GlobalFloodDistinctSources"));
+
+                return new TrafficCaptureService(flowIdleTimeoutSeconds, thresholds, liveSummaryIntervalSeconds);
             });
 
             // Clean up old rules before capture starts.
@@ -125,7 +142,9 @@ namespace PolarisSentinel
             });
             builder.Services.AddSingleton<IModelCombinationService>(sp => new ModelCombinationService(
                 sp.GetRequiredService<IRandomForestModel>(),
-                sp.GetRequiredService<IIsolationForestModel?>()));
+                sp.GetRequiredService<IIsolationForestModel?>(),
+                ModelCombination.RandomForestOnly,
+                sp.GetRequiredService<IUserSettingsStore>()));
 
             builder.Services.AddSingleton<IInferenceEngine>(sp =>
                 new OnnxInferenceEngine(sp.GetRequiredService<IModelCombinationService>()));

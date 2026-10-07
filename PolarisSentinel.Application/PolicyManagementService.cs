@@ -52,6 +52,15 @@ public class PolicyManagementService
             errors[nameof(Policy.AttackType)] = "Unknown attack type.";
         }
 
+        // The engine routes Unknown_Anomaly to monitor-only (the Isolation Forest never
+        // names a category), so a blocking action could never fire. Reject it up front
+        // rather than seeding a policy that silently never blocks.
+        if (string.Equals(policy.AttackType, AttackTypes.UnknownAnomaly, StringComparison.OrdinalIgnoreCase) &&
+            PolicyActions.IsBlocking(policy.Action))
+        {
+            errors[nameof(Policy.AttackType)] = "Unknown anomalies are monitor-only; choose a monitor action or a named attack type.";
+        }
+
         return errors;
     }
 

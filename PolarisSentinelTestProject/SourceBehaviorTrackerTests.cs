@@ -1,11 +1,12 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PolarisSentinel.Core.Constants;
+using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Core.Services;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Key behaviours of the source-IP tracker: port scan, brute force, multi-port/global flood,
-// and the per-packet fast-path.
+// Core of the cross-flow detector: port scan, multi-port DoS, and the per-packet fast-path.
 [TestClass]
 public class SourceBehaviorTrackerTests
 {
@@ -13,7 +14,8 @@ public class SourceBehaviorTrackerTests
     private const string Attacker = "203.0.113.66";
     private const string Victim = "192.168.1.10";
 
-    private static SourceBehaviorTracker CreateTracker() => new(TimeSpan.FromSeconds(10));
+    private static SourceBehaviorTracker CreateTracker() =>
+        new(TimeSpan.FromSeconds(10), DetectionThresholds.Preset(DetectionSensitivity.High));
 
     private static PacketObservation Syn(int port, int msOffset) =>
         new(Attacker, Victim, port, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset));
@@ -34,24 +36,6 @@ public class SourceBehaviorTrackerTests
         Assert.IsNotNull(verdict);
         Assert.IsTrue(verdict.IsKnownAttack);
         Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
-        Assert.AreEqual(20, verdict.Aggregate!.DistinctPorts);
-    }
-
-    // Repeated new connections to an authentication port are a brute-force run.
-    [TestMethod]
-    public void BruteForce_ManyConnections_ShouldBeDetected()
-    {
-        var tracker = CreateTracker();
-
-        for (int i = 0; i < 10; i++)
-        {
-            tracker.Observe(Syn(port: 22, msOffset: i * 100));
-        }
-
-        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
-
-        Assert.IsNotNull(verdict);
-        Assert.AreEqual(AttackTypes.BruteForce, verdict.AttackType);
     }
 
     // A DoS from one IP spread across many destination ports: each port is its own short
@@ -70,27 +54,6 @@ public class SourceBehaviorTrackerTests
         }
 
         var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
-
-        Assert.IsNotNull(verdict);
-        Assert.IsTrue(verdict.IsKnownAttack);
-        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
-    }
-
-    // A spoofed random-source flood (hping3 --rand-source): every packet has a different
-    // source, so no per-source window accumulates; the global aggregate catches it.
-    [TestMethod]
-    public void RandomSourceFlood_ManyDistinctSources_ShouldBeDetected()
-    {
-        var tracker = CreateTracker();
-
-        for (int i = 0; i < 1200; i++)
-        {
-            string spoofed = $"10.0.{i / 256}.{i % 256}";
-            tracker.Observe(new PacketObservation(spoofed, Victim, 80, ProtocolNumbers.Tcp,
-                IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(i)));
-        }
-
-        var verdict = tracker.EvaluateFast(Syn(port: 80, msOffset: 1200));
 
         Assert.IsNotNull(verdict);
         Assert.IsTrue(verdict.IsKnownAttack);

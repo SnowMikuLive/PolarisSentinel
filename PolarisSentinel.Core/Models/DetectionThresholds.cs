@@ -1,0 +1,168 @@
+using PolarisSentinel.Core.Enums;
+
+namespace PolarisSentinel.Core.Models;
+
+// Single source of truth for every heuristic detection threshold. A preset is selected
+// by DetectionSensitivity; individual values can still be overridden from configuration
+// (see Resolve) without touching code. Lower numbers mean more sensitive.
+public sealed record DetectionThresholds
+{
+    // --- PreFilter: single-flow signatures (reported as Suspicious for the AI to confirm) ---
+    public int MinPacketsForAnalysis { get; init; }
+    public int SynFloodSyns { get; init; }
+    public int UdpFloodPackets { get; init; }
+    public int UdpFloodPacketsPerSecond { get; init; }
+    public int AckFloodAcks { get; init; }
+    public int IcmpFloodPackets { get; init; }
+    public int IcmpFloodPacketsPerSecond { get; init; }
+    public int IcmpPingFloodPackets { get; init; }
+    public int IcmpPingFloodPacketsPerSecond { get; init; }
+    public int ScanSyns { get; init; }
+    public int FinRstScanPackets { get; init; }
+    public int UdpScanPackets { get; init; }
+    public double UdpScanMaxPayload { get; init; }
+    public int IcmpSweepPackets { get; init; }
+    public int BruteForceSyns { get; init; }
+    public double FlatTrafficStdDev { get; init; }
+
+    // --- SourceBehaviorTracker: cross-flow aggregates (KnownAttack -> blocks) ---
+    public int PortScanDistinctPorts { get; init; }
+    public int PortScanMaxPacketsPerPort { get; init; }
+    public int BruteForceConnections { get; init; }
+    public int BruteForceMaxPacketsPerAttempt { get; init; }
+    public int IcmpFloodSourcePackets { get; init; }
+    public int FloodPackets { get; init; }
+    public int FloodDistinctPorts { get; init; }
+    public int GlobalFloodPackets { get; init; }
+    public int GlobalFloodDistinctSources { get; init; }
+    public int HostSweepDistinctIps { get; init; }
+    public int SynFloodSourceSyns { get; init; }
+
+    // The threshold set for a sensitivity preset.
+    public static DetectionThresholds Preset(DetectionSensitivity sensitivity) => sensitivity switch
+    {
+        DetectionSensitivity.Low => Low,
+        DetectionSensitivity.Balanced => Balanced,
+        _ => High
+    };
+
+    // Applies configuration overrides (null keeps the preset value) on top of a preset.
+    public static DetectionThresholds Resolve(
+        DetectionSensitivity sensitivity,
+        int? minPackets = null,
+        int? portScanDistinctPorts = null,
+        int? portScanMaxPacketsPerPort = null,
+        int? globalFloodPackets = null,
+        int? globalFloodDistinctSources = null)
+    {
+        var preset = Preset(sensitivity);
+        return preset with
+        {
+            MinPacketsForAnalysis = minPackets ?? preset.MinPacketsForAnalysis,
+            PortScanDistinctPorts = portScanDistinctPorts ?? preset.PortScanDistinctPorts,
+            PortScanMaxPacketsPerPort = portScanMaxPacketsPerPort ?? preset.PortScanMaxPacketsPerPort,
+            GlobalFloodPackets = globalFloodPackets ?? preset.GlobalFloodPackets,
+            GlobalFloodDistinctSources = globalFloodDistinctSources ?? preset.GlobalFloodDistinctSources
+        };
+    }
+
+    // Parses a configured sensitivity name; unknown or missing falls back to High.
+    public static DetectionSensitivity ParseSensitivity(string? value) =>
+        Enum.TryParse<DetectionSensitivity>(value, ignoreCase: true, out var parsed) ? parsed : DetectionSensitivity.High;
+
+    // Aggressive: the current tuned values.
+    public static readonly DetectionThresholds High = new()
+    {
+        MinPacketsForAnalysis = 3,
+        SynFloodSyns = 4,
+        UdpFloodPackets = 20,
+        UdpFloodPacketsPerSecond = 40,
+        AckFloodAcks = 8,
+        IcmpFloodPackets = 8,
+        IcmpFloodPacketsPerSecond = 15,
+        IcmpPingFloodPackets = 8,
+        IcmpPingFloodPacketsPerSecond = 8,
+        ScanSyns = 1,
+        FinRstScanPackets = 1,
+        UdpScanPackets = 5,
+        UdpScanMaxPayload = 200,
+        IcmpSweepPackets = 5,
+        BruteForceSyns = 1,
+        FlatTrafficStdDev = 10,
+        PortScanDistinctPorts = 4,
+        PortScanMaxPacketsPerPort = 3,
+        BruteForceConnections = 3,
+        BruteForceMaxPacketsPerAttempt = 8,
+        IcmpFloodSourcePackets = 15,
+        FloodPackets = 120,
+        FloodDistinctPorts = 8,
+        GlobalFloodPackets = 300,
+        GlobalFloodDistinctSources = 15,
+        HostSweepDistinctIps = 8,
+        SynFloodSourceSyns = 40
+    };
+
+    // The precision-tuned baseline.
+    public static readonly DetectionThresholds Balanced = new()
+    {
+        MinPacketsForAnalysis = 3,
+        SynFloodSyns = 10,
+        UdpFloodPackets = 50,
+        UdpFloodPacketsPerSecond = 100,
+        AckFloodAcks = 20,
+        IcmpFloodPackets = 20,
+        IcmpFloodPacketsPerSecond = 25,
+        IcmpPingFloodPackets = 15,
+        IcmpPingFloodPacketsPerSecond = 15,
+        ScanSyns = 3,
+        FinRstScanPackets = 3,
+        UdpScanPackets = 5,
+        UdpScanMaxPayload = 200,
+        IcmpSweepPackets = 8,
+        BruteForceSyns = 3,
+        FlatTrafficStdDev = 10,
+        PortScanDistinctPorts = 6,
+        PortScanMaxPacketsPerPort = 3,
+        BruteForceConnections = 5,
+        BruteForceMaxPacketsPerAttempt = 8,
+        IcmpFloodSourcePackets = 50,
+        FloodPackets = 200,
+        FloodDistinctPorts = 20,
+        GlobalFloodPackets = 1000,
+        GlobalFloodDistinctSources = 50,
+        HostSweepDistinctIps = 20,
+        SynFloodSourceSyns = 100
+    };
+
+    // Conservative: only blatant attacks.
+    public static readonly DetectionThresholds Low = new()
+    {
+        MinPacketsForAnalysis = 4,
+        SynFloodSyns = 20,
+        UdpFloodPackets = 100,
+        UdpFloodPacketsPerSecond = 200,
+        AckFloodAcks = 40,
+        IcmpFloodPackets = 40,
+        IcmpFloodPacketsPerSecond = 50,
+        IcmpPingFloodPackets = 30,
+        IcmpPingFloodPacketsPerSecond = 30,
+        ScanSyns = 6,
+        FinRstScanPackets = 6,
+        UdpScanPackets = 8,
+        UdpScanMaxPayload = 200,
+        IcmpSweepPackets = 12,
+        BruteForceSyns = 5,
+        FlatTrafficStdDev = 10,
+        PortScanDistinctPorts = 12,
+        PortScanMaxPacketsPerPort = 3,
+        BruteForceConnections = 8,
+        BruteForceMaxPacketsPerAttempt = 8,
+        IcmpFloodSourcePackets = 80,
+        FloodPackets = 400,
+        FloodDistinctPorts = 30,
+        GlobalFloodPackets = 2000,
+        GlobalFloodDistinctSources = 80,
+        HostSweepDistinctIps = 30,
+        SynFloodSourceSyns = 200
+    };
+}

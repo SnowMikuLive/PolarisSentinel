@@ -47,6 +47,18 @@ public class RuleManagementService
             errors[nameof(Rule.Action)] = "Port actions are not valid for ICMP; use an IP action instead.";
         }
 
+        // Ports are stored as int; reject values the transport layer cannot represent.
+        // Null and 0 both mean "any port".
+        if (rule.SourcePort is { } sourcePort && (sourcePort < 0 || sourcePort > 65535))
+        {
+            errors[nameof(Rule.SourcePort)] = "Port must be between 0 and 65535.";
+        }
+
+        if (rule.DestinationPort is { } destinationPort && (destinationPort < 0 || destinationPort > 65535))
+        {
+            errors[nameof(Rule.DestinationPort)] = "Port must be between 0 and 65535.";
+        }
+
         return errors;
     }
 
@@ -54,13 +66,21 @@ public class RuleManagementService
     // alert's real 5-tuple and origin; otherwise a synthetic alert is built from the input.
     public Rule Create(Rule rule, string? alertId, string? policyId, int? durationValue, string? durationUnit)
     {
-        var alert = string.IsNullOrEmpty(alertId)
-            ? BuildManualAlert(rule)
-            : _unitOfWork.Alerts.GetByIdAsync(alertId).GetAwaiter().GetResult() ?? BuildManualAlert(rule);
+        var source = string.IsNullOrEmpty(alertId)
+            ? null
+            : _unitOfWork.Alerts.GetByIdAsync(alertId).GetAwaiter().GetResult();
+        var alert = source ?? BuildManualAlert(rule);
+
+        // Only persist the origin FKs when the referenced rows actually exist: a stale or
+        // crafted alertId/policyId would otherwise violate the Rule foreign keys on insert.
+        string? resolvedAlertId = source?.Id;
+        string? resolvedPolicyId = string.IsNullOrEmpty(policyId)
+            ? null
+            : _unitOfWork.Policies.GetByIdAsync(policyId).GetAwaiter().GetResult()?.Id;
 
         var decision = new Decision { Alert = alert, Action = rule.Action };
 
-        var created = _firewall.Apply(decision, policyId, alertId, alert.AttackType, ResolveDuration(durationValue, durationUnit));
+        var created = _firewall.Apply(decision, resolvedPolicyId, resolvedAlertId, alert.AttackType, ResolveDuration(durationValue, durationUnit));
         _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
         return created;
     }

@@ -9,17 +9,17 @@ namespace PolarisSentinel.Core.Services;
 // traffic; only the cross-flow SourceBehaviorTracker escalates straight to KnownAttack.
 public sealed class PreFilter
 {
-    private readonly int _minPacketsForAnalysis;
+    private readonly DetectionThresholds _t;
 
-    public PreFilter(int minPacketsForAnalysis)
+    public PreFilter(DetectionThresholds thresholds)
     {
-        _minPacketsForAnalysis = minPacketsForAnalysis;
+        _t = thresholds;
     }
 
     // Classifies a finished flow as known attack, suspicious (for the AI engine), or normal.
     public PreFilterResult Classify(FlowStatistics flow)
     {
-        if (flow.TotalPackets < _minPacketsForAnalysis)
+        if (flow.TotalPackets < _t.MinPacketsForAnalysis)
             return PreFilterResult.Normal();
 
         // The flow key orders endpoints by IP string, so normalise the dominant sender forward.
@@ -97,7 +97,7 @@ public sealed class PreFilter
 
         // SYN flood: many SYNs, no handshake completion, no resets.
         bool isSynFlood =
-            flow.SynCount > 10 &&
+            flow.SynCount > _t.SynFloodSyns &&
             flow.AckCount == 0 &&
             flow.RstCount == 0 &&
             flow.FwdPackets > flow.BwdPackets * 2;
@@ -109,15 +109,15 @@ public sealed class PreFilter
         bool isUdpFlood =
             flow.Protocol == ProtocolNumbers.Udp &&
             oneWay &&
-            flow.FwdPackets > 50 &&
-            flow.FwdPacketsPerSecond > 100;
+            flow.FwdPackets > _t.UdpFloodPackets &&
+            flow.FwdPacketsPerSecond > _t.UdpFloodPacketsPerSecond;
 
         if (isUdpFlood)
             return Verdict(AttackTypes.DoS, "UDP flood");
 
         // ACK flood: many ACKs with no SYN and no payload-carrying handshake.
         bool isAckFlood =
-            flow.AckCount > 20 &&
+            flow.AckCount > _t.AckFloodAcks &&
             flow.SynCount == 0 &&
             flow.FwdPackets > flow.BwdPackets * 2;
 
@@ -128,8 +128,8 @@ public sealed class PreFilter
         // are lower than the TCP/UDP floods.
         bool isIcmpFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
-            flow.FwdPackets > 20 &&
-            flow.FwdPacketsPerSecond > 25;
+            flow.FwdPackets > _t.IcmpFloodPackets &&
+            flow.FwdPacketsPerSecond > _t.IcmpFloodPacketsPerSecond;
 
         if (isIcmpFlood)
             return Verdict(AttackTypes.DoS, "ICMP flood");
@@ -137,9 +137,9 @@ public sealed class PreFilter
         // ICMP ping flood: many echo requests with a matching reply stream.
         bool isIcmpPingFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
-            flow.FwdPackets > 15 &&
+            flow.FwdPackets > _t.IcmpPingFloodPackets &&
             flow.BwdPackets > 0 &&
-            flow.FwdPacketsPerSecond > 15 &&
+            flow.FwdPacketsPerSecond > _t.IcmpPingFloodPacketsPerSecond &&
             flow.FwdPackets > flow.BwdPackets;
 
         if (isIcmpPingFlood)
@@ -156,7 +156,7 @@ public sealed class PreFilter
 
         // SYN scan: SYNs answered with RSTs, little or no reply traffic.
         bool isSynScan =
-            flow.SynCount > 3 &&
+            flow.SynCount > _t.ScanSyns &&
             flow.RstCount > flow.SynCount * 0.5 &&
             shortLived &&
             mostlyOutbound;
@@ -166,7 +166,7 @@ public sealed class PreFilter
 
         // Connect scan: full handshakes (SYN+ACK) that are reset immediately.
         bool isConnectScan =
-            flow.SynCount > 3 &&
+            flow.SynCount > _t.ScanSyns &&
             flow.AckCount > flow.SynCount &&
             flow.RstCount > 0 &&
             shortLived &&
@@ -179,28 +179,32 @@ public sealed class PreFilter
         bool isFinNullXmasScan =
             flow.SynCount == 0 &&
             flow.AckCount == 0 &&
-            (flow.FinCount > 3 || flow.RstCount > 3) &&
+            (flow.FinCount > _t.FinRstScanPackets || flow.RstCount > _t.FinRstScanPackets) &&
             shortLived &&
             mostlyOutbound;
 
         if (isFinNullXmasScan)
             return Verdict(AttackTypes.PortScan, "FIN/NULL/Xmas port scan");
 
-        // UDP scan: many small one-way UDP packets to a single port, no replies.
+        // UDP scan: many small one-way probes to a single port with no replies. The
+        // payload-size cap keeps payload-heavy one-way flows (media, bulk transfer) out
+        // of this rule while still forwarding short small-probe bursts to the AI engine.
         bool isUdpScan =
             flow.Protocol == ProtocolNumbers.Udp &&
-            flow.FwdPackets > 5 &&
+            flow.FwdPackets > _t.UdpScanPackets &&
             flow.FwdPackets <= 50 &&
             flow.BwdPackets == 0 &&
+            flow.PacketSizeMean < _t.UdpScanMaxPayload &&
             shortLived;
 
         if (isUdpScan)
             return Verdict(AttackTypes.PortScan, "UDP port scan");
 
-        // ICMP sweep: several one-way echo requests probing hosts (replies suppressed).
+        // ICMP sweep: a run of one-way echo requests (replies suppressed). The floor above
+        // a default `ping -c 4/5` stops a single blocked-host ping tripping it.
         bool isIcmpSweep =
             flow.Protocol == ProtocolNumbers.Icmp &&
-            flow.FwdPackets > 3 &&
+            flow.FwdPackets > _t.IcmpSweepPackets &&
             flow.FwdPackets <= 50 &&
             flow.BwdPackets <= 1 &&
             shortLived;
@@ -220,11 +224,11 @@ public sealed class PreFilter
 
         // Flat traffic: near-constant packet size and a steady connection cadence.
         bool flatTraffic =
-            flow.PacketSizeStdDev < 10 &&
+            flow.PacketSizeStdDev < _t.FlatTrafficStdDev &&
             flow.PacketSizeMean > 0;
 
         bool repeatedAttempts =
-            flow.SynCount > 3 &&
+            flow.SynCount > _t.BruteForceSyns &&
             flow.FwdPackets > 5 &&
             flow.PacketSizeMean < 200;
 

@@ -15,6 +15,12 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DetectionPipeline> _logger;
 
+    // Alert ids are allocated by scanning the table for the highest "A-n". Flows complete
+    // concurrently (one DI scope each), so two detections in a burst can compute the same
+    // id; the second insert then fails and that alert *and its block* are lost. Serialize
+    // id-assignment through enforcement so a burst can never drop a detection or a defence.
+    private static readonly object _persistLock = new();
+
     public DetectionPipeline(
         IInferenceEngine inference,
         IPolicyEngine policy,
@@ -39,11 +45,23 @@ public class DetectionPipeline : IDetectionPipeline
         if (verdict is { IsKnownAttack: true })
         {
             var alert = BuildPreFilterAlert(flow, verdict);
-            var modelOpinion = _inference.Detect(flow);
-            if (modelOpinion.AttackType != AttackTypes.Benign)
+
+            // The heuristic verdict already justifies the alert and the block; the model
+            // opinion is only extra detail on the alert, so a model failure must never lose
+            // the defence.
+            try
             {
-                alert.Description = $"{alert.Description} | Model: {modelOpinion.AttackType} ({modelOpinion.ConfidenceScore:0.00})";
+                var modelOpinion = _inference.Detect(flow);
+                if (modelOpinion.AttackType != AttackTypes.Benign)
+                {
+                    alert.Description = $"{alert.Description} | Model: {modelOpinion.AttackType} ({modelOpinion.ConfidenceScore:0.00})";
+                }
             }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Model opinion failed for a known attack; enforcing the heuristic verdict.");
+            }
+
             return Evaluate(alert, policies);
         }
 
@@ -108,46 +126,62 @@ public class DetectionPipeline : IDetectionPipeline
         }
 
         // The alert id is assigned here so the firewall rule name can key off it.
-        if (string.IsNullOrEmpty(alert.Id))
-        {
-            alert.Id = _unitOfWork.Alerts.NextIdAsync().GetAwaiter().GetResult();
-        }
-
-        var decision = _policy.Evaluate(alert, policies);
-
-        _unitOfWork.Alerts.Add(alert);
-        _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
-
         Rule? rule = null;
-        if (PolicyActions.IsBlocking(decision.Action))
-        {
-            rule = _firewall.Apply(
-                decision,
-                decision.PolicyId,
-                alert.Id,
-                alert.AttackType,
-                TimeSpan.FromMinutes(decision.BlockDurationMinutes));
 
-            // The rule is staged by the enforcer; commit it now that its alert exists.
+        lock (_persistLock)
+        {
+            if (string.IsNullOrEmpty(alert.Id))
+            {
+                alert.Id = _unitOfWork.Alerts.NextIdAsync().GetAwaiter().GetResult();
+            }
+
+            var decision = _policy.Evaluate(alert, policies);
+
+            _unitOfWork.Alerts.Add(alert);
             _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
-            _logger.LogInformation(
-                "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
-                alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
-        }
+            if (PolicyActions.IsBlocking(decision.Action))
+            {
+                try
+                {
+                    rule = _firewall.Apply(
+                        decision,
+                        decision.PolicyId,
+                        alert.Id,
+                        alert.AttackType,
+                        TimeSpan.FromMinutes(decision.BlockDurationMinutes));
 
-        return new DetectionOutcome
-        {
-            Verdict = TrafficVerdict.Malicious,
-            Description = alert.Description ?? decision.Reason,
-            Alert = alert,
-            Decision = decision,
-            Rule = rule,
-            SourceIp = alert.SourceIp,
-            SourcePort = alert.SourcePort,
-            DestinationIp = alert.DestinationIp,
-            DestinationPort = alert.DestinationPort
-        };
+                    // The rule is staged by the enforcer; commit it now that its alert exists.
+                    _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
+                    _logger.LogInformation(
+                        "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
+                        alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
+                }
+                catch (Exception ex)
+                {
+                    // The alert is already persisted. An enforcement failure (e.g. a policy
+                    // whose action cannot be expressed for this flow) must not abort the
+                    // pipeline or hide the detection; the absent rule name signals it.
+                    _logger.LogError(
+                        ex, "Failed to enforce the block for alert {AlertId} ({AttackType} from {SourceIp})",
+                        alert.Id, alert.AttackType, alert.SourceIp);
+                }
+            }
+
+            return new DetectionOutcome
+            {
+                Verdict = TrafficVerdict.Malicious,
+                Description = alert.Description ?? decision.Reason,
+                Alert = alert,
+                Decision = decision,
+                Rule = rule,
+                SourceIp = alert.SourceIp,
+                SourcePort = alert.SourcePort,
+                DestinationIp = alert.DestinationIp,
+                DestinationPort = alert.DestinationPort
+            };
+        }
     }
 
     // An AI alert only counts when it reaches the threshold of a policy that could act on it.

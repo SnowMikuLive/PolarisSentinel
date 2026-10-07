@@ -11,6 +11,7 @@ public class ModelCombinationService : IModelCombinationService
 {
     private readonly IRandomForestModel _randomForest;
     private readonly IIsolationForestModel? _isolationForest;
+    private readonly IUserSettingsStore? _settings;
     private readonly object _lock = new();
 
     private ModelCombination _active;
@@ -18,10 +19,20 @@ public class ModelCombinationService : IModelCombinationService
     public ModelCombinationService(
         IRandomForestModel randomForest,
         IIsolationForestModel? isolationForest,
-        ModelCombination active = ModelCombination.RandomForestOnly)
+        ModelCombination active = ModelCombination.RandomForestOnly,
+        IUserSettingsStore? settings = null)
     {
         _randomForest = randomForest;
         _isolationForest = isolationForest;
+        _settings = settings;
+
+        // A saved user choice wins over the default, so the selected model survives a restart.
+        if (settings?.Read().ModelCombination is { } saved &&
+            Enum.TryParse<ModelCombination>(saved, out var restored))
+        {
+            active = restored;
+        }
+
         _active = active;
     }
 
@@ -42,6 +53,9 @@ public class ModelCombinationService : IModelCombinationService
         {
             _active = combination;
         }
+
+        // Only a user selection reaches this method, so it is the value to persist.
+        _settings?.Update(s => s.ModelCombination = combination.ToString());
     }
 
     public InferenceResult Run(FlowFeatureVector flow, ModelCombination? combination = null)

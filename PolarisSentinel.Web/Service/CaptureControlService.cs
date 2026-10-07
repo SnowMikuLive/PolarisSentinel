@@ -8,22 +8,29 @@ public class CaptureControlService
 {
     private readonly ITrafficCaptureService _capture;
     private readonly ILogger<CaptureControlService> _logger;
+    private readonly IUserSettingsStore? _settings;
     private readonly object _lock = new();
     private string? _currentDevice;
 
-    public CaptureControlService(ITrafficCaptureService capture, ILogger<CaptureControlService> logger)
+    public CaptureControlService(ITrafficCaptureService capture, ILogger<CaptureControlService> logger, IUserSettingsStore? settings = null)
     {
         _capture = capture;
         _logger = logger;
+        _settings = settings;
     }
 
     public string? CurrentDevice => _currentDevice;
 
-    // Auto-select: prefer Wi-Fi, then Ethernet, then the first device.
+    // Auto-select: prefer the device the user last chose (it follows them across restarts),
+    // then Wi-Fi, then Ethernet, then the first device.
     public void AutoStart()
     {
         var devices = _capture.GetAvailableDevices().ToList();
-        var selected = devices.FirstOrDefault(d =>
+        string? saved = _settings?.Read().CaptureDevice;
+
+        var selected =
+            (!string.IsNullOrEmpty(saved) ? devices.FirstOrDefault(d => d.DeviceName == saved) : null) ??
+            devices.FirstOrDefault(d =>
                 d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase)) ??
             devices.FirstOrDefault(d =>
                 d.DisplayName.Contains("Ethernet", StringComparison.OrdinalIgnoreCase)) ??
@@ -31,7 +38,8 @@ public class CaptureControlService
 
         if (selected != null)
         {
-            SwitchTo(selected.DeviceName);
+            // Startup selection is not a user choice, so it is not persisted.
+            SwitchTo(selected.DeviceName, persist: false);
         }
     }
 
@@ -52,8 +60,9 @@ public class CaptureControlService
 
     // Switches capture to the given device. Retries once, because a NIC that was
     // just hammered by a flood can briefly refuse to reopen; the retry re-resolves
-    // the device from a freshly refreshed list.
-    public bool SwitchTo(string deviceName)
+    // the device from a freshly refreshed list. persist is true for an explicit user
+    // choice, which is then saved and restored on the next start.
+    public bool SwitchTo(string deviceName, bool persist = true)
     {
         lock (_lock)
         {
@@ -69,6 +78,12 @@ public class CaptureControlService
                     _capture.Stop();
                     _capture.Start(deviceName);
                     _currentDevice = deviceName;
+
+                    if (persist)
+                    {
+                        _settings?.Update(s => s.CaptureDevice = deviceName);
+                    }
+
                     _logger.LogInformation("Capture switched to {Device} (attempt {Attempt})", deviceName, attempt);
                     return true;
                 }

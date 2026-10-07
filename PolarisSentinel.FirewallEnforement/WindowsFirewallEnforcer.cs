@@ -17,7 +17,12 @@ namespace PolarisSentinel.FirewallEnforement
         private WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
-        private readonly object _lock = new object();
+
+        // Process-wide: every DI scope builds its own enforcer (one per processed flow),
+        // and the sweeper and manual rule management run on other threads. Rule ids are
+        // allocated by scanning the table, so rule mutations must be serialized across all
+        // instances or concurrent blocks can collide on the same id.
+        private static readonly object _lock = new object();
 
         public bool IsDryRun => _firewall == null;
 
@@ -127,6 +132,13 @@ namespace PolarisSentinel.FirewallEnforement
                         existing.Status = RuleStatus.Active;
                         _rules.Update(existing);
                         _rules.SaveChangesAsync().GetAwaiter().GetResult();
+                    }
+
+                    // Re-push an active rule so it is enforced even if it was first recorded
+                    // while dry-run was on or its Windows entry was otherwise lost. A
+                    // non-active rule is left disabled (operator intent).
+                    if (existing.Status == RuleStatus.Active)
+                    {
                         SaveToWindows(existing, SpecFrom(existing));
                     }
                     return existing;
