@@ -9,6 +9,9 @@ namespace PolarisSentinel.Core.Services;
 // traffic; only the cross-flow SourceBehaviorTracker escalates straight to KnownAttack.
 public sealed class PreFilter
 {
+    // Ports that legitimately carry one-way traffic (DHCP, NTP, NetBIOS, SSDP, mDNS).
+    private static readonly HashSet<int> OneWayBenignPorts = new() { 67, 68, 123, 137, 138, 1900, 5353 };
+
     private readonly int _minPacketsForAnalysis;
 
     public PreFilter(int minPacketsForAnalysis)
@@ -34,22 +37,59 @@ public sealed class PreFilter
         if (flow.DurationSeconds < 0.1)
             return PreFilterResult.Normal();
 
-        // Unidirectional traffic, typical of broadcast/multicast.
-        if (direction.FwdPackets == 0 || direction.BwdPackets == 0)
+        if (direction.FwdPackets == 0)
             return PreFilterResult.Normal();
 
+        // No reply at all is also what scans and floods look like, so only known
+        // one-way protocols are dropped here.
+        if (direction.BwdPackets == 0)
+        {
+            return OneWayBenignPorts.Contains(direction.DestinationPort)
+                ? PreFilterResult.Normal()
+                : PreFilterResult.Suspicious("Unidirectional flow without replies forwarded to the AI engine.");
+        }
+
+        double rate = ForwardRate(direction);
+        bool isWebPort = direction.DestinationPort == 80 || direction.DestinationPort == 443;
+
+        // Slowloris / slow POST: long-lived, tiny packets, very low rate. This would
+        // otherwise pass as ordinary two-way traffic below.
+        bool isSlowHttp =
+            (isWebPort || direction.DestinationPort == 8080) &&
+            direction.DurationSeconds > 10.0 &&
+            direction.FwdPackets >= 3 &&
+            direction.PacketSizeMean < 100 &&
+            rate < 2.0;
+
+        if (isSlowHttp)
+            return PreFilterResult.Suspicious("Possible slow HTTP attack forwarded to the AI engine.");
+
+        double downUp = (double)direction.BwdBytes / Math.Max(direction.FwdBytes, 1);
+
         bool isNormalWebTraffic =
-            (direction.DestinationPort == 443 || direction.DestinationPort == 80) &&
+            isWebPort &&
             direction.FwdPackets > 5 &&
             direction.BwdPackets > 5 &&
             direction.SynCount <= 1 &&
             direction.RstCount == 0 &&
             direction.FinCount <= 2 &&
-            direction.DownUpRatio > 0.1 &&
-            direction.DownUpRatio < 10;
+            downUp > 0.1 &&
+            downUp < 10 &&
+            rate < 500;
 
         if (isNormalWebTraffic)
             return PreFilterResult.Normal();
+
+        // A long SSH/FTP flow with flat packet sizes is a brute-force run inside one
+        // connection, not an ordinary session.
+        bool isAuthPort = direction.DestinationPort == 22 || direction.DestinationPort == 21;
+        if (isAuthPort &&
+            direction.FwdPackets > 10 &&
+            direction.PacketSizeMean > 0 &&
+            direction.PacketSizeStdDev < 10)
+        {
+            return PreFilterResult.Suspicious("Flat repeating traffic on an authentication port forwarded to the AI engine.");
+        }
 
         bool isOrdinaryTwoWayTraffic =
             direction.DurationSeconds > 1.0 &&
@@ -90,17 +130,23 @@ public sealed class PreFilter
         };
     }
 
+    // Computed here rather than read from the flow, because Normalise rebuilds the
+    // object and does not carry derived rates over.
+    private static double ForwardRate(FlowStatistics flow) =>
+        flow.FwdPackets / Math.Max(flow.DurationSeconds, 0.05);
+
     // DoS family: SYN / UDP / ACK / ICMP floods, driven by flag counts and one-way packet volume.
     private PreFilterResult? DetectFlood(FlowStatistics flow)
     {
         bool oneWay = flow.BwdPackets <= flow.FwdPackets * 0.1;
+        double rate = ForwardRate(flow);
 
-        // SYN flood: many SYNs, no handshake completion, no resets.
+        // SYN flood: many SYNs and the handshake never completes. The victim may answer
+        // with SYN-ACK or RST, so replies are allowed; an established connection would
+        // carry far more ACKs than the victim's own replies account for.
         bool isSynFlood =
             flow.SynCount > 10 &&
-            flow.AckCount == 0 &&
-            flow.RstCount == 0 &&
-            flow.FwdPackets > flow.BwdPackets * 2;
+            flow.AckCount <= flow.BwdPackets + 2;
 
         if (isSynFlood)
             return Verdict(AttackTypes.DoS, "TCP SYN flood");
@@ -110,16 +156,19 @@ public sealed class PreFilter
             flow.Protocol == ProtocolNumbers.Udp &&
             oneWay &&
             flow.FwdPackets > 50 &&
-            flow.FwdPacketsPerSecond > 100;
+            rate > 100;
 
         if (isUdpFlood)
             return Verdict(AttackTypes.DoS, "UDP flood");
 
-        // ACK flood: many ACKs with no SYN and no payload-carrying handshake.
+        // ACK flood: fast stream of small ACKs with no SYN. Packet size keeps truncated
+        // bulk transfers (which are also all ACKs) from matching.
         bool isAckFlood =
             flow.AckCount > 20 &&
             flow.SynCount == 0 &&
-            flow.FwdPackets > flow.BwdPackets * 2;
+            flow.FwdPackets > flow.BwdPackets * 2 &&
+            flow.PacketSizeMean < 100 &&
+            rate > 100;
 
         if (isAckFlood)
             return Verdict(AttackTypes.DoS, "TCP ACK flood");
@@ -129,7 +178,7 @@ public sealed class PreFilter
         bool isIcmpFlood =
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 20 &&
-            flow.FwdPacketsPerSecond > 25;
+            rate > 25;
 
         if (isIcmpFlood)
             return Verdict(AttackTypes.DoS, "ICMP flood");
@@ -139,7 +188,7 @@ public sealed class PreFilter
             flow.Protocol == ProtocolNumbers.Icmp &&
             flow.FwdPackets > 15 &&
             flow.BwdPackets > 0 &&
-            flow.FwdPacketsPerSecond > 15 &&
+            rate > 15 &&
             flow.FwdPackets > flow.BwdPackets;
 
         if (isIcmpPingFlood)
@@ -154,44 +203,46 @@ public sealed class PreFilter
         bool shortLived = flow.DurationSeconds < 2.0;
         bool mostlyOutbound = flow.BwdPackets <= flow.FwdPackets * 0.3;
 
-        // SYN scan: SYNs answered with RSTs, little or no reply traffic.
+        // SYN scan: closed ports answer each SYN with a RST (so replies are plentiful),
+        // filtered ports answer nothing (so the flow is mostly outbound). Either counts.
         bool isSynScan =
             flow.SynCount > 3 &&
-            flow.RstCount > flow.SynCount * 0.5 &&
             shortLived &&
-            mostlyOutbound;
+            (flow.RstCount >= flow.SynCount * 0.5 || mostlyOutbound);
 
         if (isSynScan)
             return Verdict(AttackTypes.PortScan, "TCP SYN port scan");
 
-        // Connect scan: full handshakes (SYN+ACK) that are reset immediately.
+        // Connect scan: full handshakes that are reset immediately, no real payload.
         bool isConnectScan =
             flow.SynCount > 3 &&
             flow.AckCount > flow.SynCount &&
             flow.RstCount > 0 &&
             shortLived &&
-            mostlyOutbound;
+            flow.PacketSizeMean < 100;
 
         if (isConnectScan)
             return Verdict(AttackTypes.PortScan, "TCP connect port scan");
 
-        // FIN/NULL/Xmas scan: no SYN at all, only FIN or RST probes.
+        // FIN/NULL/Xmas scan: no SYN at all, only FIN or RST probes. Closed ports answer
+        // with RST, so there is no outbound-ratio condition.
         bool isFinNullXmasScan =
             flow.SynCount == 0 &&
             flow.AckCount == 0 &&
+            flow.FwdPackets > 3 &&
             (flow.FinCount > 3 || flow.RstCount > 3) &&
-            shortLived &&
-            mostlyOutbound;
+            shortLived;
 
         if (isFinNullXmasScan)
             return Verdict(AttackTypes.PortScan, "FIN/NULL/Xmas port scan");
 
-        // UDP scan: many small one-way UDP packets to a single port, no replies.
+        // UDP scan: a few small one-way UDP packets to a single port, no replies.
         bool isUdpScan =
             flow.Protocol == ProtocolNumbers.Udp &&
             flow.FwdPackets > 5 &&
             flow.FwdPackets <= 50 &&
             flow.BwdPackets == 0 &&
+            flow.PacketSizeMean < 100 &&
             shortLived;
 
         if (isUdpScan)
