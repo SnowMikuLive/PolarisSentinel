@@ -67,6 +67,7 @@
                         <th>Rule ID</th>
                         <th>Source</th>
                         <th>Destination</th>
+                        <th>Blocked</th>
                         <th>Protocol</th>
                         <th>Action</th>
                         <th>Status</th>
@@ -81,7 +82,7 @@
                     @if (Model.Count == 0)
                     {
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-3">No rules.</td>
+                            <td colspan="12" class="text-center text-muted py-3">No rules.</td>
                         </tr>
                     }
                     else
@@ -92,6 +93,16 @@
                                 <td class="fw-bold">@item.Id</td>
                                 <td>@FormatEndpoint(item.SourceIp, item.SourcePort)</td>
                                 <td>@FormatEndpoint(item.DestinationIp, item.DestinationPort)</td>
+                                <td>
+                                    @if (item.BlocksAddress)
+                                    {
+                                        <span class="badge bg-danger">IP @(string.IsNullOrEmpty(item.BlockedIp) ? "Any" : item.BlockedIp)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Port @(item.BlockedPort is null or 0 ? "Any" : item.BlockedPort.ToString())</span>
+                                    }
+                                </td>
                                 <td>@ProtocolName(item.Protocol)</td>
                                 <td><span class="badge bg-secondary">@item.Action</span></td>
                                 <td>

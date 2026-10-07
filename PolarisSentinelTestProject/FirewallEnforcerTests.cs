@@ -23,11 +23,15 @@ namespace PolarisSentienlUnitTestProject
 
             Assert.IsTrue(enforcer.IsDryRun);
             Assert.AreEqual("PolarisSentinel_Block_A-RF-1", rule.Name);
+            // The rule's 5-tuple mirrors the alert exactly.
             Assert.AreEqual("203.0.113.10", rule.SourceIp);
-            // The blocked address is mirrored onto the destination so the Rules view shows
-            // the IP instead of "Any"; the inbound direction still comes from the action.
-            Assert.AreEqual("203.0.113.10", rule.DestinationIp);
-            Assert.IsNull(rule.SourcePort);
+            Assert.AreEqual(44321, rule.SourcePort);
+            Assert.AreEqual("192.168.1.10", rule.DestinationIp);
+            Assert.AreEqual(80, rule.DestinationPort);
+            // The inbound-IP action blocks the alert's source address.
+            Assert.IsTrue(rule.BlocksAddress);
+            Assert.AreEqual("203.0.113.10", rule.BlockedIp);
+            Assert.IsNull(rule.BlockedPort);
             Assert.AreEqual((byte)ProtocolNumbers.Tcp, rule.Protocol);
             Assert.AreEqual("P-1", rule.PolicyId);
             Assert.AreEqual("A-RF-1", rule.AlertId);
@@ -41,8 +45,12 @@ namespace PolarisSentienlUnitTestProject
 
             var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundPort), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
+            // The 5-tuple mirrors the alert; the action blocks the destination port.
             Assert.AreEqual(80, rule.DestinationPort);
-            Assert.IsNull(rule.SourcePort);
+            Assert.AreEqual(44321, rule.SourcePort);
+            Assert.IsFalse(rule.BlocksAddress);
+            Assert.AreEqual(80, rule.BlockedPort);
+            Assert.IsNull(rule.BlockedIp);
         }
 
         [TestMethod]
@@ -53,9 +61,11 @@ namespace PolarisSentienlUnitTestProject
 
             var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockOutboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
+            // The 5-tuple mirrors the alert; the outbound-IP action blocks the destination.
+            Assert.AreEqual("203.0.113.10", rule.SourceIp);
             Assert.AreEqual("192.168.1.10", rule.DestinationIp);
-            // Mirrored onto the source so the blocked IP is visible in the Rules view.
-            Assert.AreEqual("192.168.1.10", rule.SourceIp);
+            Assert.IsTrue(rule.BlocksAddress);
+            Assert.AreEqual("192.168.1.10", rule.BlockedIp);
             Assert.AreEqual(PolicyAction.BlockOutboundIp, rule.Action);
         }
 

@@ -128,12 +128,10 @@ namespace PolarisSentinel.FirewallEnforement
                     return existing;
                 }
 
-                // An IP block constrains a single address. Record it on both endpoints so the
-                // Rules view shows the blocked IP under Source and Destination instead of
-                // "Any"; the direction (inbound vs outbound) still comes from the action.
-                bool ipBlock = decision.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp;
-                string blockedAddress = ipBlock ? spec.RemoteAddress ?? string.Empty : string.Empty;
-
+                // The rule's 5-tuple mirrors the originating alert exactly. Which address or
+                // port is actually blocked is decided by the policy action and derived from
+                // that 5-tuple (see Rule.BlockedIp / Rule.BlockedPort), so the Rules view can
+                // show both the observed endpoints and the block target.
                 var rule = new Rule
                 {
                     Id = ruleId,
@@ -142,14 +140,10 @@ namespace PolarisSentinel.FirewallEnforement
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
                     Action = decision.Action,
                     Status = RuleStatus.Active,
-                    SourceIp = ipBlock
-                        ? blockedAddress
-                        : spec.Direction == 1 ? spec.RemoteAddress ?? string.Empty : string.Empty,
-                    SourcePort = null,
-                    DestinationIp = ipBlock
-                        ? blockedAddress
-                        : spec.Direction == 2 ? spec.RemoteAddress ?? string.Empty : string.Empty,
-                    DestinationPort = spec.LocalPort ?? spec.RemotePort,
+                    SourceIp = alert.SourceIp,
+                    SourcePort = alert.SourcePort == 0 ? null : alert.SourcePort,
+                    DestinationIp = alert.DestinationIp,
+                    DestinationPort = alert.DestinationPort == 0 ? null : alert.DestinationPort,
                     Protocol = spec.Protocol,
                     CreatedAt = now,
                     UpdatedAt = now,

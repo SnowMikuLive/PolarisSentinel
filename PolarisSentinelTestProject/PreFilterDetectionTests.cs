@@ -101,10 +101,10 @@ namespace PolarisSentienlUnitTestProject
             Assert.IsEmpty(firewall.GetAllRules());
         }
 
-        // The generated rule records the blocked address on the destination too, so the
-        // Rules view shows the IP instead of "Any".
+        // The generated rule mirrors the alert's 5-tuple, and the blocked IP is exposed
+        // separately so the Rules view can show what is actually blocked.
         [TestMethod]
-        public void PreFilterVerdict_BlockRule_ShouldExposeBlockedAddressAsDestination()
+        public void PreFilterVerdict_BlockRule_ShouldMirrorAlertAndExposeBlockedIp()
         {
             var pipeline = CreatePipeline(new CountingInferenceEngine(), out _);
 
@@ -112,8 +112,12 @@ namespace PolarisSentienlUnitTestProject
 
             var rule = outcome.Rule!;
             Assert.AreEqual(PolicyAction.BlockInboundIp, rule.Action);
-            Assert.AreEqual("203.0.113.9", rule.SourceIp);
-            Assert.AreEqual("203.0.113.9", rule.DestinationIp);
+            // 5-tuple mirrors the alert.
+            Assert.AreEqual(outcome.Alert!.SourceIp, rule.SourceIp);
+            Assert.AreEqual(outcome.Alert.DestinationIp, rule.DestinationIp);
+            // The inbound-IP action blocks the alert's source address.
+            Assert.IsTrue(rule.BlocksAddress);
+            Assert.AreEqual("203.0.113.9", rule.BlockedIp);
         }
 
         // A spoofed/random-source flood targets the destination instead of the fake source,
@@ -139,7 +143,7 @@ namespace PolarisSentienlUnitTestProject
             var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy() });
 
             Assert.AreEqual("192.168.1.10", outcome.Alert!.SourceIp);
-            Assert.AreEqual("192.168.1.10", outcome.Rule!.SourceIp);
+            Assert.AreEqual("192.168.1.10", outcome.Rule!.BlockedIp);
         }
 
         #region Helper Methods

@@ -28,6 +28,18 @@
                 <dt class="col-sm-3">Destination Port</dt>
                 <dd class="col-sm-9">@(Model.DestinationPort is null or 0 ? "Any" : Model.DestinationPort.ToString())</dd>
 
+                <dt class="col-sm-3">Blocked</dt>
+                <dd class="col-sm-9">
+                    @if (Model.BlocksAddress)
+                    {
+                        <span class="badge bg-danger">IP @(string.IsNullOrEmpty(Model.BlockedIp) ? "Any" : Model.BlockedIp)</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger">Port @(Model.BlockedPort is null or 0 ? "Any" : Model.BlockedPort.ToString())</span>
+                    }
+                </dd>
+
                 <dt class="col-sm-3">Protocol</dt>
                 <dd class="col-sm-9">@ProtocolName(Model.Protocol)</dd>
 
