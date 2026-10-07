@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     /// <inheritdoc />
-    public partial class Inital : Migration
+    public partial class @new : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,6 +33,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                     RstCount = table.Column<int>(type: "int", nullable: false),
                     PshCount = table.Column<int>(type: "int", nullable: false),
                     FlowSnapshotJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    BehaviorSnapshotJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
@@ -276,15 +277,13 @@ namespace PolarisSentinel.DataAccess.Migrations
                 columns: new[] { "Id", "Action", "AttackType", "BlockDurationMinutes", "CreatedAt", "Description", "DetectionSource", "IfThreshold", "IsEnabled", "Name", "Priority", "RfThreshold", "UpdatedAt", "UserId" },
                 values: new object[,]
                 {
-                    { "P-1", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based DoS detection.", "PreFilter", null, true, "Prefilter DoS", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-1", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based DoS detection.", "HeuristicBased", null, true, "Heuristic DoS", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
                     { "P-2", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest port scan detection.", "RandomForest", null, true, "Random Forest PortScan", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
                     { "P-3", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest brute force detection.", "RandomForest", null, true, "Random Forest BruteForce", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-4", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based port scan detection.", "PreFilter", null, true, "Prefilter PortScan", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-5", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based brute force detection.", "PreFilter", null, true, "Prefilter BruteForce", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-6", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of an Isolation Forest DoS anomaly.", "IsolationForest", 0.6f, true, "Isolation Forest DoS", 80, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-7", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of an Isolation Forest port scan anomaly.", "IsolationForest", 0.6f, true, "Isolation Forest PortScan", 80, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-8", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of an Isolation Forest brute force anomaly.", "IsolationForest", 0.6f, true, "Isolation Forest BruteForce", 80, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-9", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest DoS detection.", "RandomForest", null, true, "Random Forest DoS", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
+                    { "P-4", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based port scan detection.", "HeuristicBased", null, true, "Heuristic PortScan", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-5", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based brute force detection.", "HeuristicBased", null, true, "Heuristic BruteForce", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-6", "BlockInboundIp", "Unknown_Anomaly", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of an Isolation Forest abnormal behavior.", "IsolationForest", 0.7f, true, "Isolation Forest abnormal", 90, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-7", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest DoS detection.", "RandomForest", null, true, "Random Forest DoS", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
                 });
 
             migrationBuilder.CreateIndex(

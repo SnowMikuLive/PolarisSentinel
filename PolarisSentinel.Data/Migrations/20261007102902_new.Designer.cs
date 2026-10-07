@@ -12,8 +12,8 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
-    [Migration("20261004015824_RenamePreFilterToHeuristicBased")]
-    partial class RenamePreFilterToHeuristicBased
+    [Migration("20261007102902_new")]
+    partial class @new
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -175,6 +175,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("BehaviorSnapshotJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<float?>("ConfidenceScore")
                         .HasColumnType("real");
@@ -374,53 +377,21 @@ namespace PolarisSentinel.DataAccess.Migrations
                         {
                             Id = "P-6",
                             Action = "BlockInboundIp",
-                            AttackType = "DoS",
+                            AttackType = "Unknown_Anomaly",
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of an Isolation Forest DoS anomaly.",
+                            Description = "Block the source of an Isolation Forest abnormal behavior.",
                             DetectionSource = "IsolationForest",
-                            IfThreshold = 0.6f,
+                            IfThreshold = 0.7f,
                             IsEnabled = true,
-                            Name = "Isolation Forest DoS",
-                            Priority = 80,
+                            Name = "Isolation Forest abnormal",
+                            Priority = 90,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
                         },
                         new
                         {
                             Id = "P-7",
-                            Action = "BlockInboundIp",
-                            AttackType = "PortScan",
-                            BlockDurationMinutes = 60,
-                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of an Isolation Forest port scan anomaly.",
-                            DetectionSource = "IsolationForest",
-                            IfThreshold = 0.6f,
-                            IsEnabled = true,
-                            Name = "Isolation Forest PortScan",
-                            Priority = 80,
-                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            UserId = "admin"
-                        },
-                        new
-                        {
-                            Id = "P-8",
-                            Action = "BlockInboundIp",
-                            AttackType = "BruteForce",
-                            BlockDurationMinutes = 60,
-                            CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of an Isolation Forest brute force anomaly.",
-                            DetectionSource = "IsolationForest",
-                            IfThreshold = 0.6f,
-                            IsEnabled = true,
-                            Name = "Isolation Forest BruteForce",
-                            Priority = 80,
-                            UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            UserId = "admin"
-                        },
-                        new
-                        {
-                            Id = "P-9",
                             Action = "BlockInboundIp",
                             AttackType = "DoS",
                             BlockDurationMinutes = 60,
@@ -690,19 +661,15 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.Rule", b =>
                 {
-                    b.HasOne("PolarisSentinel.Core.Models.Alert", "Alert")
+                    b.HasOne("PolarisSentinel.Core.Models.Alert", null)
                         .WithMany()
                         .HasForeignKey("AlertId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("PolarisSentinel.Core.Models.Policy", "Policy")
+                    b.HasOne("PolarisSentinel.Core.Models.Policy", null)
                         .WithMany()
                         .HasForeignKey("PolicyId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Alert");
-
-                    b.Navigation("Policy");
                 });
 #pragma warning restore 612, 618
         }
