@@ -43,6 +43,13 @@ public class RuleRepository : IRuleRepository
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
+    public async Task<Rule?> GetByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        return await _context.Rules
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Name == name, cancellationToken);
+    }
+
     public void Update(Rule rule)
     {
         // Rules are read with AsNoTracking(), so the passed-in instance is detached.

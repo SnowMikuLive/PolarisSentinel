@@ -88,4 +88,28 @@ public class PreFilterClassifierTests
 
         Assert.IsTrue(verdict.IsSuspicious);
     }
+
+    // A probe that had to be retransmitted is a scan signature, and it is only a handful of
+    // packets, so it must be classified before the small-flow gate.
+    [TestMethod]
+    public void SynProbe_ShouldBeScanned()
+    {
+        var flow = new FlowStatistics
+        {
+            Protocol = ProtocolNumbers.Tcp,
+            DestinationPort = 8080,
+            FwdPackets = 4,
+            BwdPackets = 0,
+            SynCount = 2,
+            RstCount = 2,
+            DurationSeconds = 0.5,
+            PacketSizeMean = 60
+        };
+
+        var verdict = Create().Classify(flow);
+
+        Assert.IsTrue(verdict.IsSuspicious);
+        Assert.AreEqual("PortScan: TCP SYN port scan", verdict.Description);
+    }
+
 }

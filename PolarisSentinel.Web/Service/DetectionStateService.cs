@@ -44,6 +44,9 @@ namespace PolarisSentinel.Web.Service
         public int SuspiciousCount { get; private set; }
         public int MaliciousCount { get; private set; }
 
+        // Traffic the firewall dropped because its source is blocked.
+        public int BlockedCount { get; private set; }
+
         public DetectionRecord Record(DetectionOutcome outcome)
         {
             var now = DateTime.Now;
@@ -79,6 +82,9 @@ namespace PolarisSentinel.Web.Service
                         break;
                     case TrafficVerdict.Malicious:
                         MaliciousCount++;
+                        break;
+                    case TrafficVerdict.Blocked:
+                        BlockedCount++;
                         break;
                 }
 
@@ -142,6 +148,9 @@ namespace PolarisSentinel.Web.Service
                         case nameof(TrafficVerdict.Malicious):
                             MaliciousCount++;
                             break;
+                        case nameof(TrafficVerdict.Blocked):
+                            BlockedCount++;
+                            break;
                     }
 
                     if (!string.IsNullOrEmpty(record.AlertId))
@@ -192,6 +201,7 @@ namespace PolarisSentinel.Web.Service
                     normal = NormalCount,
                     suspicious = SuspiciousCount,
                     malicious = MaliciousCount,
+                    blocked = BlockedCount,
                     // Newest first, and only the most recent window: serialising all 20k
                     // records on every dashboard poll is what stalls the browser.
                     recent = _live.Reverse().Take(MaxRecentRecords).Select(e => e.Record).ToArray()
@@ -199,7 +209,20 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Per-minute flow counts for the whole day, oldest first, for the line chart.
+        // The whole live window, oldest first (not capped like GetSnapshot).
+        public IReadOnlyList<DetectionRecord> GetLiveRecords()
+        {
+            var now = DateTime.Now;
+            PruneExpired(now);
+
+            lock (_lock)
+            {
+                return _live.Select(e => e.Record).ToArray();
+            }
+        }
+
+        // Per-minute flow counts for the whole day, oldest first, for the line chart. Normal
+        // and blocked traffic are counted separately so the chart can draw them as two lines.
         public object GetTrafficSeries()
         {
             var now = DateTime.Now;
@@ -215,7 +238,8 @@ namespace PolarisSentinel.Web.Service
                     .Select(g => new
                     {
                         time = g.Key.ToString("HH:mm"),
-                        count = g.Count()
+                        normal = g.Count(e => e.Record.Verdict == nameof(TrafficVerdict.Normal)),
+                        blocked = g.Count(e => e.Record.Verdict == nameof(TrafficVerdict.Blocked))
                     })
                     .ToArray();
 

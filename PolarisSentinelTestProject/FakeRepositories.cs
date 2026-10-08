@@ -19,6 +19,9 @@ namespace PolarisSentienlUnitTestProject
         public Task<Rule?> GetByIdAsync(string id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_rules.FirstOrDefault(r => r.Id == id));
 
+        public Task<Rule?> GetByNameAsync(string name, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_rules.FirstOrDefault(r => r.Name == name));
+
         public void Update(Rule rule)
         {
             var index = _rules.FindIndex(r => r.Id == rule.Id);
@@ -101,5 +104,39 @@ namespace PolarisSentienlUnitTestProject
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    // In-memory firewall gateway for tests.
+    internal sealed class FakeFirewallGateway : IFirewallGateway
+    {
+        public bool IsEnabled { get; set; } = true;
+
+        public string? DisabledReason { get; set; }
+
+        // Rules currently present in the "OS store".
+        public IReadOnlyList<string> ManagedNames { get; set; } = Array.Empty<string>();
+
+        public List<string> Applied { get; } = new();
+
+        public List<string> Removed { get; } = new();
+
+        public void Reevaluate()
+        {
+        }
+
+        public bool Apply(string ruleName, FirewallRuleSpec spec, bool ruleActive)
+        {
+            if (!IsEnabled)
+            {
+                return false;
+            }
+
+            Applied.Add(ruleName);
+            return true;
+        }
+
+        public void Remove(string ruleName) => Removed.Add(ruleName);
+
+        public IReadOnlyList<string> ListManagedNames() => ManagedNames;
     }
 }

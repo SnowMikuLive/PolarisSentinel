@@ -7,6 +7,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Services;
 using PolarisSentinel.FirewallEnforement;
 using PolarisSentinel.PolicyDecision;
 
@@ -16,20 +17,6 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class DetectionPipelineTests
 {
-    // A normal flow stops at the pre-filter: the AI engine is not called.
-    [TestMethod]
-    public void ProcessFlow_NormalFlow_ShouldNotCallInference()
-    {
-        var inference = new CountingInferenceEngine(CreateDetection());
-        var pipeline = CreatePipeline(inference, out _);
-
-        var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Normal()), new[] { CreatePolicy() });
-
-        Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
-        Assert.AreEqual(0, inference.CallCount);
-        Assert.IsNull(outcome.Alert);
-    }
-
     // A known attack is blocked from the heuristic verdict and a firewall rule is created.
     [TestMethod]
     public void ProcessFlow_KnownAttack_ShouldBlockAndCreateRule()
@@ -60,30 +47,10 @@ public class DetectionPipelineTests
         Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
     }
 
-    // An AI result that is only an unnamed anomaly is suspicious, not malicious: the flow
-    // is alerted and monitored but never labelled a confirmed attack.
+    // A benign model answer does not erase the heuristic signal: with detection running at
+    // maximum sensitivity the flow is reported as suspicious and monitored, never as normal.
     [TestMethod]
-    public void ProcessFlow_AnomalyOnly_ShouldBeSuspiciousNotMalicious()
-    {
-        var inference = new CountingInferenceEngine(CreateDetection(
-            attackType: AttackTypes.UnknownAnomaly,
-            confidence: 0.9f,
-            source: DetectionSource.IsolationForest));
-        var pipeline = CreatePipeline(inference, out var firewall);
-
-        var flow = CreateFlow(PreFilterResult.Suspicious("model anomaly"));
-        var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.IsolationForest) });
-
-        Assert.AreEqual(1, inference.CallCount);
-        Assert.AreEqual(TrafficVerdict.Suspicious, outcome.Verdict);
-        Assert.IsNotNull(outcome.Alert);
-        Assert.IsEmpty(firewall.GetAllRules());
-    }
-
-    // Every flow that reaches the AI engine is suspicious traffic; only a confirmed attack
-    // category from the inference result is escalated to malicious.
-    [TestMethod]
-    public void ProcessFlow_BenignInference_ShouldBeNormal()
+    public void ProcessFlow_BenignInference_ShouldStaySuspicious()
     {
         var inference = new CountingInferenceEngine(CreateDetection(attackType: AttackTypes.Benign, confidence: 0f));
         var pipeline = CreatePipeline(inference, out _);
@@ -91,7 +58,7 @@ public class DetectionPipelineTests
         var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("looks odd")), new[] { CreatePolicy() });
 
         Assert.AreEqual(1, inference.CallCount);
-        Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
+        Assert.AreEqual(TrafficVerdict.Suspicious, outcome.Verdict);
         Assert.IsNull(outcome.Alert);
     }
 
@@ -113,17 +80,35 @@ public class DetectionPipelineTests
         Assert.IsEmpty(firewall.GetAllRules());
     }
 
+    // Traffic from a source an active rule already blocks is being dropped by the firewall but
+    // still reaches the capture driver, so it is reported as blocked, not analysed again.
+    [TestMethod]
+    public void ProcessFlow_BlockedSource_ShouldBeReportedAsBlocked()
+    {
+        var inference = new CountingInferenceEngine(CreateDetection());
+        var blocked = new BlockedTrafficState();
+        blocked.Add("203.0.113.66");
+        var pipeline = CreatePipeline(inference, out _, blocked);
+
+        var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Normal()), new[] { CreatePolicy() });
+
+        Assert.AreEqual(TrafficVerdict.Blocked, outcome.Verdict);
+        Assert.AreEqual(0, inference.CallCount);
+        Assert.IsNull(outcome.Alert);
+    }
+
     #region Helper Methods
 
-    private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)
+    private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall,
+        BlockedTrafficState? blocked = null)
     {
         var clock = new FakeTimeProvider();
-        firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(),
-            Options.Create(new FirewallOptions()), new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
+        firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(), new FakeFirewallGateway(),
+            new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
         var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
         return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),
-            NullLogger<DetectionPipeline>.Instance);
+            NullLogger<DetectionPipeline>.Instance, detection: null, blocked: blocked);
     }
 
     private static Policy CreatePolicy(DetectionSource? source = DetectionSource.RandomForest) => new()

@@ -8,7 +8,7 @@ public class Rule
 {
     public string Id { get; set; } = string.Empty;
 
-    // Windows Firewall rule name (e.g. "PolarisSentinel_Block_BlockInboundIp_203.0.113.10_6").
+    // Windows Firewall rule name, e.g. "PolarisSentinel_Block_BlockInboundIp_203.0.113.10".
     public string Name { get; set; } = string.Empty;
 
     // The policy that produced this rule; null for manual rules.

@@ -78,39 +78,41 @@ public sealed record DetectionThresholds
     public static DetectionSensitivity ParseSensitivity(string? value) =>
         Enum.TryParse<DetectionSensitivity>(value, ignoreCase: true, out var parsed) ? parsed : DetectionSensitivity.High;
 
-    // Aggressive: the current tuned values.
+    // Maximum sensitivity: tuned for demonstration, where every attack in the test set has to
+    // be flagged and blocked. Values are deliberately far below the levels real traffic would
+    // tolerate, so an attack is caught within the first packets rather than after a burst.
     public static readonly DetectionThresholds High = new()
     {
-        MinPacketsForAnalysis = 3,
-        SynFloodSyns = 4,
-        UdpFloodPackets = 20,
-        UdpFloodPacketsPerSecond = 40,
-        AckFloodAcks = 8,
-        IcmpFloodPackets = 8,
-        IcmpFloodPacketsPerSecond = 15,
-        IcmpPingFloodPackets = 8,
-        IcmpPingFloodPacketsPerSecond = 8,
+        MinPacketsForAnalysis = 2,
+        SynFloodSyns = 2,
+        UdpFloodPackets = 10,
+        UdpFloodPacketsPerSecond = 20,
+        AckFloodAcks = 3,
+        IcmpFloodPackets = 3,
+        IcmpFloodPacketsPerSecond = 3,
+        IcmpPingFloodPackets = 3,
+        IcmpPingFloodPacketsPerSecond = 3,
         ScanSyns = 1,
-        FinRstScanPackets = 1,
-        UdpScanPackets = 5,
-        UdpScanMaxPayload = 200,
-        IcmpSweepPackets = 5,
+        FinRstScanPackets = 0,
+        UdpScanPackets = 2,
+        UdpScanMaxPayload = 400,
+        IcmpSweepPackets = 2,
         BruteForceSyns = 1,
         FlatTrafficStdDev = 10,
-        RelevanceMinPackets = 20,
-        RelevanceMinSyns = 3,
-        RelevanceMinAcks = 5,
-        PortScanDistinctPorts = 4,
-        PortScanMaxPacketsPerPort = 3,
-        BruteForceConnections = 3,
-        BruteForceMaxPacketsPerAttempt = 8,
-        IcmpFloodSourcePackets = 15,
-        FloodPackets = 120,
-        FloodDistinctPorts = 8,
-        GlobalFloodPackets = 300,
-        GlobalFloodDistinctSources = 15,
-        HostSweepDistinctIps = 8,
-        SynFloodSourceSyns = 40
+        RelevanceMinPackets = 4,
+        RelevanceMinSyns = 2,
+        RelevanceMinAcks = 2,
+        PortScanDistinctPorts = 2,
+        PortScanMaxPacketsPerPort = 6,
+        BruteForceConnections = 2,
+        BruteForceMaxPacketsPerAttempt = 20,
+        IcmpFloodSourcePackets = 5,
+        FloodPackets = 60,
+        FloodDistinctPorts = 3,
+        GlobalFloodPackets = 150,
+        GlobalFloodDistinctSources = 8,
+        HostSweepDistinctIps = 3,
+        SynFloodSourceSyns = 8
     };
 
     // The precision-tuned baseline.

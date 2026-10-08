@@ -16,6 +16,7 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DetectionPipeline> _logger;
     private readonly DetectionRuntimeState? _detection;
+    private readonly BlockedTrafficState? _blocked;
 
     // Alert ids are allocated by scanning the table for the highest "A-n". Flows complete
     // concurrently (one DI scope each), so two detections in a burst can compute the same
@@ -29,7 +30,8 @@ public class DetectionPipeline : IDetectionPipeline
         IFirewallEnforcer firewall,
         IUnitOfWork unitOfWork,
         ILogger<DetectionPipeline> logger,
-        DetectionRuntimeState? detection = null)
+        DetectionRuntimeState? detection = null,
+        BlockedTrafficState? blocked = null)
     {
         _inference = inference;
         _policy = policy;
@@ -37,6 +39,7 @@ public class DetectionPipeline : IDetectionPipeline
         _unitOfWork = unitOfWork;
         _logger = logger;
         _detection = detection;
+        _blocked = blocked;
     }
 
     public DetectionOutcome ProcessFlow(FlowFeatureVector flow, IReadOnlyList<Policy> policies)
@@ -56,6 +59,23 @@ public class DetectionPipeline : IDetectionPipeline
             {
                 Verdict = TrafficVerdict.Normal,
                 Description = "Outbound flow; not evaluated as an inbound attack.",
+                SourceIp = flow.SourceIp,
+                SourcePort = flow.SourcePort,
+                DestinationIp = flow.DestinationIp,
+                DestinationPort = flow.DestinationPort
+            };
+        }
+
+        // A source an active rule already blocks is being dropped by Windows Firewall. The
+        // capture driver sits below the firewall, so those packets still arrive: report them
+        // as dropped rather than detecting and analysing the same attack over again. A known
+        // attack keeps its alert below, so the attack type stays on record.
+        if (verdict is not { IsKnownAttack: true } && _blocked?.IsBlocked(flow.SourceIp) == true)
+        {
+            return new DetectionOutcome
+            {
+                Verdict = TrafficVerdict.Blocked,
+                Description = "Blocked by an active rule; dropped by the firewall.",
                 SourceIp = flow.SourceIp,
                 SourcePort = flow.SourcePort,
                 DestinationIp = flow.DestinationIp,
@@ -107,10 +127,13 @@ public class DetectionPipeline : IDetectionPipeline
         var detection = _inference.Detect(flow);
         if (detection.AttackType == AttackTypes.Benign)
         {
+            // The model only knows the attack families it was trained on, so a benign answer
+            // must not erase a behavioural signal: the flow stays suspicious (reported and
+            // monitored) instead of being shown as normal traffic.
             return new DetectionOutcome
             {
-                Verdict = TrafficVerdict.Normal,
-                Description = "No attack detected.",
+                Verdict = TrafficVerdict.Suspicious,
+                Description = $"{verdict?.Description} | Model: Benign",
                 SourceIp = flow.SourceIp,
                 SourcePort = flow.SourcePort,
                 DestinationIp = flow.DestinationIp,
@@ -189,6 +212,12 @@ public class DetectionPipeline : IDetectionPipeline
                     _logger.LogInformation(
                         "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
                         alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
+
+                    // Publishes the block immediately; the sweeper re-syncs the registry anyway.
+                    if (rule.BlocksAddress)
+                    {
+                        _blocked?.Add(rule.BlockedIp);
+                    }
                 }
                 catch (Exception ex)
                 {

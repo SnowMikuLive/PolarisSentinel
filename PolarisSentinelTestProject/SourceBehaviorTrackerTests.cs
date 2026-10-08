@@ -17,8 +17,8 @@ public class SourceBehaviorTrackerTests
     private static SourceBehaviorTracker CreateTracker() =>
         new(TimeSpan.FromSeconds(10), DetectionThresholds.Preset(DetectionSensitivity.High));
 
-    private static PacketObservation Syn(int port, int msOffset) =>
-        new(Attacker, Victim, port, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset));
+    private static PacketObservation Syn(int port, int msOffset, bool inbound = true) =>
+        new(Attacker, Victim, port, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset), IsInbound: inbound);
 
     // A scan touching many distinct ports is caught even though each port is its own flow.
     [TestMethod]
@@ -81,5 +81,61 @@ public class SourceBehaviorTrackerTests
         Assert.IsNotNull(verdict);
         Assert.IsTrue(verdict.IsKnownAttack);
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
+    }
+
+    // Many packets on each port is a client with real sessions, not a scanner.
+    [TestMethod]
+    public void BusyMultiPortClient_ShouldNotBeReportedAsAScan()
+    {
+        var tracker = CreateTracker();
+
+        for (int port = 0; port < 6; port++)
+        {
+            for (int i = 0; i < 25; i++)
+            {
+                tracker.Observe(Syn(port: 4000 + port, msOffset: port * 25 + i));
+            }
+        }
+
+        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
+
+        Assert.IsNotNull(verdict);
+        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
+    }
+
+    // A modest hping3 style SYN flood: a handful of SYNs with no handshake from one source is
+    // enough at maximum sensitivity, instead of waiting for a full flood volume.
+    [TestMethod]
+    public void ModestSynFlood_ShouldBeDetected()
+    {
+        var tracker = CreateTracker();
+
+        for (int i = 0; i < 10; i++)
+        {
+            tracker.Observe(Syn(port: 80, msOffset: i * 20));
+        }
+
+        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
+
+        Assert.IsNotNull(verdict);
+        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
+    }
+
+    // The host's own outbound connections are not attacks against it, so they are not tracked.
+    [TestMethod]
+    public void OutboundPackets_ShouldBeIgnored()
+    {
+        var tracker = CreateTracker();
+        PreFilterResult? verdict = null;
+
+        for (int i = 0; i < 300; i++)
+        {
+            var packet = Syn(port: 7000 + i, msOffset: i * 5, inbound: false);
+            tracker.Observe(packet);
+            verdict = tracker.EvaluateFast(packet);
+        }
+
+        Assert.IsNull(verdict);
+        Assert.IsNull(tracker.Evaluate(Attacker, Start.AddSeconds(2)));
     }
 }

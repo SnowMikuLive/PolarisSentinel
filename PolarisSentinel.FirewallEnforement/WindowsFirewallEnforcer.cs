@@ -1,6 +1,4 @@
-using System.Security.Principal;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
@@ -9,95 +7,41 @@ using PolarisSentinel.Core.Models;
 namespace PolarisSentinel.FirewallEnforement
 {
     // Applies firewall rules to Windows Firewall and mirrors them into the rule repository.
-    // DryRun skips new Windows blocks; existing rules are still removed when requested or expired.
+    // All OS access goes through the shared IFirewallGateway.
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
+        private readonly IFirewallGateway _gateway;
         private readonly FirewallRuntimeState _state;
-        private WindowsFirewall? _firewall;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
 
-        // Process-wide: every DI scope builds its own enforcer (one per processed flow),
-        // and the sweeper and manual rule management run on other threads. Rule ids are
-        // allocated by scanning the table, so rule mutations must be serialized across all
-        // instances or concurrent blocks can collide on the same id.
+        // One enforcer per flow; serialized so two blocks cannot allocate the same rule id.
         private static readonly object _lock = new object();
 
-        public bool IsDryRun => _firewall == null;
+        public bool IsDryRun => !_gateway.IsEnabled;
 
-        public string? DryRunReason { get; private set; }
+        public string? DryRunReason => _gateway.DisabledReason;
 
         public WindowsFirewallEnforcer(
             IRuleRepository rules,
-            IOptions<FirewallOptions> options,
+            IFirewallGateway gateway,
             FirewallRuntimeState state,
             TimeProvider timeProvider,
             ILogger<WindowsFirewallEnforcer> logger)
         {
             _rules = rules;
+            _gateway = gateway;
             _state = state;
             _timeProvider = timeProvider;
             _logger = logger;
-
-            // The runtime state (seeded from config) is the source of truth; it can be
-            // toggled from the dashboard after startup.
-            EvaluateEnforcement();
         }
 
-        // Opens or releases the real Windows Firewall handle to match the runtime DryRun flag.
-        // Called at construction and whenever the dashboard toggles the setting.
-        private void EvaluateEnforcement()
-        {
-            lock (_lock)
-            {
-                if (_state.DryRun)
-                {
-                    _firewall = null;
-                    DryRunReason = "disabled (dry-run enabled from the dashboard)";
-                    _logger.LogWarning("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
-                    return;
-                }
-
-                try
-                {
-                    if (!OperatingSystem.IsWindows())
-                    {
-                        _firewall = null;
-                        DryRunReason = "Windows Firewall is unavailable on this platform";
-                        _logger.LogError("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
-                        return;
-                    }
-
-                    using var identity = WindowsIdentity.GetCurrent();
-                    var principal = new WindowsPrincipal(identity);
-                    // Writing the system firewall needs administrator rights.
-                    if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
-                    {
-                        _firewall = null;
-                        DryRunReason = "administrator rights are required";
-                        _logger.LogError("Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
-                        return;
-                    }
-
-                    _firewall = new WindowsFirewall();
-                    DryRunReason = null;
-                    _logger.LogInformation("Real Windows Firewall execution enabled");
-                }
-                catch (Exception ex)
-                {
-                    _firewall = null;
-                    DryRunReason = "Windows Firewall could not be opened";
-                    _logger.LogError(ex, "Firewall DRY-RUN: {Reason}. Detections are recorded but NOT blocked.", DryRunReason);
-                }
-            }
-        }
-
-        // Turns dry-run on/off at runtime and returns the resulting enforcement status.
+        // Turns dry-run on/off and returns the resulting enforcement status.
         public (bool DryRun, string? Reason) SetDryRun(bool dryRun)
         {
             _state.DryRun = dryRun;
-            EvaluateEnforcement();
+            _gateway.Reevaluate();
             return (IsDryRun, DryRunReason);
         }
 
@@ -114,15 +58,14 @@ namespace PolarisSentinel.FirewallEnforement
             {
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
-                var ruleId = _rules.NextIdAsync().GetAwaiter().GetResult();
 
-                // Name the rule after the block target, not the alert, so repeated attacks
-                // from the same source reuse and extend one rule instead of piling up.
+                // Named after the block target so repeated attacks reuse one rule.
                 string target = spec.RemoteAddress ?? spec.LocalPort?.ToString() ?? spec.RemotePort?.ToString() ?? string.Empty;
-                string ruleName = EntityIds.FirewallRule($"{decision.Action}_{target}_{spec.Protocol}");
+                string ruleName = spec.RemoteAddress is not null
+                    ? EntityIds.FirewallRule($"{decision.Action}_{target}")
+                    : EntityIds.FirewallRule($"{decision.Action}_{target}_{spec.Protocol}");
 
-                var existing = _rules.GetAllAsync().GetAwaiter().GetResult()
-                    .FirstOrDefault(r => r.Name == ruleName);
+                var existing = _rules.GetByNameAsync(ruleName).GetAwaiter().GetResult();
                 if (existing != null)
                 {
                     if (expiresAt > existing.ExpiresAt)
@@ -134,9 +77,6 @@ namespace PolarisSentinel.FirewallEnforement
                         _rules.SaveChangesAsync().GetAwaiter().GetResult();
                     }
 
-                    // Re-push an active rule so it is enforced even if it was first recorded
-                    // while dry-run was on or its Windows entry was otherwise lost. A
-                    // non-active rule is left disabled (operator intent).
                     if (existing.Status == RuleStatus.Active)
                     {
                         SaveToWindows(existing, SpecFrom(existing));
@@ -144,11 +84,9 @@ namespace PolarisSentinel.FirewallEnforement
                     return existing;
                 }
 
-                // The rule's 5-tuple mirrors the originating alert. What is blocked is
-                // derived from the action (see Rule.BlockedIp / Rule.BlockedPort).
                 var rule = new Rule
                 {
-                    Id = ruleId,
+                    Id = _rules.NextIdAsync().GetAwaiter().GetResult(),
                     Name = ruleName,
                     PolicyId = string.IsNullOrEmpty(policyId) ? null : policyId,
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
@@ -285,6 +223,85 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
+        // Removes OS rules the database no longer tracks, and re-pushes Active rules missing
+        // from the OS. Does nothing while enforcement is off.
+        public int Reconcile()
+        {
+            lock (_lock)
+            {
+                var managed = _gateway.ListManagedNames();
+                if (managed.Count == 0 && !_gateway.IsEnabled)
+                {
+                    return 0;
+                }
+
+                var managedSet = managed.ToHashSet(StringComparer.Ordinal);
+                var rules = _rules.GetAllAsync().GetAwaiter().GetResult();
+                var tracked = rules
+                    .Select(r => r.Name)
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToHashSet(StringComparer.Ordinal);
+
+                int changes = 0;
+
+                foreach (var name in managedSet)
+                {
+                    if (tracked.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        _gateway.Remove(name);
+                        changes++;
+                        _logger.LogInformation("Removed orphaned firewall rule {RuleName}", name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to remove orphaned firewall rule {RuleName}", name);
+                    }
+                }
+
+                // Re-push Active rules whose Windows entry is missing.
+                foreach (var rule in rules)
+                {
+                    if (rule.Status != RuleStatus.Active ||
+                        string.IsNullOrEmpty(rule.Name) ||
+                        managedSet.Contains(rule.Name))
+                    {
+                        continue;
+                    }
+
+                    var spec = FirewallRuleSpec.FromRule(rule);
+                    if (spec is null)
+                    {
+                        _logger.LogWarning("Cannot re-push rule {RuleName}: its action is not representable", rule.Name);
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (_gateway.Apply(rule.Name, spec, ruleActive: true))
+                        {
+                            changes++;
+                            _logger.LogInformation("Re-pushed missing firewall rule {RuleName}", rule.Name);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to re-push firewall rule {RuleName}", rule.Name);
+                    }
+                }
+
+                if (changes > 0)
+                {
+                    _logger.LogWarning("Reconciled firewall: {Count} change(s)", changes);
+                }
+                return changes;
+            }
+        }
+
         public IReadOnlyList<Rule> GetAllRules()
         {
             lock (_lock)
@@ -301,62 +318,25 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        private static FirewallRuleSpec SpecFrom(Rule rule) => FirewallRuleSpec.FromRule(rule);
+        private static FirewallRuleSpec? SpecFrom(Rule rule) => FirewallRuleSpec.FromRule(rule);
 
-        // Push a rule to the Windows Firewall API (skipped in dry-run).
-        private void SaveToWindows(Rule rule, FirewallRuleSpec spec)
+        private void SaveToWindows(Rule rule, FirewallRuleSpec? spec)
         {
-            if (_firewall == null || !OperatingSystem.IsWindows())
+            if (spec is null)
             {
+                _logger.LogWarning("Cannot apply rule {RuleName}: its action is not representable", rule.Name);
                 return;
             }
 
-            // An address rule normalises the remote address; a port rule leaves it as
-            // "*" (any) and scopes the block with the local/remote port instead.
-            bool anyAddress = string.IsNullOrWhiteSpace(spec.RemoteAddress);
-            string? ip = anyAddress ? "*" : NormalizeIp(spec.RemoteAddress!);
-            if (ip == null)
-            {
-                _logger.LogWarning("Cannot apply rule {RuleName}: invalid address {Address}", rule.Name, spec.RemoteAddress);
-                return;
-            }
-
-            _firewall.Save(new FirewallStoredRule
-            {
-                Name = rule.Name,
-                RemoteAddress = ip,
-                LocalPort = spec.LocalPort ?? 0,
-                RemotePort = spec.RemotePort ?? 0,
-                Protocol = spec.Protocol,
-                Enabled = rule.Status == RuleStatus.Active,
-                Direction = spec.Direction
-            });
+            _gateway.Apply(rule.Name, spec, rule.Status == RuleStatus.Active);
         }
 
         private void RemoveFromWindows(string ruleName)
         {
             if (!string.IsNullOrEmpty(ruleName))
             {
-                RemoveWindowsRule(ruleName);
+                _gateway.Remove(ruleName);
             }
-        }
-
-        // Cleanup must work in dry-run without enabling new blocks.
-        protected virtual void RemoveWindowsRule(string ruleName)
-        {
-            if (!OperatingSystem.IsWindows()) return;
-            var cleanupFirewall = _firewall ?? new WindowsFirewall();
-            cleanupFirewall.Remove(ruleName);
-        }
-
-        private static string? NormalizeIp(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return null;
-            }
-
-            return NetworkAddress.TryNormalize(value, out var normalized) ? normalized : null;
         }
     }
 }

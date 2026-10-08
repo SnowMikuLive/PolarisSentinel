@@ -51,6 +51,11 @@ namespace PolarisSentinel
                 heuristicEnabled: true,
                 sp.GetRequiredService<IUserSettingsStore>()));
 
+            // Addresses an active rule currently blocks, so the dashboard can show the traffic
+            // the firewall is dropping (the capture driver sits below the firewall and still
+            // sees those packets).
+            builder.Services.AddSingleton<BlockedTrafficState>();
+
             // Runtime-toggleable enforcement state, seeded from configuration or the user's
             // saved choice. The dashboard can flip DryRun after startup; a singleton so every
             // enforcer sees the change.
@@ -167,11 +172,18 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
                 new PolicyEngine(sp.GetRequiredService<ILogger<PolicyEngine>>()));
 
+            // Process-wide Windows Firewall gateway: owns the COM handle, the administrator
+            // check and the dry-run evaluation, so the per-flow enforcer never opens COM.
+            builder.Services.AddSingleton<IFirewallGateway>(sp =>
+                new WindowsFirewallGateway(
+                    sp.GetRequiredService<FirewallRuntimeState>(),
+                    sp.GetRequiredService<ILogger<WindowsFirewallGateway>>()));
+
             // Firewall enforcer stages rules; the pipeline commits them after the alert exists.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>
                 new WindowsFirewallEnforcer(
                     sp.GetRequiredService<IUnitOfWork>().Rules,
-                    sp.GetRequiredService<IOptions<FirewallOptions>>(),
+                    sp.GetRequiredService<IFirewallGateway>(),
                     sp.GetRequiredService<FirewallRuntimeState>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
@@ -184,7 +196,8 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IFirewallEnforcer>(),
                     sp.GetRequiredService<IUnitOfWork>(),
                     sp.GetRequiredService<ILogger<DetectionPipeline>>(),
-                    sp.GetRequiredService<DetectionRuntimeState>()));
+                    sp.GetRequiredService<DetectionRuntimeState>(),
+                    sp.GetRequiredService<BlockedTrafficState>()));
 
             // Application use case: process one completed flow against the enabled policies.
             builder.Services.AddScoped<FlowProcessingService>();

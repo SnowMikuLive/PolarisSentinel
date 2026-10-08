@@ -31,6 +31,9 @@ public interface IFirewallEnforcer
     // Remove rules whose expiry has passed.
     int RemoveExpired();
 
+    // Remove OS rules the database no longer tracks, and re-push Active rules that are missing.
+    int Reconcile();
+
     // Every rule this application created.
     IReadOnlyList<Rule> GetAllRules();
 

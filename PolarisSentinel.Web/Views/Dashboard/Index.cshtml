@@ -125,9 +125,12 @@
 
     @* Rolling 24-hour window of classified flows, restored on page load. *@
     <div class="card shadow-sm border-primary mt-3">
-        <div class="card-header bg-primary text-white">
-            Live Traffic (last 24 hours)
-            <span class="float-end small" id="liveCount">0 record(s)</span>
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>Live Traffic (last 24 hours)</span>
+            <span class="d-flex align-items-center gap-3">
+                <span class="small" id="liveCount">0 record(s)</span>
+                <a asp-controller="Dashboard" asp-action="ExportLiveTraffic" class="btn btn-sm btn-light">Export CSV</a>
+            </span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive" style="max-height: 360px; overflow-y: auto;">
@@ -162,11 +165,11 @@
         const verdictChart = new Chart(document.getElementById('verdictChart').getContext('2d'), {
             type: 'bar',
             data: {
-                labels: ['Normal', 'Suspicious', 'Malicious'],
+                labels: ['Normal', 'Suspicious', 'Malicious', 'Blocked'],
                 datasets: [{
                     label: 'Flows',
-                    data: [0, 0, 0],
-                    backgroundColor: ['#198754', '#ffc107', '#dc3545']
+                    data: [0, 0, 0, 0],
+                    backgroundColor: ['#198754', '#ffc107', '#dc3545', '#6c757d']
                 }]
             },
             options: {
@@ -183,10 +186,18 @@
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Live traffic (flows per minute)',
+                    label: 'Normal traffic (flows per minute)',
                     data: [],
                     borderColor: '#2563EB',
                     backgroundColor: 'rgba(37,99,235,0.1)',
+                    fill: true,
+                    tension: 0.3
+                }, {
+                    // Traffic the firewall dropped because its source is blocked.
+                    label: 'Blocked traffic (flows per minute)',
+                    data: [],
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.12)',
                     fill: true,
                     tension: 0.3
                 }]
@@ -194,6 +205,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                plugins: { legend: { display: true } },
                 scales: {
                     x: { title: { display: true, text: 'Local time' } },
                     y: { beginAtZero: true, ticks: { precision: 0 } }
@@ -201,19 +213,20 @@
             }
         });
 
-        const testRates = [20, 25, 22, 30, 28, 35, 120, 300, 550, 800,
+        const testNormalRates = [20, 25, 22, 30, 28, 35, 120, 300, 550, 800,
             650, 450, 200, 80, 35, 25, 22, 20, 24, 21];
-        const testTimes = testRates.map((_, i) => i * 5);
-        let liveRates = [];
+        const testBlockedRates = [0, 0, 0, 0, 0, 0, 0, 0, 0, 140,
+            260, 380, 300, 180, 60, 0, 0, 0, 0, 0];
+        const testTimes = testNormalRates.map((_, i) => i * 5);
         let liveTimes = [];
+        let liveNormal = [];
+        let liveBlocked = [];
 
         function showTrafficChart() {
             const isTest = trafficSource.value === 'test';
             trafficChart.data.labels = (isTest ? testTimes : liveTimes).slice();
-            trafficChart.data.datasets[0].data = (isTest ? testRates : liveRates).slice();
-            trafficChart.data.datasets[0].label = isTest
-                ? 'Test sample (packets per second)'
-                : 'Live traffic (flows per minute)';
+            trafficChart.data.datasets[0].data = (isTest ? testNormalRates : liveNormal).slice();
+            trafficChart.data.datasets[1].data = (isTest ? testBlockedRates : liveBlocked).slice();
             trafficChart.options.scales.x.title.text = isTest ? 'Elapsed time (seconds)' : 'Local time';
             document.getElementById('trafficSourceNote').textContent = isTest
                 ? 'Fixed sample data at 5-second intervals. Dashboard counters and alerts continue to show live data.'
@@ -224,14 +237,15 @@
         trafficSource.addEventListener('change', showTrafficChart);
 
         // 实时和历史曲线统一使用每分钟流数。
-        // Use flows per minute for both live updates and history.
+        // Normal and blocked traffic are both plotted per minute.
         function loadTrafficSeries() {
             return fetch('/api/detections/traffic-series')
                 .then(r => r.json())
                 .then(data => {
                     const points = data.points || [];
                     liveTimes = points.map(p => p.time);
-                    liveRates = points.map(p => p.count);
+                    liveNormal = points.map(p => p.normal);
+                    liveBlocked = points.map(p => p.blocked);
                     if (trafficSource.value === 'live') showTrafficChart();
                 })
                 .catch(err => console.error('Failed to fetch traffic series', err));
@@ -240,7 +254,7 @@
         function applyState(state) {
             document.getElementById('c-captured').textContent = state.capturedFlows;
             document.getElementById('c-alerts').textContent = state.alerts;
-            verdictChart.data.datasets[0].data = [state.normal, state.suspicious, state.malicious];
+            verdictChart.data.datasets[0].data = [state.normal, state.suspicious, state.malicious, state.blocked];
             verdictChart.update();
             renderLive(state.recent);
         }
@@ -258,7 +272,8 @@
 
             body.innerHTML = list.map(function (d) {
                 const badge = d.verdict === 'Malicious' ? 'bg-danger'
-                    : d.verdict === 'Suspicious' ? 'bg-warning text-dark' : 'bg-success';
+                    : d.verdict === 'Suspicious' ? 'bg-warning text-dark'
+                    : d.verdict === 'Blocked' ? 'bg-secondary' : 'bg-success';
                 const confidence = d.confidenceScore == null ? 'N/A' : Number(d.confidenceScore).toFixed(3);
                 const source = d.sourceIp ? (d.sourceIp + (d.sourcePort ? ':' + d.sourcePort : '')) : '-';
                 const destination = d.destinationIp ? (d.destinationIp + (d.destinationPort ? ':' + d.destinationPort : '')) : '-';

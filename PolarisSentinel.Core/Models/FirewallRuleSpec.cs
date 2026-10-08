@@ -28,9 +28,10 @@ public class FirewallRuleSpec
         Create(action, alert.SourceIp, alert.DestinationIp, alert.DestinationPort, alert.Protocol, out error);
 
     // Rebuilds the spec for a persisted rule (its 5-tuple mirrors the originating alert).
-    public static FirewallRuleSpec FromRule(Rule rule) =>
+    // Null when the rule's action/protocol combination is not representable as a rule.
+    public static FirewallRuleSpec? FromRule(Rule rule) =>
         Create(rule.Action, rule.SourceIp ?? string.Empty, rule.DestinationIp ?? string.Empty,
-            rule.DestinationPort ?? 0, rule.Protocol ?? 0, out _)!;
+            rule.DestinationPort ?? 0, rule.Protocol ?? 0, out _);
 
     private static FirewallRuleSpec? Create(
         PolicyAction action, string sourceIp, string destinationIp, int destinationPort, byte protocol, out string? error)
@@ -55,9 +56,10 @@ public class FirewallRuleSpec
 
         return action switch
         {
-            PolicyAction.BlockInboundIp => new FirewallRuleSpec { Direction = 1, RemoteAddress = sourceIp, Protocol = protocol },
+            // An address block is protocol-agnostic so it covers the whole host.
+            PolicyAction.BlockInboundIp => new FirewallRuleSpec { Direction = 1, RemoteAddress = sourceIp, Protocol = 0 },
+            PolicyAction.BlockOutboundIp => new FirewallRuleSpec { Direction = 2, RemoteAddress = destinationIp, Protocol = 0 },
             PolicyAction.BlockInboundPort => new FirewallRuleSpec { Direction = 1, LocalPort = destinationPort, Protocol = protocol },
-            PolicyAction.BlockOutboundIp => new FirewallRuleSpec { Direction = 2, RemoteAddress = destinationIp, Protocol = protocol },
             PolicyAction.BlockOutboundPort => new FirewallRuleSpec { Direction = 2, RemotePort = destinationPort, Protocol = protocol },
             _ => null
         };

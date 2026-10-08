@@ -12,7 +12,8 @@ public readonly record struct PacketObservation(
     bool IsSyn,
     bool IsRst,
     int PacketSize,
-    DateTime Timestamp);
+    DateTime Timestamp,
+    bool IsInbound = true);
 
 // Detects aggregate behaviour across many short flows from one source (port scans,
 // brute-force runs, floods) that a single flow cannot reveal. Also tracks a global
@@ -32,9 +33,15 @@ public sealed class SourceBehaviorTracker
     private readonly int _hostSweepDistinctIps;
     private readonly int _synFloodSyns;
     private readonly TimeSpan _cooldown;
+    private readonly TimeSpan _scanWindow;
 
     private readonly object _lock = new();
     private readonly Dictionary<string, SourceWindow> _sources = new();
+
+    // Probes seen from each source, kept over a horizon long enough to cover a port range
+    // walked slowly. Separate from the volume window so a scan spread over a minute is not
+    // forgotten between windows.
+    private readonly Dictionary<string, ScanWindow> _scans = new();
 
     // Global window of every observed packet, so a flood spread across many spoofed sources
     // (where no single source window accumulates) is still visible. Each entry keeps its
@@ -44,11 +51,15 @@ public sealed class SourceBehaviorTracker
     private DateTime _globalLastFlaggedAt = DateTime.MinValue;
 
     private const int MaxTrackedSources = 50000;
+    private const int MaxScanEntries = 4096;
+    private const int MaxPacketsPerProbedHost = 2;
+    private static readonly TimeSpan ScanPruneInterval = TimeSpan.FromSeconds(1);
 
     public SourceBehaviorTracker(
         TimeSpan window,
         DetectionThresholds thresholds,
-        TimeSpan? cooldown = null)
+        TimeSpan? cooldown = null,
+        TimeSpan? scanWindow = null)
     {
         _window = window;
         _portScanDistinctPorts = thresholds.PortScanDistinctPorts;
@@ -63,10 +74,18 @@ public sealed class SourceBehaviorTracker
         _hostSweepDistinctIps = thresholds.HostSweepDistinctIps;
         _synFloodSyns = thresholds.SynFloodSourceSyns;
         _cooldown = cooldown ?? TimeSpan.FromSeconds(30);
+        _scanWindow = scanWindow ?? TimeSpan.FromMinutes(1);
     }
 
     public void Observe(PacketObservation packet)
     {
+        // Only traffic aimed at this host is analysed. The host's own outbound connections
+        // would otherwise read as scans and floods aimed at the remote side.
+        if (!packet.IsInbound)
+        {
+            return;
+        }
+
         lock (_lock)
         {
             _globalPackets.Enqueue((packet.Timestamp, packet.SourceIp));
@@ -85,6 +104,74 @@ public sealed class SourceBehaviorTracker
             }
 
             window.Add(packet, _window);
+            ObserveProbe(packet);
+        }
+    }
+
+    // Records a probe against its destination port and host. Only SYNs and ICMP echo
+    // requests count: the scanned host answers each probe, so counting replies would make
+    // the victim look like the scanner.
+    private void ObserveProbe(PacketObservation packet)
+    {
+        if (!packet.IsSyn && packet.Protocol != ProtocolNumbers.Icmp)
+        {
+            return;
+        }
+
+        if (!_scans.TryGetValue(packet.SourceIp, out var scan))
+        {
+            if (_scans.Count >= MaxTrackedSources)
+            {
+                return;
+            }
+
+            scan = new ScanWindow();
+            _scans[packet.SourceIp] = scan;
+        }
+
+        scan.LastSeen = packet.Timestamp;
+        PruneScan(scan, packet.Timestamp);
+        Bump(scan.Ports, packet.DestinationPort, packet.Timestamp);
+        Bump(scan.Hosts, packet.DestinationIp, packet.Timestamp);
+    }
+
+    // Counts a probe against a key, without letting a fast scan grow the map without bound.
+    private static void Bump<TKey>(Dictionary<TKey, ScanEntry> map, TKey key, DateTime now) where TKey : notnull
+    {
+        if (map.TryGetValue(key, out var entry))
+        {
+            map[key] = entry with { Packets = entry.Packets + 1, LastSeen = now };
+        }
+        else if (map.Count < MaxScanEntries)
+        {
+            map.Add(key, new ScanEntry(1, now));
+        }
+    }
+
+    // Drops probes that fell out of the scan window. Throttled because it walks the maps.
+    private void PruneScan(ScanWindow scan, DateTime now)
+    {
+        if (now - scan.LastPrunedAt < ScanPruneInterval)
+        {
+            return;
+        }
+
+        scan.LastPrunedAt = now;
+        DropStale(scan.Ports, now);
+        DropStale(scan.Hosts, now);
+    }
+
+    private void DropStale<TKey>(Dictionary<TKey, ScanEntry> map, DateTime now) where TKey : notnull
+    {
+        if (map.Count == 0)
+        {
+            return;
+        }
+
+        var stale = map.Where(kv => now - kv.Value.LastSeen > _scanWindow).Select(kv => kv.Key).ToList();
+        foreach (var key in stale)
+        {
+            map.Remove(key);
         }
     }
 
@@ -114,7 +201,7 @@ public sealed class SourceBehaviorTracker
                 return null;
             }
 
-            var verdict = Classify(window);
+            var verdict = Classify(window, _scans.GetValueOrDefault(packet.SourceIp));
             if (verdict is null)
             {
                 return null;
@@ -161,7 +248,7 @@ public sealed class SourceBehaviorTracker
                 return null;
             }
 
-            var verdict = Classify(window);
+            var verdict = Classify(window, _scans.GetValueOrDefault(sourceIp));
             if (verdict is null)
             {
                 return null;
@@ -187,17 +274,46 @@ public sealed class SourceBehaviorTracker
             {
                 _sources.Remove(ip);
             }
+
+            var staleScans = _scans
+                .Where(kv => now - kv.Value.LastSeen > _scanWindow)
+                .Select(kv => kv.Key)
+                .ToList();
+
+            foreach (var ip in staleScans)
+            {
+                _scans.Remove(ip);
+            }
         }
     }
 
-    private PreFilterResult? Classify(SourceWindow window)
+    private PreFilterResult? Classify(SourceWindow window, ScanWindow? scan)
     {
         // The snapshot is only built for the verdict that actually fires, so the per-packet
         // fast-path does not allocate on every observation.
         BehaviorWindowStats Build() => window.Snapshot(_window);
 
-        // Volume rules first: a high packet count is stronger evidence than port spread,
-        // and a multi-port flood would otherwise be mislabelled as a port scan.
+        // Scan rules come first, because they are the more specific signature: a scan crosses
+        // the volume thresholds too, and would otherwise be reported as a generic flood.
+        // Only ports that were probed once or twice count, which is what separates a scanner
+        // walking a port range from a client that holds real sessions on the ports it uses.
+        int probedPorts = scan is null ? 0 : scan.Ports.Count(kv => kv.Value.Packets <= _portScanMaxPacketsPerPort);
+        if (probedPorts >= _portScanDistinctPorts)
+        {
+            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
+                $"Port scan: {probedPorts} ports probed from one source", Build());
+        }
+
+        // The same test horizontally: a sweep probes many hosts a packet or two each.
+        int probedHosts = scan is null ? 0 : scan.Hosts.Count(kv => kv.Value.Packets <= MaxPacketsPerProbedHost);
+        if (probedHosts >= _hostSweepDistinctIps)
+        {
+            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
+                $"Host sweep: {probedHosts} hosts probed from one source", Build());
+        }
+
+        // Volume rules: a high packet count is stronger evidence than port spread, and a
+        // multi-port flood would otherwise be mislabelled as a port scan.
         if (window.TotalPackets >= _floodPackets && window.DistinctPorts.Count >= _floodDistinctPorts)
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
@@ -256,6 +372,17 @@ public sealed class SourceBehaviorTracker
         }
 
         return null;
+    }
+
+    // One probed port or host: how many probes hit it, and when the last one arrived.
+    private readonly record struct ScanEntry(int Packets, DateTime LastSeen);
+
+    private sealed class ScanWindow
+    {
+        public readonly Dictionary<int, ScanEntry> Ports = new();
+        public readonly Dictionary<string, ScanEntry> Hosts = new();
+        public DateTime LastPrunedAt;
+        public DateTime LastSeen;
     }
 
     private sealed class SourceWindow

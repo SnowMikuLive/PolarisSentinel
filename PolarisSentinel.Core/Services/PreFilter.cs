@@ -19,14 +19,21 @@ public sealed class PreFilter
     // Classifies a finished flow as known attack, suspicious (for the AI engine), or normal.
     public PreFilterResult Classify(FlowStatistics flow)
     {
-        if (flow.TotalPackets < _t.MinPacketsForAnalysis)
-            return PreFilterResult.Normal();
-
         // The flow key orders endpoints by IP string, so normalise the dominant sender forward.
         var direction = Normalise(flow);
 
+        // Scan signatures are checked before the packet floor below: a probe flow is only a
+        // couple of packets, so gating them behind MinPacketsForAnalysis hid every scan whose
+        // probes each landed in their own short flow.
+        var scan = DetectScan(direction);
+        if (scan is not null)
+            return scan;
+
+        if (flow.TotalPackets < _t.MinPacketsForAnalysis)
+            return PreFilterResult.Normal();
+
         // Attack signatures run before the benign filters: floods can be short-lived.
-        var attack = DetectFlood(direction) ?? DetectScan(direction) ?? DetectBruteForce(direction);
+        var attack = DetectFlood(direction) ?? DetectBruteForce(direction);
         if (attack is not null)
             return attack;
 
@@ -124,12 +131,14 @@ public sealed class PreFilter
         if (isSynFlood)
             return Verdict(AttackTypes.DoS, "TCP SYN flood");
 
-        // UDP flood: high one-way UDP packet rate, no reply traffic.
+        // UDP flood: high one-way UDP packet rate, no reply traffic. The payload cap keeps a
+        // one-way bulk transfer (media, backup) out of this rule: a flood is small packets.
         bool isUdpFlood =
             flow.Protocol == ProtocolNumbers.Udp &&
             oneWay &&
             flow.FwdPackets > _t.UdpFloodPackets &&
-            flow.FwdPacketsPerSecond > _t.UdpFloodPacketsPerSecond;
+            flow.FwdPacketsPerSecond > _t.UdpFloodPacketsPerSecond &&
+            flow.PacketSizeMean < _t.UdpScanMaxPayload;
 
         if (isUdpFlood)
             return Verdict(AttackTypes.DoS, "UDP flood");

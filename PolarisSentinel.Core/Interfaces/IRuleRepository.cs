@@ -13,6 +13,8 @@ public interface IRuleRepository
 
     Task<Rule?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
 
+    Task<Rule?> GetByNameAsync(string name, CancellationToken cancellationToken = default);
+
     void Update(Rule rule);
 
     void Remove(Rule rule);

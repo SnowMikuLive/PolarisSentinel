@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PolarisSentinel.Core.Constants;
@@ -17,7 +16,7 @@ public class FirewallEnforcerUnitTest
     [TestMethod]
     public void Apply_ShouldBuildRuleForEachAction()
     {
-        var (enforcer, _) = CreateEnforcer();
+        var (enforcer, _, _) = CreateEnforcer();
         var alert = CreateAlert();
 
         var inboundIp = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
@@ -38,48 +37,58 @@ public class FirewallEnforcerUnitTest
         Assert.AreEqual(80, outboundPort.BlockedPort);
     }
 
+    // An address block is protocol-agnostic.
     [TestMethod]
-    public void RemoveAndRemoveAll_ShouldDeleteRules()
+    public void AddressBlock_ShouldBeProtocolAgnostic()
     {
-        var (enforcer, _) = CreateEnforcer();
         var alert = CreateAlert();
-        var rule = enforcer.Apply(Decision(alert, PolicyAction.BlockInboundIp), "P-1", alert.Id, AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-        Assert.IsTrue(enforcer.Remove(rule.Id));
-        Assert.IsEmpty(enforcer.GetAllRules());
+        var inbound = FirewallRuleSpec.TryCreate(PolicyAction.BlockInboundIp, alert, out var error);
+        Assert.IsNull(error);
+        Assert.IsNotNull(inbound);
+        Assert.AreEqual("203.0.113.10", inbound!.RemoteAddress);
+        Assert.AreEqual(0, inbound.Protocol, "An inbound IP block must not inherit the alert protocol.");
+        Assert.IsNull(inbound.LocalPort);
+        Assert.IsNull(inbound.RemotePort);
 
-        var first = CreateAlert("A-RF-1");
-        first.SourceIp = "203.0.113.1";
-        var second = CreateAlert("A-RF-2");
-        second.SourceIp = "203.0.113.2";
-        enforcer.Apply(Decision(first, PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
-        enforcer.Apply(Decision(second, PolicyAction.BlockInboundIp), "P-1", "A-RF-2", AttackTypes.PortScan, TimeSpan.FromMinutes(60));
+        var outbound = FirewallRuleSpec.TryCreate(PolicyAction.BlockOutboundIp, alert, out _);
+        Assert.AreEqual("192.168.1.10", outbound!.RemoteAddress);
+        Assert.AreEqual(0, outbound.Protocol, "An outbound IP block must not inherit the alert protocol.");
+    }
 
-        Assert.AreEqual(2, enforcer.RemoveAll());
-        Assert.IsEmpty(enforcer.GetAllRules());
+    // Rules the database no longer tracks are removed from the OS.
+    [TestMethod]
+    public void Reconcile_ShouldRemoveUntrackedRules()
+    {
+        var (enforcer, repository, gateway) = CreateEnforcer();
+        enforcer.Apply(Decision(CreateAlert(), PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+
+        var tracked = repository.GetAllAsync().GetAwaiter().GetResult().Single().Name;
+        gateway.ManagedNames =
+        [
+            tracked,
+            "PolarisSentinel_Block_A-34",
+            "PolarisSentinel_Block_A-35"
+        ];
+
+        int changes = enforcer.Reconcile();
+
+        Assert.AreEqual(2, changes);
+        CollectionAssert.AreEquivalent(
+            new[] { "PolarisSentinel_Block_A-34", "PolarisSentinel_Block_A-35" },
+            gateway.Removed);
     }
 
     #region Helper Methods
 
-    private static (TestFirewallEnforcer Enforcer, FakeRuleRepository Repository) CreateEnforcer()
+    private static (WindowsFirewallEnforcer Enforcer, FakeRuleRepository Repository, FakeFirewallGateway Gateway) CreateEnforcer()
     {
         var repository = new FakeRuleRepository();
-        var enforcer = new TestFirewallEnforcer(repository, new FakeTimeProvider());
-        return (enforcer, repository);
-    }
-
-    // Keeps the test off the real Windows Firewall COM API when a rule is removed.
-    private sealed class TestFirewallEnforcer : WindowsFirewallEnforcer
-    {
-        public TestFirewallEnforcer(FakeRuleRepository repository, FakeTimeProvider clock)
-            : base(repository, Options.Create(new FirewallOptions { DryRun = true }),
-                new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance)
-        {
-        }
-
-        protected override void RemoveWindowsRule(string ruleName)
-        {
-        }
+        var gateway = new FakeFirewallGateway();
+        var enforcer = new WindowsFirewallEnforcer(
+            repository, gateway, new FirewallRuntimeState(dryRun: true), new FakeTimeProvider(),
+            NullLogger<WindowsFirewallEnforcer>.Instance);
+        return (enforcer, repository, gateway);
     }
 
     private static PolicyDecision Decision(Alert alert, PolicyAction action) =>

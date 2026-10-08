@@ -46,15 +46,15 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             target.Name = rule.Name;
+            // INetFwRule requires Protocol, then ports, then addresses to be set in that order.
             // 256 = any protocol; 0 is not a valid Windows Firewall protocol value.
             target.Protocol = rule.Protocol == 0 ? 256 : rule.Protocol;
+            SetPorts(target, rule);
             target.RemoteAddresses = rule.RemoteAddress;
             target.Direction = rule.Direction;
             target.Action = 0;
             target.Profiles = int.MaxValue;
             target.Enabled = rule.Enabled;
-
-            SetPorts(target, rule);
 
             // Update the existing rule when extending; do not Add again.
             if (existing == null)
@@ -63,16 +63,18 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        // Windows Firewall uses "*" for every port; 0 means "not specified".
-        // A port filter cannot be combined with the Any protocol, so that combination
-        // is rejected rather than silently widened into an all-port block.
+        // Ports are only valid for TCP/UDP; for Any and ICMP they must be left unset.
         private static void SetPorts(dynamic target, FirewallStoredRule rule)
         {
-            bool anyProtocol = rule.Protocol == 0;
-            if (anyProtocol && (rule.LocalPort != 0 || rule.RemotePort != 0))
+            bool portCapable = rule.Protocol is ProtocolNumbers.Tcp or ProtocolNumbers.Udp;
+            if (!portCapable)
             {
-                throw new ArgumentException(
-                    "A port filter cannot be applied with the Any protocol; specify TCP or UDP.");
+                if (rule.LocalPort != 0 || rule.RemotePort != 0)
+                {
+                    throw new ArgumentException(
+                        "A port filter requires the TCP or UDP protocol.");
+                }
+                return;
             }
 
             target.LocalPorts = rule.LocalPort == 0 ? "*" : rule.LocalPort.ToString();
@@ -90,6 +92,22 @@ namespace PolarisSentinel.FirewallEnforement
                     return;
                 }
             }
+        }
+
+        // Names of the managed rules currently present in Windows Firewall.
+        public IReadOnlyList<string> ListManagedNames()
+        {
+            var names = new List<string>();
+            foreach (dynamic rule in _rules)
+            {
+                string name = (string)rule.Name;
+                if (!string.IsNullOrEmpty(name) &&
+                    name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal))
+                {
+                    names.Add(name);
+                }
+            }
+            return names;
         }
 
         private static void CheckName(string name)

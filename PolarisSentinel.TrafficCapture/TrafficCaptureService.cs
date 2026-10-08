@@ -54,6 +54,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     // Behavioural detection window: a source is judged on the last N seconds of activity.
     private static readonly TimeSpan BehaviorWindow = TimeSpan.FromSeconds(10);
 
+    // Minimum gap between two behavioural alerts for the same source. Short, so an attack in
+    // progress is re-reported continuously instead of only once per half minute.
+    private static readonly TimeSpan BehaviorCooldown = TimeSpan.FromSeconds(5);
+
     public event EventHandler<FlowFeatureVector>? OnFlowCompleted;
     public event EventHandler<LiveTrafficSummary>? OnLiveTrafficSummary;
 
@@ -65,7 +69,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
         _preFilter = new PreFilter(thresholds);
-        _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds);
+        _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds, BehaviorCooldown);
         _detection = detection;
 
         // Both timers start suspended and only tick once Start(deviceName) is called.
@@ -337,7 +341,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 IsSyn: tcpPacket?.Synchronize ?? false,
                 IsRst: tcpPacket?.Reset ?? false,
                 PacketSize: packetSize,
-                Timestamp: now);
+                Timestamp: now,
+                IsInbound: IsInboundPacket(srcIp, dstIp));
             _behavior.Observe(observation);
 
             // Emit the alert the instant a threshold is crossed, without waiting for expiry.
