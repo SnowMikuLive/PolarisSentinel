@@ -39,6 +39,22 @@ public class DetectionPipeline : IDetectionPipeline
     {
         var verdict = flow.PreFilterVerdict;
 
+        // Only inbound traffic (remote -> local) is treated as an attack. Outbound flows are
+        // still captured and shown on the dashboard, but this system defends the host, so it
+        // never raises an alert or blocks on traffic the host itself initiated.
+        if (!flow.IsInbound)
+        {
+            return new DetectionOutcome
+            {
+                Verdict = TrafficVerdict.Normal,
+                Description = "Outbound flow; not evaluated as an inbound attack.",
+                SourceIp = flow.SourceIp,
+                SourcePort = flow.SourcePort,
+                DestinationIp = flow.DestinationIp,
+                DestinationPort = flow.DestinationPort
+            };
+        }
+
         // A known attack is alerted and blocked from the pre-filter verdict. The AI engine
         // still runs so its opinion is recorded on the alert (the heuristic verdict stays
         // authoritative for blocking).
@@ -62,7 +78,8 @@ public class DetectionPipeline : IDetectionPipeline
                 _logger.LogWarning(ex, "Model opinion failed for a known attack; enforcing the heuristic verdict.");
             }
 
-            return Evaluate(alert, policies);
+            // A heuristic known attack is a confirmed malicious flow regardless of the model.
+            return Evaluate(alert, policies, malicious: true);
         }
 
         if (verdict is not { IsSuspicious: true })
@@ -77,6 +94,8 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
+        // Everything that reaches the AI engine is suspicious traffic; it only becomes
+        // malicious when the inference result is a confirmed attack category.
         var detection = _inference.Detect(flow);
         if (detection.AttackType == AttackTypes.Benign)
         {
@@ -105,11 +124,16 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        return Evaluate(detection, policies);
+        // The AI inference result decides the final verdict: only a confirmed attack
+        // category (DoS / PortScan / BruteForce) is malicious; an unnamed anomaly is
+        // suspicious and is monitored rather than treated as a confirmed attack.
+        return Evaluate(detection, policies, malicious: AttackTypes.IsMalicious(detection.AttackType));
     }
 
     // Runs the alert through policy evaluation and, when blocked, firewall enforcement.
-    private DetectionOutcome Evaluate(Alert alert, IReadOnlyList<Policy> policies)
+    // The malicious flag is supplied by the caller from the AI inference result, so the
+    // pipeline never labels a flow malicious on the strength of reaching this stage alone.
+    private DetectionOutcome Evaluate(Alert alert, IReadOnlyList<Policy> policies, bool malicious)
     {
         // Only non-benign detections are alerted; a benign flow never reaches persistence.
         if (alert.AttackType == AttackTypes.Benign)
@@ -171,7 +195,9 @@ public class DetectionPipeline : IDetectionPipeline
 
             return new DetectionOutcome
             {
-                Verdict = TrafficVerdict.Malicious,
+                // Only a confirmed attack is malicious; anything else that produced an alert
+                // (e.g. an unnamed anomaly) stays suspicious.
+                Verdict = malicious ? TrafficVerdict.Malicious : TrafficVerdict.Suspicious,
                 Description = alert.Description ?? decision.Reason,
                 Alert = alert,
                 Decision = decision,

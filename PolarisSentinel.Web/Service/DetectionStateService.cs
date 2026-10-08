@@ -18,7 +18,9 @@ namespace PolarisSentinel.Web.Service
         string Reason,
         string Source,
         string? RuleName,
-        string Verdict);
+        string Verdict,
+        string DecisionReason,
+        string DecisionText);
 
     // Singleton runtime counters and the live traffic window for the current day.
     public class DetectionStateService
@@ -53,7 +55,9 @@ namespace PolarisSentinel.Web.Service
                 outcome.Alert?.Description ?? outcome.Decision?.Reason ?? outcome.Description ?? string.Empty,
                 outcome.Alert?.DetectionSource.ToString() ?? DetectionSource.None.ToString(),
                 outcome.Rule?.Name,
-                outcome.Verdict.ToString());
+                outcome.Verdict.ToString(),
+                outcome.Decision?.Reason ?? string.Empty,
+                outcome.Decision?.ReasonText ?? string.Empty);
 
             lock (_lock)
             {
@@ -113,7 +117,9 @@ namespace PolarisSentinel.Web.Service
                         record.Reason,
                         record.Source,
                         record.RuleName,
-                        record.Verdict);
+                        record.Verdict,
+                        string.Empty,
+                        string.Empty);
 
                     _live.Add((record.CreatedAt, detection));
 

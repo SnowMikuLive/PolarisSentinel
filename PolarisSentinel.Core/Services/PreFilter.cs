@@ -30,36 +30,55 @@ public sealed class PreFilter
         if (attack is not null)
             return attack;
 
-        // Short-lived flow, likely a handshake fragment.
-        if (flow.DurationSeconds < 0.1)
+        // Only flows that carry a signal relevant to DoS, port scanning or brute force are
+        // forwarded to the AI engine. Everything else is unrelated to the three attack
+        // families this system detects, so it is dropped as normal rather than analysed.
+        if (!IsRelevantToTrackedAttacks(direction))
             return PreFilterResult.Normal();
 
-        // Unidirectional traffic, typical of broadcast/multicast.
-        if (direction.FwdPackets == 0 || direction.BwdPackets == 0)
-            return PreFilterResult.Normal();
+        // Relevant but below the attack signatures: hand it to the AI engine for a verdict.
+        return PreFilterResult.Suspicious("Flow relevant to a tracked attack; forwarded to the AI engine.");
+    }
 
-        bool isNormalWebTraffic =
-            (direction.DestinationPort == 443 || direction.DestinationPort == 80) &&
-            direction.FwdPackets > 5 &&
-            direction.BwdPackets > 5 &&
-            direction.SynCount <= 1 &&
-            direction.RstCount == 0 &&
-            direction.FinCount <= 2 &&
-            direction.DownUpRatio > 0.1 &&
-            direction.DownUpRatio < 10;
+    // Relevance gate: true when the flow shows any signal that could belong to one of the
+    // three tracked attack families (DoS, port scan, brute force). These are weaker than the
+    // attack signatures above: they mark "worth analysing", not "attack", so the AI engine
+    // still makes the final call. Flows that match none are unrelated traffic and are skipped.
+    private bool IsRelevantToTrackedAttacks(FlowStatistics flow)
+    {
+        // Brute force: any traffic to the authentication ports it targets.
+        if (flow.DestinationPort == 22 || flow.DestinationPort == 21)
+            return true;
 
-        if (isNormalWebTraffic)
-            return PreFilterResult.Normal();
+        // ICMP is only ever interesting as a flood or a sweep.
+        if (flow.Protocol == ProtocolNumbers.Icmp)
+            return true;
 
-        bool isOrdinaryTwoWayTraffic =
-            direction.DurationSeconds > 1.0 &&
-            direction.SynCount <= 1;
+        // One-way bursts are only relevant when they look like probes/floods, not payload-heavy
+        // transfers: a large mean packet size means bulk data (media, download), not an attack.
+        bool oneWay = flow.BwdPackets <= flow.FwdPackets * 0.1;
+        if (oneWay &&
+            flow.FwdPackets >= _t.RelevanceMinPackets &&
+            flow.PacketSizeMean < _t.UdpScanMaxPayload)
+            return true;
 
-        if (isOrdinaryTwoWayTraffic)
-            return PreFilterResult.Normal();
+        // DoS: a flood is a one-way stampede. SYN/ACK volume only counts when the flow is
+        // predominantly one-way, because ordinary two-way traffic carries an ACK on almost
+        // every packet and would otherwise always look relevant.
+        bool mostlyOneWay = flow.BwdPackets <= flow.FwdPackets * 0.3;
+        if (mostlyOneWay &&
+            (flow.SynCount >= _t.RelevanceMinSyns || flow.AckCount >= _t.RelevanceMinAcks))
+            return true;
 
-        // Every rule has been evaluated and nothing matched: hand it to the AI engine.
-        return PreFilterResult.Suspicious("Suspicious flow forwarded to the AI engine.");
+        // Port scan: short-lived, mostly one-way probe bursts of small packets.
+        bool shortLived = flow.DurationSeconds < 2.0;
+        if (shortLived &&
+            mostlyOneWay &&
+            flow.FwdPackets >= _t.RelevanceMinPackets &&
+            flow.PacketSizeMean < _t.UdpScanMaxPayload)
+            return true;
+
+        return false;
     }
 
     // Returns the flow as seen from the dominant sender, so the attack rules can

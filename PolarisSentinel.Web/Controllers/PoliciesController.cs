@@ -22,11 +22,61 @@ namespace PolarisSentinel.Web.Controllers
             _policies = policies;
         }
 
-        public async Task<IActionResult> Index(CancellationToken cancellationToken)
+        public async Task<IActionResult> Index(string? search = null, string? sort = null, CancellationToken cancellationToken = default)
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
+
+            // Free-text search across the fields an operator scans by.
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                policies = policies
+                    .Where(p =>
+                        Contains(p.Id, term) ||
+                        Contains(p.Name, term) ||
+                        Contains(p.AttackType, term) ||
+                        Contains(p.DetectionSource?.ToString(), term))
+                    .ToList();
+            }
+
+            // Highest priority first by default: that is the order the engine evaluates them.
+            policies = sort switch
+            {
+                "name" => policies.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList(),
+                "action" => policies.OrderBy(p => p.Action).ThenByDescending(p => p.Priority).ToList(),
+                "enabled" => policies.OrderByDescending(p => p.IsEnabled).ThenByDescending(p => p.Priority).ToList(),
+                _ => policies.OrderByDescending(p => p.Priority).ThenBy(p => p.Id, StringComparer.Ordinal).ToList()
+            };
+
+            ViewBag.Search = search;
+            ViewBag.Sort = sort;
+
             return View(policies);
         }
+
+        // Quick enable/disable without opening the full edit form.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Toggle(string id, CancellationToken cancellationToken)
+        {
+            var policy = await FindAsync(id, cancellationToken);
+            if (policy == null)
+            {
+                return NotFound();
+            }
+
+            policy.IsEnabled = !policy.IsEnabled;
+            policy.UpdatedAt = DateTime.Now;
+            _uow.Policies.Update(policy);
+            await _uow.SaveChangesAsync(cancellationToken);
+
+            TempData["success"] = $"Policy {policy.Id} {(policy.IsEnabled ? "enabled" : "disabled")}.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // Case-insensitive substring test that tolerates null fields.
+        private static bool Contains(string? value, string term) =>
+            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
@@ -147,6 +197,17 @@ namespace PolarisSentinel.Web.Controllers
             await _uow.SaveChangesAsync(cancellationToken);
 
             TempData["success"] = "Policy deleted.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // Deletes every policy. Rules keep their PolicyId as a historical reference; the
+        // FK is ON DELETE SET NULL, so those rules simply lose the link.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)
+        {
+            int removed = await _uow.Policies.RemoveAllAsync(cancellationToken);
+            TempData["success"] = $"{removed} policy(ies) removed.";
             return RedirectToAction(nameof(Index));
         }
 

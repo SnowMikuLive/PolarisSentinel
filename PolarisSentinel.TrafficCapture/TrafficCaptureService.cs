@@ -27,6 +27,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     // Last known-good device list; never replaced by a smaller (transiently incomplete) one.
     private List<NetworkInterfaceInfo> _cachedDevices = new();
 
+    // The local host's own IP addresses on the capture interface. Used to orient each flow so
+    // the remote endpoint is the source (the endpoint the detection logic reasons about), and
+    // to mark whether a flow is inbound (remote -> local) or outbound (local -> remote).
+    // Populated in Start(); empty means every endpoint is treated as remote.
+    private readonly HashSet<string> _localAddresses = new(StringComparer.OrdinalIgnoreCase);
+
     // Fast-path counters, reset every time OnLiveTrafficSummary fires.
     private long _packetsSinceLastTick;
     private long _bytesSinceLastTick;
@@ -170,11 +176,56 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         throw new InvalidOperationException($"No capture device found with name '{deviceName}'.");
     }
 
+    // Records the interface's own addresses so each flow can be oriented and classified by
+    // direction. Falls back to the cached device snapshot when the live device exposes none.
+    private void RefreshLocalAddresses(ICaptureDevice device)
+    {
+        _localAddresses.Clear();
+
+        try
+        {
+            if (device is LibPcapLiveDevice liveDevice)
+            {
+                foreach (var address in liveDevice.Addresses)
+                {
+                    var ip = address.Addr?.ipAddress?.ToString();
+                    if (!string.IsNullOrEmpty(ip))
+                    {
+                        _localAddresses.Add(ip);
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // A device whose addresses cannot be read leaves the set empty; orientation then
+            // falls back to the cached snapshot below.
+        }
+
+        if (_localAddresses.Count == 0)
+        {
+            foreach (var info in SnapshotDevices())
+            {
+                if (!string.IsNullOrEmpty(info.IpAddress))
+                {
+                    _localAddresses.Add(info.IpAddress);
+                }
+            }
+        }
+    }
+
+    // True when the address belongs to this host.
+    private bool IsLocalAddress(string ip) => _localAddresses.Contains(ip);
+
     public void Start(string deviceName)
     {
         // The device list is cached by SharpPcap. After a flood the adapter state can
         // change, so resolve with a retry loop before giving up.
         _device = ResolveDevice(deviceName);
+
+        // Snapshot the interface's own addresses so each flow can be oriented and its
+        // direction (inbound/outbound) classified.
+        RefreshLocalAddresses(_device);
 
         _device.OnPacketArrival += OnPacketArrival;
         _device.Open(DeviceModes.Promiscuous, 1000);
@@ -292,17 +343,38 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             return;
         }
 
+        // Orient the flow so the remote endpoint is the source, which is what the detection
+        // logic reasons about (it blocks the source). For an inbound flow the first packet's
+        // source is already remote; for an outbound flow the local host sent first, so the
+        // endpoints are swapped to keep the remote endpoint as the source. When neither or
+        // both endpoints are local, the first packet's order is kept.
+        bool srcIsLocal = IsLocalAddress(srcIp);
+        bool dstIsLocal = IsLocalAddress(dstIp);
+        bool swap = srcIsLocal && !dstIsLocal;
+
+        string flowSourceIp = swap ? dstIp : srcIp;
+        ushort flowSourcePort = swap ? dstPort : srcPort;
+        string flowDestinationIp = swap ? srcIp : dstIp;
+        ushort flowDestinationPort = swap ? srcPort : dstPort;
+
+        // Inbound when the remote endpoint is the source we just derived, i.e. the traffic
+        // arrived at this host. Outbound flows are still captured and shown, just not treated
+        // as inbound attacks.
+        bool isInbound = dstIsLocal && !srcIsLocal;
+
         var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
         {
             StartTime = now,
             LastSeenTime = now,
             Protocol = protocol,
-            DestinationPort = dstPort,
-            SourceIp = srcIp,
-            SourcePort = srcPort,
-            DestinationIp = dstIp
+            DestinationPort = flowDestinationPort,
+            SourceIp = flowSourceIp,
+            SourcePort = flowSourcePort,
+            DestinationIp = flowDestinationIp,
+            IsInbound = isInbound
         });
 
+        // Forward means "the packet's source is the flow's source" (the remote endpoint).
         bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
 
         lock (flow) // packets for the same flow can arrive back-to-back on the capture thread
@@ -423,7 +495,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 FinCount = featureVector.FinCount,
                 RstCount = featureVector.RstCount,
                 PshCount = featureVector.PshCount,
-                PreFilterVerdict = verdict
+                PreFilterVerdict = verdict,
+                IsInbound = flow.IsInbound
             };
 
             // Hand off to the thread pool so a slow subscriber (DB + inference + SignalR)
@@ -490,7 +563,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             FinCount = tcpPacket?.Finished == true ? 1 : 0,
             RstCount = tcpPacket?.Reset == true ? 1 : 0,
             PshCount = tcpPacket?.Push == true ? 1 : 0,
-            PreFilterVerdict = verdict
+            PreFilterVerdict = verdict,
+            // Only an inbound packet (destination is this host) is an inbound attack.
+            IsInbound = IsLocalAddress(destinationIp) && !IsLocalAddress(sourceIp)
         };
 
         ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));

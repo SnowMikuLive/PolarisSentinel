@@ -7,7 +7,12 @@
 <div class="container-fluid">
     <h2 class="text-primary">Inference Results</h2>
     <p class="text-muted">AI inference results that produced an alert. Benign flows are not alerted.</p>
-    <a asp-action="Export" class="btn btn-outline-primary mb-2">Export CSV</a>
+    <div class="d-flex gap-2 mb-2">
+        <a asp-action="Export" class="btn btn-outline-primary">Export CSV</a>
+        <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all stored alerts? Linked rules keep their history but lose the alert link.');">
+            <button type="submit" class="btn btn-outline-danger">Remove All</button>
+        </form>
+    </div>
     <p class="text-muted small">Exports all saved alerts. Actions and statuses come from currently linked rules; blank means no linked rule.</p>
 
     @if (TempData["success"] != null)
@@ -18,6 +23,33 @@
     {
         <div class="alert alert-danger">@TempData["error"]</div>
     }
+
+    @* Uses GET so filter conditions appear in the URL and can be bookmarked/shared *@
+    <form asp-action="Index" method="get" class="card shadow-sm border-primary mb-3">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label small text-muted mb-1">Search</label>
+                    <input type="search" name="search" value="@ViewBag.Search" class="form-control form-control-sm"
+                           placeholder="IP, port, alert id, description..." />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Attack Type</label>
+                    <select name="attackType" class="form-select form-select-sm">
+                        <option value="">All</option>
+                        @foreach (var type in (IReadOnlyList<string>)ViewBag.AttackTypes)
+                        {
+                            <option value="@type" selected="@(ViewBag.AttackType == type)">@type</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Clear</a>
+                </div>
+            </div>
+        </div>
+    </form>
 
     <div class="card shadow-sm border-primary">
         <div class="card-header bg-primary text-white">
@@ -30,34 +62,34 @@
                         <tr>
                             <th class="text-nowrap">ID</th>
                             <th class="text-nowrap">Created</th>
-                            <th class="text-nowrap">Detection Source</th>
-                            <th class="text-nowrap">Source</th>
-                            <th class="text-nowrap">Destination</th>
-                            <th class="text-nowrap">Attack Type</th>
-                            <th class="text-nowrap">Confidence</th>
-                            <th class="text-nowrap">Description</th>
-                            <th class="text-end">Actions</th>
+                            <th>Detection Source</th>
+                            <th>Source</th>
+                            <th>Destination</th>
+                            <th>Attack Type</th>
+                            <th>Confidence</th>
+                            <th>Description</th>
+                            <th class="text-end text-nowrap">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (Model.Count == 0)
                         {
                             <tr>
-                                <td colspan="9" class="text-center text-muted py-4">No alerts yet.</td>
+                                <td colspan="9" class="text-center text-muted py-4">No alerts match the current filters.</td>
                             </tr>
                         }
                         @foreach (var item in Model)
                         {
                             <tr>
-                                <td class="fw-bold">@item.Id</td>
-                                <td>@TimeFormat.Format(item.CreatedAt)</td>
+                                <td class="fw-bold text-nowrap">@item.Id</td>
+                                <td class="text-nowrap">@TimeFormat.Format(item.CreatedAt)</td>
                                 <td><span class="badge bg-primary">@item.DetectionSource</span></td>
                                 <td>@item.SourceIp:@item.SourcePort</td>
                                 <td>@item.DestinationIp:@item.DestinationPort</td>
                                 <td class="fw-bold">@item.AttackType</td>
                                 <td>@(item.ConfidenceScore?.ToString("0.000") ?? "N/A")</td>
-                                <td class="small">@(string.IsNullOrWhiteSpace(item.Description) ? "-" : item.Description)</td>
-                                <td class="text-end">
+                                <td class="small"><span class="cell-clamp">@(string.IsNullOrWhiteSpace(item.Description) ? "-" : item.Description)</span></td>
+                                <td class="text-end text-nowrap">
                                     <a asp-action="Details" asp-route-id="@item.Id" class="btn btn-sm btn-outline-secondary">Details</a>
                                     <a asp-controller="Rules" asp-action="Create"
                                        asp-route-alertId="@item.Id"
@@ -77,6 +109,10 @@
         </div>
         <div class="card-footer small text-muted">
             Total: @Model.Count alert(s)
+            @if (Context.Request.Query.Count > 0)
+            {
+                <span class="ms-2 badge bg-info text-dark">Filtered</span>
+            }
         </div>
     </div>
 </div>

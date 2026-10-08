@@ -126,10 +126,11 @@
                             <th>Attack Type</th>
                             <th>Confidence</th>
                             <th>Action</th>
+                            <th>Reason</th>
                         </tr>
                     </thead>
                     <tbody id="liveBody">
-                        <tr><td colspan="7" class="text-center text-muted py-3">No traffic yet.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-3">No traffic yet.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -236,7 +237,7 @@
             document.getElementById('liveCount').textContent = list.length + ' record(s)';
 
             if (list.length === 0) {
-                body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No traffic yet.</td></tr>';
+                body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">No traffic yet.</td></tr>';
                 return;
             }
 
@@ -246,14 +247,17 @@
                 const confidence = d.confidenceScore == null ? 'N/A' : Number(d.confidenceScore).toFixed(3);
                 const source = d.sourceIp ? (d.sourceIp + (d.sourcePort ? ':' + d.sourcePort : '')) : '-';
                 const destination = d.destinationIp ? (d.destinationIp + (d.destinationPort ? ':' + d.destinationPort : '')) : '-';
+                // Fall back to the alert description when no decision text is available.
+                const reason = d.decisionText || d.reason || '-';
                 return '<tr>' +
-                    '<td>' + d.createdAt + '</td>' +
-                    '<td><span class="badge ' + badge + '">' + d.verdict + '</span></td>' +
+                    '<td class="text-nowrap">' + d.createdAt + '</td>' +
+                    '<td class="text-nowrap"><span class="badge ' + badge + '">' + d.verdict + '</span></td>' +
                     '<td>' + source + '</td>' +
                     '<td>' + destination + '</td>' +
                     '<td>' + d.attackType + '</td>' +
                     '<td>' + confidence + '</td>' +
                     '<td>' + d.action + '</td>' +
+                    '<td class="small text-muted"><span class="cell-clamp">' + reason + '</span></td>' +
                     '</tr>';
             }).join('');
         }

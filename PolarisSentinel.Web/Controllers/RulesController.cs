@@ -23,11 +23,13 @@ namespace PolarisSentinel.Web.Controllers
         }
 
         public IActionResult Index(
-            RuleStatus?status=null,
-            byte?protocol=null,
-            PolicyAction? actionFliter=null)
+            RuleStatus? status = null,
+            byte? protocol = null,
+            PolicyAction? action = null,
+            string? search = null,
+            string? sort = null)
         {
-            // Start from the full list, then apply filter in turn
+            // Start from the full list, then apply each filter in turn.
             var rules = _firewall.GetAllRules();
 
             if (status.HasValue)
@@ -40,15 +42,40 @@ namespace PolarisSentinel.Web.Controllers
                 rules = rules.Where(r => r.Protocol == protocol.Value).ToList();
             }
 
-            if (actionFliter.HasValue)
+            if (action.HasValue)
             {
-                rules = rules.Where(r => r.Action == actionFliter.Value).ToList();
+                rules = rules.Where(r => r.Action == action.Value).ToList();
             }
 
-            //Build dropdown option lists. The 3rd SelectList argument is selectedValue, which auto-marks the matching item as selected.
+            // Free-text search across the fields an operator scans by.
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                rules = rules.Where(r =>
+                    Contains(r.Id, term) ||
+                    Contains(r.Name, term) ||
+                    Contains(r.BlockedIp, term) ||
+                    Contains(r.SourceIp, term) ||
+                    Contains(r.DestinationIp, term) ||
+                    Contains(r.PolicyId, term) ||
+                    Contains(r.AlertId, term) ||
+                    (r.BlockedPort is { } port && port.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            // Sorting: newest first by default, matching the "what just happened" focus.
+            rules = sort switch
+            {
+                "expires" => rules.OrderBy(r => r.ExpiresAt ?? DateTime.MaxValue).ToList(),
+                "status" => rules.OrderBy(r => r.Status).ThenByDescending(r => r.CreatedAt).ToList(),
+                "blocked" => rules.OrderBy(r => r.BlockedIp ?? r.BlockedPort?.ToString()).ToList(),
+                "created" => rules.OrderByDescending(r => r.CreatedAt).ToList(),
+                _ => rules.OrderByDescending(r => r.CreatedAt).ToList()
+            };
+
             ViewBag.StatusList = new SelectList(
                 Enum.GetValues<RuleStatus>().Select(v => new { Value = v.ToString(), Text = v.ToString() }),
-                "Value","Text",status?.ToString());
+                "Value", "Text", status?.ToString());
             ViewBag.ProtocolList = new SelectList(
                 new[]
                 {
@@ -56,14 +83,20 @@ namespace PolarisSentinel.Web.Controllers
                     new { Value = "17", Text = "UDP" },
                     new { Value = "1", Text = "ICMP" }
                 },
-                "Value","Text",protocol?.ToString());
-
-            ViewBag.ActionList=new SelectList(
+                "Value", "Text", protocol?.ToString());
+            ViewBag.ActionList = new SelectList(
                 PolicyActions.Blocking.Select(v => new { Value = v.ToString(), Text = v.ToString() }),
-                "Value","Text",actionFliter?.ToString());
+                "Value", "Text", action?.ToString());
+
+            ViewBag.Search = search;
+            ViewBag.Sort = sort;
 
             return View(rules);
         }
+
+        // Case-insensitive substring test that tolerates null fields.
+        private static bool Contains(string? value, string term) =>
+            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
         public IActionResult Details(string? id)
         {

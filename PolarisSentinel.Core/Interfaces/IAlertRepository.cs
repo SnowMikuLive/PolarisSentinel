@@ -13,4 +13,7 @@ public interface IAlertRepository
     Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default);
 
     Task<Alert?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+
+    // Deletes every stored alert and returns how many rows were removed.
+    Task<int> RemoveAllAsync(CancellationToken cancellationToken = default);
 }

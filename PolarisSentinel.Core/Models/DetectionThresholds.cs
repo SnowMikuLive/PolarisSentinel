@@ -25,6 +25,14 @@ public sealed record DetectionThresholds
     public int BruteForceSyns { get; init; }
     public double FlatTrafficStdDev { get; init; }
 
+    // --- PreFilter: relevance gate (which flows are worth sending to the AI engine) ---
+    // A flow is forwarded only when it shows a signal relevant to DoS, port scanning or
+    // brute force. These are weaker than the attack signatures above: they mark "worth
+    // analysing", not "attack". Flows matching none are unrelated traffic and are skipped.
+    public int RelevanceMinPackets { get; init; }
+    public int RelevanceMinSyns { get; init; }
+    public int RelevanceMinAcks { get; init; }
+
     // --- SourceBehaviorTracker: cross-flow aggregates (KnownAttack -> blocks) ---
     public int PortScanDistinctPorts { get; init; }
     public int PortScanMaxPacketsPerPort { get; init; }
@@ -89,6 +97,9 @@ public sealed record DetectionThresholds
         IcmpSweepPackets = 5,
         BruteForceSyns = 1,
         FlatTrafficStdDev = 10,
+        RelevanceMinPackets = 20,
+        RelevanceMinSyns = 3,
+        RelevanceMinAcks = 5,
         PortScanDistinctPorts = 4,
         PortScanMaxPacketsPerPort = 3,
         BruteForceConnections = 3,
@@ -121,6 +132,9 @@ public sealed record DetectionThresholds
         IcmpSweepPackets = 8,
         BruteForceSyns = 3,
         FlatTrafficStdDev = 10,
+        RelevanceMinPackets = 50,
+        RelevanceMinSyns = 5,
+        RelevanceMinAcks = 10,
         PortScanDistinctPorts = 6,
         PortScanMaxPacketsPerPort = 3,
         BruteForceConnections = 5,
@@ -153,6 +167,9 @@ public sealed record DetectionThresholds
         IcmpSweepPackets = 12,
         BruteForceSyns = 5,
         FlatTrafficStdDev = 10,
+        RelevanceMinPackets = 100,
+        RelevanceMinSyns = 10,
+        RelevanceMinAcks = 20,
         PortScanDistinctPorts = 12,
         PortScanMaxPacketsPerPort = 3,
         BruteForceConnections = 8,

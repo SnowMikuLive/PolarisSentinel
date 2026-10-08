@@ -77,3 +77,56 @@ a {
 a:hover {
     color: #1D4ED8;
 }
+
+/*Responsive data tables: fit the viewport instead of forcing a wide horizontal scroll.
+  Cells shrink and wrap, and long free-text cells are clamped so one column cannot
+  stretch the table past the window. Applies to the alert, rule and policy lists.*/
+.table-responsive > .table {
+    width: 100%;
+    table-layout: auto;
+}
+
+/*Let cells wrap within their column so the table can compress on narrow screens.*/
+.table-responsive > .table > thead > tr > th,
+.table-responsive > .table > tbody > tr > td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/*Keep short identifier/status columns on one line where it reads better.*/
+.table-responsive > .table .text-nowrap {
+    white-space: nowrap;
+}
+
+/*Clamp long free-text (e.g. an alert description) to a couple of lines so it wraps
+  rather than widening the whole table.*/
+.cell-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 22rem;
+}
+
+/*Tighten padding and type as the viewport narrows so more columns stay visible.*/
+@media (max-width: 1200px) {
+    .table-responsive > .table > thead > tr > th,
+    .table-responsive > .table > tbody > tr > td {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .table-responsive > .table > thead > tr > th,
+    .table-responsive > .table > tbody > tr > td {
+        padding: 0.3rem 0.4rem;
+        font-size: 0.78rem;
+    }
+
+    .cell-clamp {
+        max-width: 12rem;
+        -webkit-line-clamp: 3;
+    }
+}

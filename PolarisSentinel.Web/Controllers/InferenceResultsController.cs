@@ -19,10 +19,58 @@ namespace PolarisSentinel.Web.Controllers
             _uow = uow;
         }
 
-        public async Task<IActionResult> Index(CancellationToken cancellationToken)
+        public async Task<IActionResult> Index(string? search = null, string? attackType = null, CancellationToken cancellationToken = default)
         {
             var alerts = await _uow.Alerts.GetAllAsync(cancellationToken);
+
+            // Filter by attack type, then free-text search across the fields an operator scans by.
+            if (!string.IsNullOrWhiteSpace(attackType))
+            {
+                alerts = alerts.Where(a => string.Equals(a.AttackType, attackType, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                alerts = alerts
+                    .Where(a =>
+                        Contains(a.Id, term) ||
+                        Contains(a.SourceIp, term) ||
+                        Contains(a.DestinationIp, term) ||
+                        Contains(a.AttackType, term) ||
+                        Contains(a.Description, term) ||
+                        Contains(a.SourcePort.ToString(), term) ||
+                        Contains(a.DestinationPort.ToString(), term))
+                    .ToList();
+            }
+
+            // Distinct attack types present in the data, for the filter dropdown.
+            var all = await _uow.Alerts.GetAllAsync(cancellationToken);
+            ViewBag.AttackTypes = all
+                .Select(a => a.AttackType)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            ViewBag.Search = search;
+            ViewBag.AttackType = attackType;
+
             return View(alerts);
+        }
+
+        // Case-insensitive substring test that tolerates null fields.
+        private static bool Contains(string? value, string term) =>
+            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+        // Deletes every stored alert. Linked rules keep their AlertId as a historical
+        // reference; the FK is ON DELETE SET NULL, so those rules simply lose the link.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)
+        {
+            int removed = await _uow.Alerts.RemoveAllAsync(cancellationToken);
+            TempData["success"] = $"{removed} alert(s) removed.";
+            return RedirectToAction(nameof(Index));
         }
 
         // Export saved alerts and linked rules without changing the firewall.

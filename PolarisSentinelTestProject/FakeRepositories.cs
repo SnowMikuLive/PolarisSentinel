@@ -47,6 +47,13 @@ namespace PolarisSentienlUnitTestProject
 
         public Task<Alert?> GetByIdAsync(string id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_alerts.FirstOrDefault(a => a.Id == id));
+
+        public Task<int> RemoveAllAsync(CancellationToken cancellationToken = default)
+        {
+            int count = _alerts.Count;
+            _alerts.Clear();
+            return Task.FromResult(count);
+        }
     }
 
     internal sealed class FakePolicyRepository : IPolicyRepository
@@ -74,6 +81,13 @@ namespace PolarisSentienlUnitTestProject
         }
 
         public void Remove(Policy policy) => _policies.RemoveAll(p => p.Id == policy.Id);
+
+        public Task<int> RemoveAllAsync(CancellationToken cancellationToken = default)
+        {
+            int count = _policies.Count;
+            _policies.Clear();
+            return Task.FromResult(count);
+        }
     }
 
     internal sealed class FakeUnitOfWork : IUnitOfWork

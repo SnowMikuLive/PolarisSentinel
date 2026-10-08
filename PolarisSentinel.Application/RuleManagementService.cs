@@ -25,30 +25,33 @@ public class RuleManagementService
     {
         var errors = new Dictionary<string, string>();
 
-        if (string.IsNullOrWhiteSpace(rule.SourceIp) && string.IsNullOrWhiteSpace(rule.DestinationIp))
+        // An address rule needs a valid address; a port rule is scoped by its port instead.
+        bool addressAction = rule.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp;
+        bool portAction = rule.Action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
+
+        if (addressAction && !NetworkAddress.IsValid(rule.SourceIp))
         {
-            errors[nameof(Rule.SourceIp)] = "Provide at least one address, or pick Any on both sides.";
+            errors[nameof(Rule.SourceIp)] = "Enter a valid IPv4 address.";
         }
 
-        if (!NetworkAddress.IsValidOrEmpty(rule.SourceIp))
+        if (rule.Action == PolicyAction.BlockOutboundIp && !NetworkAddress.IsValid(rule.DestinationIp))
         {
-            errors[nameof(Rule.SourceIp)] = "Enter a valid IP address or CIDR.";
-        }
-
-        if (!NetworkAddress.IsValidOrEmpty(rule.DestinationIp))
-        {
-            errors[nameof(Rule.DestinationIp)] = "Enter a valid IP address or CIDR.";
+            errors[nameof(Rule.DestinationIp)] = "Enter a valid IPv4 address.";
         }
 
         // ICMP has no ports, so a port-based action cannot be expressed.
-        bool portAction = rule.Action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
         if (portAction && rule.Protocol == ProtocolNumbers.Icmp)
         {
             errors[nameof(Rule.Action)] = "Port actions are not valid for ICMP; use an IP action instead.";
         }
 
+        // A port filter needs a concrete transport protocol.
+        if (portAction && rule.Protocol == 0)
+        {
+            errors[nameof(Rule.Protocol)] = "Port actions require a specific protocol (TCP or UDP), not Any.";
+        }
+
         // Ports are stored as int; reject values the transport layer cannot represent.
-        // Null and 0 both mean "any port".
         if (rule.SourcePort is { } sourcePort && (sourcePort < 0 || sourcePort > 65535))
         {
             errors[nameof(Rule.SourcePort)] = "Port must be between 0 and 65535.";

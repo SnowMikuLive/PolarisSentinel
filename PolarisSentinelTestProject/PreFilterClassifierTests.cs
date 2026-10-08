@@ -41,4 +41,51 @@ public class PreFilterClassifierTests
 
         Assert.IsFalse(verdict.IsSuspicious);
     }
+
+    // Ordinary two-way web traffic is unrelated to DoS/port scan/brute force, so it is
+    // classified as normal and never forwarded to the AI engine.
+    [TestMethod]
+    public void OrdinaryWebTraffic_ShouldBeNormal()
+    {
+        var flow = new FlowStatistics
+        {
+            Protocol = ProtocolNumbers.Tcp,
+            DestinationPort = 443,
+            FwdPackets = 30,
+            BwdPackets = 28,
+            FwdBytes = 4000,
+            BwdBytes = 9000,
+            SynCount = 1,
+            AckCount = 40,
+            DurationSeconds = 5.0,
+            PacketSizeMean = 250
+        };
+
+        var verdict = Create().Classify(flow);
+
+        Assert.IsFalse(verdict.IsSuspicious);
+        Assert.IsFalse(verdict.IsKnownAttack);
+    }
+
+    // A brute-force target port (SSH) is relevant even without a signature match, so it is
+    // forwarded to the AI engine for a verdict.
+    [TestMethod]
+    public void AuthPortTraffic_ShouldBeRelevant()
+    {
+        var flow = new FlowStatistics
+        {
+            Protocol = ProtocolNumbers.Tcp,
+            DestinationPort = 22,
+            FwdPackets = 8,
+            BwdPackets = 6,
+            SynCount = 1,
+            AckCount = 8,
+            DurationSeconds = 3.0,
+            PacketSizeMean = 120
+        };
+
+        var verdict = Create().Classify(flow);
+
+        Assert.IsTrue(verdict.IsSuspicious);
+    }
 }

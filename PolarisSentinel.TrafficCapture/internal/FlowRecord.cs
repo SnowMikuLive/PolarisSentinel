@@ -36,4 +36,8 @@ internal sealed class FlowRecord
 
     // IP protocol number; set when the flow is created.
     public byte Protocol { get; internal set; }
+
+    // True when the flow arrived at this host (remote -> local). Outbound flows are still
+    // captured and shown on the dashboard, but only inbound flows are treated as attacks.
+    public bool IsInbound { get; internal set; }
 }

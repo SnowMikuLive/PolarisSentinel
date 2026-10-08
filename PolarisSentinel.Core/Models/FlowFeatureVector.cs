@@ -26,4 +26,8 @@ public class FlowFeatureVector
 
     // Rule-based verdict from the capture-layer pre-filter.
     public PreFilterResult? PreFilterVerdict { get; init; }
+
+    // True when the flow arrived at this host (remote -> local). Only inbound flows are
+    // treated as attacks; outbound flows are captured and shown but never blocked.
+    public bool IsInbound { get; init; }
 }

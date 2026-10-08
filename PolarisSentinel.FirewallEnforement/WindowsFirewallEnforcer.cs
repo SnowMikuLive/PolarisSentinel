@@ -118,7 +118,7 @@ namespace PolarisSentinel.FirewallEnforement
 
                 // Name the rule after the block target, not the alert, so repeated attacks
                 // from the same source reuse and extend one rule instead of piling up.
-                string target = spec.RemoteAddress ?? string.Empty;
+                string target = spec.RemoteAddress ?? spec.LocalPort?.ToString() ?? spec.RemotePort?.ToString() ?? string.Empty;
                 string ruleName = EntityIds.FirewallRule($"{decision.Action}_{target}_{spec.Protocol}");
 
                 var existing = _rules.GetAllAsync().GetAwaiter().GetResult()
@@ -311,6 +311,8 @@ namespace PolarisSentinel.FirewallEnforement
                 return;
             }
 
+            // An address rule normalises the remote address; a port rule leaves it as
+            // "*" (any) and scopes the block with the local/remote port instead.
             bool anyAddress = string.IsNullOrWhiteSpace(spec.RemoteAddress);
             string? ip = anyAddress ? "*" : NormalizeIp(spec.RemoteAddress!);
             if (ip == null)
@@ -354,7 +356,6 @@ namespace PolarisSentinel.FirewallEnforement
                 return null;
             }
 
-            // Keep the CIDR prefix so a subnet block reaches Windows Firewall intact.
             return NetworkAddress.TryNormalize(value, out var normalized) ? normalized : null;
         }
     }

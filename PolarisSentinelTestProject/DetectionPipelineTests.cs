@@ -60,6 +60,59 @@ public class DetectionPipelineTests
         Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
     }
 
+    // An AI result that is only an unnamed anomaly is suspicious, not malicious: the flow
+    // is alerted and monitored but never labelled a confirmed attack.
+    [TestMethod]
+    public void ProcessFlow_AnomalyOnly_ShouldBeSuspiciousNotMalicious()
+    {
+        var inference = new CountingInferenceEngine(CreateDetection(
+            attackType: AttackTypes.UnknownAnomaly,
+            confidence: 0.9f,
+            source: DetectionSource.IsolationForest));
+        var pipeline = CreatePipeline(inference, out var firewall);
+
+        var flow = CreateFlow(PreFilterResult.Suspicious("model anomaly"));
+        var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.IsolationForest) });
+
+        Assert.AreEqual(1, inference.CallCount);
+        Assert.AreEqual(TrafficVerdict.Suspicious, outcome.Verdict);
+        Assert.IsNotNull(outcome.Alert);
+        Assert.IsEmpty(firewall.GetAllRules());
+    }
+
+    // Every flow that reaches the AI engine is suspicious traffic; only a confirmed attack
+    // category from the inference result is escalated to malicious.
+    [TestMethod]
+    public void ProcessFlow_BenignInference_ShouldBeNormal()
+    {
+        var inference = new CountingInferenceEngine(CreateDetection(attackType: AttackTypes.Benign, confidence: 0f));
+        var pipeline = CreatePipeline(inference, out _);
+
+        var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("looks odd")), new[] { CreatePolicy() });
+
+        Assert.AreEqual(1, inference.CallCount);
+        Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
+        Assert.IsNull(outcome.Alert);
+    }
+
+    // An outbound flow is captured and shown, but never treated as an inbound attack: the AI
+    // engine is not called and no alert or rule is produced.
+    [TestMethod]
+    public void ProcessFlow_OutboundFlow_ShouldNotBeTreatedAsAttack()
+    {
+        var inference = new CountingInferenceEngine(CreateDetection());
+        var pipeline = CreatePipeline(inference, out var firewall);
+
+        var flow = CreateFlow(PreFilterResult.KnownAttack(AttackTypes.DoS, "SYN flood"), isInbound: false);
+
+        var outcome = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.HeuristicBased) });
+
+        Assert.AreEqual(TrafficVerdict.Normal, outcome.Verdict);
+        Assert.AreEqual(0, inference.CallCount);
+        Assert.IsNull(outcome.Alert);
+        Assert.IsEmpty(firewall.GetAllRules());
+    }
+
     #region Helper Methods
 
     private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall)
@@ -99,7 +152,7 @@ public class DetectionPipelineTests
         Protocol = ProtocolNumbers.Tcp
     };
 
-    private static FlowFeatureVector CreateFlow(PreFilterResult verdict) => new()
+    private static FlowFeatureVector CreateFlow(PreFilterResult verdict, bool isInbound = true) => new()
     {
         Features = new float[20],
         SourceIp = "203.0.113.66",
@@ -109,7 +162,9 @@ public class DetectionPipelineTests
         Protocol = ProtocolNumbers.Tcp,
         FlowStartTime = DateTime.UnixEpoch,
         FlowEndTime = DateTime.UnixEpoch.AddSeconds(1),
-        PreFilterVerdict = verdict
+        PreFilterVerdict = verdict,
+        // The pipeline only treats inbound flows as attacks; these tests exercise that path.
+        IsInbound = isInbound
     };
 
     private class CountingInferenceEngine : IInferenceEngine

@@ -32,11 +32,11 @@
                 <dd class="col-sm-9">
                     @if (Model.BlocksAddress)
                     {
-                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") IP @(string.IsNullOrEmpty(Model.BlockedIp) ? "Any" : Model.BlockedIp)</span>
+                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") IP @Model.BlockedIp</span>
                     }
                     else
                     {
-                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") port @(Model.BlockedPort is null or 0 ? "Any" : Model.BlockedPort.ToString())</span>
+                        <span class="badge bg-danger">Block @(Model.BlocksOutbound ? "outbound" : "inbound") port @Model.BlockedPort</span>
                     }
                 </dd>
 

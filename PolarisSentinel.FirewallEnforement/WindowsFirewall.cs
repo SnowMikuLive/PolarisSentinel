@@ -24,10 +24,6 @@ namespace PolarisSentinel.FirewallEnforement
         {
             CheckName(rule.Name);
 
-            // "*" means Any; otherwise one or more comma-separated addresses or CIDR
-            // subnets are allowed (Windows Firewall accepts both forms).
-            string remoteAddresses = AddressNormalizer.NormalizeRemoteAddresses(rule.RemoteAddress);
-
             object? existing = null;
             foreach (dynamic item in _rules)
             {
@@ -52,7 +48,7 @@ namespace PolarisSentinel.FirewallEnforement
             target.Name = rule.Name;
             // 256 = any protocol; 0 is not a valid Windows Firewall protocol value.
             target.Protocol = rule.Protocol == 0 ? 256 : rule.Protocol;
-            target.RemoteAddresses = remoteAddresses;
+            target.RemoteAddresses = rule.RemoteAddress;
             target.Direction = rule.Direction;
             target.Action = 0;
             target.Profiles = int.MaxValue;

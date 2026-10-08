@@ -16,4 +16,7 @@ public interface IPolicyRepository
     void Update(Policy policy);
 
     void Remove(Policy policy);
+
+    // Deletes every policy and returns how many rows were removed.
+    Task<int> RemoveAllAsync(CancellationToken cancellationToken = default);
 }

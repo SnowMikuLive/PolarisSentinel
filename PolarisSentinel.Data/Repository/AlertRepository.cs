@@ -42,4 +42,10 @@ public class AlertRepository : IAlertRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
+
+    public async Task<int> RemoveAllAsync(CancellationToken cancellationToken = default)
+    {
+        // A set-based delete avoids loading every row just to remove it.
+        return await _context.Alerts.ExecuteDeleteAsync(cancellationToken);
+    }
 }

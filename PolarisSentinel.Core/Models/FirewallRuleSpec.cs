@@ -3,19 +3,21 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// The concrete Windows Firewall rule a policy action maps to.
+// The concrete Windows Firewall rule a policy action maps to, mirroring an Azure Network
+// Security Group rule: an action selects a direction (inbound/outbound) and a match on
+// either a remote address (IP) or a port.
 public class FirewallRuleSpec
 {
     // 1 = inbound, 2 = outbound.
     public required int Direction { get; init; }
 
-    // Remote address to constrain, or null for any.
+    // Remote address to constrain, or null when the rule matches a port instead.
     public string? RemoteAddress { get; init; }
 
-    // Local port to constrain, or null for any.
+    // Local port to constrain, or null when the rule matches an address instead.
     public int? LocalPort { get; init; }
 
-    // Remote port to constrain, or null for any.
+    // Remote port to constrain, or null when the rule matches an address instead.
     public int? RemotePort { get; init; }
 
     public required byte Protocol { get; init; }

@@ -34,31 +34,33 @@ public class PolicyEngine : IPolicyEngine
 
         if (alert.DetectionSource == DetectionSource.None || alert.AttackType == AttackTypes.Benign)
         {
-            return Decision.Monitor(alert, "benign");
+            return Decision.Monitor(alert, DecisionReasons.Benign);
         }
 
         // Unknown anomalies are monitored for a human decision.
         if (alert.AttackType == AttackTypes.UnknownAnomaly)
         {
-            return Decision.Monitor(alert, "unknown_anomaly");
+            return Decision.Monitor(alert, DecisionReasons.UnknownAnomaly);
         }
 
         var match = SelectPolicy(alert, policies);
         if (match == null)
         {
-            return Decision.Monitor(alert, "no_matching_policy");
+            return Decision.Monitor(alert, DecisionReasons.NoMatchingPolicy);
         }
 
         if (!PolicyActions.IsBlocking(match.Action))
         {
-            return Decision.Monitor(alert, match.Action == PolicyAction.Allow ? "policy_allow" : "policy_monitor");
+            return Decision.Monitor(alert, match.Action == PolicyAction.Allow
+                ? DecisionReasons.PolicyAllow
+                : DecisionReasons.PolicyMonitor);
         }
 
         _logger.LogDebug(
             "Policy {PolicyId} blocked {AttackType} from {SourceIp}",
             match.Id, alert.AttackType, alert.SourceIp);
 
-        return Decision.Block(alert, match, "policy_block");
+        return Decision.Block(alert, match, DecisionReasons.PolicyBlock);
     }
 
     // Highest priority wins; ties fall back to the older policy, then the id, for determinism.

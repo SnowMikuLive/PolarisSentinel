@@ -32,6 +32,10 @@ public class FirewallEnforcerUnitTest
 
         var outboundIp = enforcer.Apply(Decision(CreateAlert("A-RF-3"), PolicyAction.BlockOutboundIp), "P-1", "A-RF-3", AttackTypes.DoS, TimeSpan.FromMinutes(60));
         Assert.AreEqual("192.168.1.10", outboundIp.BlockedIp);
+
+        var outboundPort = enforcer.Apply(Decision(CreateAlert("A-RF-4"), PolicyAction.BlockOutboundPort), "P-1", "A-RF-4", AttackTypes.DoS, TimeSpan.FromMinutes(60));
+        Assert.IsFalse(outboundPort.BlocksAddress);
+        Assert.AreEqual(80, outboundPort.BlockedPort);
     }
 
     [TestMethod]
