@@ -20,12 +20,15 @@ public class AlertRepository : IAlertRepository
         _context.Alerts.Add(alert);
     }
 
-    // Sequential ids are derived from the highest existing number, so deleted
-    // rows can cause a number to be reused; acceptable for this prototype.
+    // The next number comes from a single aggregate instead of loading every id: under a
+    // flood the table grows fast and the old full-table read made each insert slower than the
+    // last. TRY_CAST ignores any non-numeric ids.
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
-        var ids = await _context.Alerts.Select(a => a.Id).ToListAsync(cancellationToken);
-        return EntityIds.Next(ids, EntityIds.AlertPrefix, EntityIds.Alert);
+        int max = await _context.Database.SqlQuery<int>(
+            $"SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Id], {EntityIds.AlertPrefix.Length + 1}, 20) AS INT)), 0) AS [Value] FROM [Alerts]")
+            .SingleAsync(cancellationToken);
+        return EntityIds.Alert(max + 1);
     }
 
     public async Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default)

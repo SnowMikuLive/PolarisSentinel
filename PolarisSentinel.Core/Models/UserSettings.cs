@@ -5,6 +5,9 @@ namespace PolarisSentinel.Core.Models;
 // configured default applies.
 public class UserSettings
 {
+    // Primary key; the table always holds a single settings row.
+    public int Id { get; set; }
+
     // Firewall enforcement: true = record-only (dry-run), false = write real blocks.
     public bool? DryRun { get; set; }
 
@@ -13,4 +16,8 @@ public class UserSettings
 
     // Capture device the user selected (SharpPcap device name).
     public string? CaptureDevice { get; set; }
+
+    // Heuristic (rule-based pre-filter/tracker) detection: true = filter then AI,
+    // false = hand every flow straight to the AI engine.
+    public bool? HeuristicEnabled { get; set; }
 }

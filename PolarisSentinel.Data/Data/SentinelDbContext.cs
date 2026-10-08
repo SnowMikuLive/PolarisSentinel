@@ -22,6 +22,8 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TrafficRecord> TrafficRecords => Set<TrafficRecord>();
 
+    public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+
     // Reads a DetectionSource from the database without throwing on legacy or
     // unknown values. The enum member PreFilter was renamed to HeuristicBased, so
     // rows written before the rename must still load; anything unrecognised falls
@@ -101,6 +103,14 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.RuleName).HasMaxLength(128);
             e.Property(x => x.Verdict).HasMaxLength(16);
             e.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<UserSettings>(e =>
+        {
+            e.ToTable("UserSettings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.ModelCombination).HasMaxLength(64);
+            e.Property(x => x.CaptureDevice).HasMaxLength(256);
         });
 
         modelBuilder.Entity<Policy>().HasData(DefaultPolicies);

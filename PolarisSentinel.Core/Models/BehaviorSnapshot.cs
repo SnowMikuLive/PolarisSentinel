@@ -18,11 +18,6 @@ public static class BehaviorSnapshot
             ["window_seconds"] = (float)stats.WindowSeconds
         };
 
-        if (stats.TopPorts.Count > 0)
-        {
-            values["sample_ports"] = float.Parse(string.Join(".", stats.TopPorts.Take(12)));
-        }
-
         return SnapshotJson.Serialize(values);
     }
 
@@ -39,5 +34,4 @@ public sealed record BehaviorWindowStats(
     int AckCount,
     int IcmpCount,
     int AuthConnections,
-    double WindowSeconds,
-    IReadOnlyList<int> TopPorts);
+    double WindowSeconds);

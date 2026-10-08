@@ -14,6 +14,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private readonly ConcurrentDictionary<Internal.FlowKey, Internal.FlowRecord> _flows = new();
     private readonly PreFilter _preFilter;
     private readonly SourceBehaviorTracker _behavior;
+    private readonly DetectionRuntimeState? _detection;
+
+    // True when the rule-based pre-filter/tracker should gate flows before the AI engine.
+    private bool HeuristicEnabled => _detection?.HeuristicEnabled ?? true;
 
     private readonly int _flowIdleTimeoutSeconds;
     private readonly System.Threading.Timer _expiryTimer;
@@ -57,11 +61,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     public TrafficCaptureService(
         int flowIdleTimeoutSeconds,
         DetectionThresholds thresholds,
-        int liveSummaryIntervalSeconds = 5)
+        int liveSummaryIntervalSeconds = 5,
+        DetectionRuntimeState? detection = null)
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
         _preFilter = new PreFilter(thresholds);
         _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds);
+        _detection = detection;
 
         // Both timers start suspended and only tick once Start(deviceName) is called.
         _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
@@ -217,6 +223,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     // True when the address belongs to this host.
     private bool IsLocalAddress(string ip) => _localAddresses.Contains(ip);
 
+    // Direction of a packet. When the interface exposed no addresses the direction cannot be
+    // determined; treat the flow as inbound (fail-open) so detection still runs, instead of
+    // silently classifying every flow as outbound and detecting nothing.
+    private bool IsInboundPacket(string sourceIp, string destinationIp) =>
+        _localAddresses.Count == 0 || (IsLocalAddress(destinationIp) && !IsLocalAddress(sourceIp));
+
     public void Start(string deviceName)
     {
         // The device list is cached by SharpPcap. After a flood the adapter state can
@@ -315,23 +327,26 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
         // Behavioural detection sees every packet, so a scan or flood spread across many
-        // short flows is still caught.
-        var observation = new PacketObservation(
-            SourceIp: srcIp,
-            DestinationIp: dstIp,
-            DestinationPort: dstPort,
-            Protocol: protocol,
-            IsSyn: tcpPacket?.Synchronize ?? false,
-            IsRst: tcpPacket?.Reset ?? false,
-            PacketSize: packetSize,
-            Timestamp: now);
-        _behavior.Observe(observation);
-
-        // Emit the alert the instant a threshold is crossed, without waiting for expiry.
-        var immediate = _behavior.EvaluateFast(observation);
-        if (immediate is not null)
+        // short flows is still caught. Skipped entirely when heuristic detection is off.
+        if (HeuristicEnabled)
         {
-            EmitImmediateAlert(srcIp, srcPort, dstIp, dstPort, protocol, tcpPacket, immediate, now);
+            var observation = new PacketObservation(
+                SourceIp: srcIp,
+                DestinationIp: dstIp,
+                DestinationPort: dstPort,
+                Protocol: protocol,
+                IsSyn: tcpPacket?.Synchronize ?? false,
+                IsRst: tcpPacket?.Reset ?? false,
+                PacketSize: packetSize,
+                Timestamp: now);
+            _behavior.Observe(observation);
+
+            // Emit the alert the instant a threshold is crossed, without waiting for expiry.
+            var immediate = _behavior.EvaluateFast(observation);
+            if (immediate is not null)
+            {
+                EmitImmediateAlert(srcIp, srcPort, dstIp, dstPort, protocol, tcpPacket, immediate, now);
+            }
         }
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
@@ -360,7 +375,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         // Inbound when the remote endpoint is the source we just derived, i.e. the traffic
         // arrived at this host. Outbound flows are still captured and shown, just not treated
         // as inbound attacks.
-        bool isInbound = dstIsLocal && !srcIsLocal;
+        bool isInbound = IsInboundPacket(srcIp, dstIp);
 
         var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
         {
@@ -467,10 +482,18 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
             if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
 
-            // Behavioural verdict first (across flows), then the per-flow pre-filter.
-            var verdict = _behavior.Evaluate(flow.SourceIp, now);
-            verdict ??= _preFilter.Classify(ToStatistics(flow));
-            if (!verdict.IsKnownAttack && !verdict.IsSuspicious) continue;
+            // Behavioural verdict first (across flows), then the per-flow pre-filter. When
+            // heuristic detection is off, every flow is handed to the AI engine instead.
+            PreFilterResult verdict;
+            if (HeuristicEnabled)
+            {
+                verdict = _behavior.Evaluate(flow.SourceIp, now) ?? _preFilter.Classify(ToStatistics(flow));
+                if (!verdict.IsKnownAttack && !verdict.IsSuspicious) continue;
+            }
+            else
+            {
+                verdict = PreFilterResult.Suspicious("Heuristic detection disabled; forwarded to the AI engine.");
+            }
 
             var featureVector = Internal.FeatureExporter.Export(
                 flow, key,
@@ -565,7 +588,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             PshCount = tcpPacket?.Push == true ? 1 : 0,
             PreFilterVerdict = verdict,
             // Only an inbound packet (destination is this host) is an inbound attack.
-            IsInbound = IsLocalAddress(destinationIp) && !IsLocalAddress(sourceIp)
+            IsInbound = IsInboundPacket(sourceIp, destinationIp)
         };
 
         ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));

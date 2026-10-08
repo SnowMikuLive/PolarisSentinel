@@ -311,8 +311,7 @@ public sealed class SourceBehaviorTracker
             AckCount,
             IcmpCount,
             AuthConnections,
-            window.TotalSeconds,
-            DistinctPorts.OrderBy(p => p).ToList());
+            window.TotalSeconds);
 
         private void Recompute()
         {

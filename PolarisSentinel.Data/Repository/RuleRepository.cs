@@ -20,12 +20,13 @@ public class RuleRepository : IRuleRepository
         _context.Rules.Add(rule);
     }
 
-    // Sequential ids are derived from the highest existing number, so deleted
-    // rows can cause a number to be reused; acceptable for this prototype.
+    // Single aggregate instead of a full-table read (see AlertRepository.NextIdAsync).
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
-        var ids = await _context.Rules.Select(r => r.Id).ToListAsync(cancellationToken);
-        return EntityIds.Next(ids, EntityIds.RulePrefix, EntityIds.Rule);
+        int max = await _context.Database.SqlQuery<int>(
+            $"SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Id], {EntityIds.RulePrefix.Length + 1}, 20) AS INT)), 0) AS [Value] FROM [Rules]")
+            .SingleAsync(cancellationToken);
+        return EntityIds.Rule(max + 1);
     }
 
     public async Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default)

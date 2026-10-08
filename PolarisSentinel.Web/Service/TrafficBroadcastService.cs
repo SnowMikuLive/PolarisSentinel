@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +20,17 @@ namespace PolarisSentinel.Web.Service
         private readonly DetectionStateService _state;
         private readonly TrafficHistoryService _history;
         private readonly ILogger<TrafficBroadcastService> _logger;
+
+        // Bounded so a flood cannot queue unbounded SignalR work. The pump sends one record at
+        // a time; when the queue is full the record is dropped from the live push (it is still
+        // recorded in the state window and persisted), which keeps the host responsive.
+        private const int BroadcastQueueCapacity = 2000;
+        private readonly Channel<DetectionRecord> _broadcasts =
+            Channel.CreateBounded<DetectionRecord>(new BoundedChannelOptions(BroadcastQueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropWrite,
+                SingleReader = true
+            });
 
         public TrafficBroadcastService(
             IHubContext<TrafficHub> hubContext,
@@ -43,6 +55,9 @@ namespace PolarisSentinel.Web.Service
             // Subscribe before starting capture so no early events are missed.
             _trafficCaptureService.OnLiveTrafficSummary += OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
+
+            // Single writer so the pipeline never awaits SignalR directly.
+            _ = Task.Run(PumpBroadcastsAsync);
 
             try
             {
@@ -86,8 +101,10 @@ namespace PolarisSentinel.Web.Service
                 // Persist for long-term history so charts survive a restart.
                 _history.Enqueue(DetectionStateService.ToTrafficRecord(record));
 
-                // Every classified flow is pushed so the live monitor can show the full window.
-                await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
+                // Hand the push to the single background writer instead of awaiting SignalR
+                // here. Under a flood thousands of these fire at once; awaiting each one
+                // swamped the host and the browser.
+                _broadcasts.Writer.TryWrite(record);
             }
             catch (Exception ex)
             {
@@ -95,8 +112,33 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
+        // Drains the broadcast queue and sends one message at a time. A client disconnect or
+        // slow consumer slows only this loop, never the detection pipeline.
+        private async Task PumpBroadcastsAsync()
+        {
+            try
+            {
+                await foreach (var record in _broadcasts.Reader.ReadAllAsync())
+                {
+                    try
+                    {
+                        await _hubContext.Clients.All.SendAsync("ReceivePolicyDecision", record);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to broadcast a policy decision");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Broadcast pump stopped");
+            }
+        }
+
         public Task StopAsync(CancellationToken cancellationToken)
         {
+            _broadcasts.Writer.TryComplete();
             _trafficCaptureService.OnLiveTrafficSummary -= OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted -= OnFlowCompletedHandler;
             return Task.CompletedTask;

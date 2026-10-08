@@ -1,6 +1,7 @@
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Core.Enums;
+using PolarisSentinel.Core.Services;
 using PolarisSentinel.Inference;
 using PolarisSentinel.TrafficCapture;
 using Microsoft.Extensions.Configuration;
@@ -39,10 +40,16 @@ namespace PolarisSentinel
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
 
-            // Persisted user choices (dry-run, model combination, capture device): they follow
-            // the user across restarts and only change when the user changes them.
-            builder.Services.AddSingleton<IUserSettingsStore>(sp =>
-                new JsonUserSettingsStore(sp.GetRequiredService<ILogger<JsonUserSettingsStore>>()));
+            // Persisted user choices (dry-run, model combination, capture device, heuristic
+            // switch) live in the database (single row), so they follow the database instead
+            // of the Windows account.
+            builder.Services.AddSingleton<IUserSettingsStore, DbUserSettingsStore>();
+
+            // Runtime-toggleable heuristic detection (dashboard switch), persisted like the
+            // other user settings.
+            builder.Services.AddSingleton(sp => new DetectionRuntimeState(
+                heuristicEnabled: true,
+                sp.GetRequiredService<IUserSettingsStore>()));
 
             // Runtime-toggleable enforcement state, seeded from configuration or the user's
             // saved choice. The dashboard can flip DryRun after startup; a singleton so every
@@ -71,7 +78,8 @@ namespace PolarisSentinel
                     globalFloodPackets: section.GetValue<int?>("GlobalFloodPackets"),
                     globalFloodDistinctSources: section.GetValue<int?>("GlobalFloodDistinctSources"));
 
-                return new TrafficCaptureService(flowIdleTimeoutSeconds, thresholds, liveSummaryIntervalSeconds);
+                return new TrafficCaptureService(flowIdleTimeoutSeconds, thresholds, liveSummaryIntervalSeconds,
+                    sp.GetRequiredService<DetectionRuntimeState>());
             });
 
             // Clean up old rules before capture starts.
@@ -175,7 +183,8 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IPolicyEngine>(),
                     sp.GetRequiredService<IFirewallEnforcer>(),
                     sp.GetRequiredService<IUnitOfWork>(),
-                    sp.GetRequiredService<ILogger<DetectionPipeline>>()));
+                    sp.GetRequiredService<ILogger<DetectionPipeline>>(),
+                    sp.GetRequiredService<DetectionRuntimeState>()));
 
             // Application use case: process one completed flow against the enabled policies.
             builder.Services.AddScoped<FlowProcessingService>();

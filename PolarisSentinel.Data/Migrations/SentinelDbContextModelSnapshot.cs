@@ -537,6 +537,33 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.ToTable("TrafficRecords", (string)null);
                 });
 
+            modelBuilder.Entity("PolarisSentinel.Core.Models.UserSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CaptureDevice")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool?>("DryRun")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("HeuristicEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ModelCombination")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("UserSettings", (string)null);
+                });
+
             modelBuilder.Entity("PolarisSentinel.DataAccess.Data.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")

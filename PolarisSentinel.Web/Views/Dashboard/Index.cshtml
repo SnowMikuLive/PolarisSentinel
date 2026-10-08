@@ -64,6 +64,21 @@
                 </div>
             </div>
         </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-warning shadow-sm h-100">
+                <div class="card-body">
+                    <label for="heuristicSelect" class="form-label text-muted small">Heuristic Detection</label>
+                    <div class="input-group input-group-sm">
+                        <select id="heuristicSelect" class="form-select form-select-sm">
+                            <option value="true">Enabled (filter, then AI)</option>
+                            <option value="false">Disabled (AI only)</option>
+                        </select>
+                        <button type="button" class="btn btn-warning" id="btnSetHeuristic">Set</button>
+                    </div>
+                    <div id="heuristicStatus" class="small mt-1 text-muted"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Shown only when firewall enforcement is not actually applying rules. -->
@@ -277,6 +292,8 @@
         const modelStatus = document.getElementById('modelStatus');
         const dryRunSelect = document.getElementById('dryRunSelect');
         const dryRunStatus = document.getElementById('dryRunStatus');
+        const heuristicSelect = document.getElementById('heuristicSelect');
+        const heuristicStatus = document.getElementById('heuristicStatus');
 
         // Reflects the enforcement state in the dropdown, status text and banner.
         function applyDryRun(dryRun, reason) {
@@ -293,6 +310,13 @@
             }
         }
 
+        // Reflects the heuristic-triage switch in the dropdown and status text.
+        function applyHeuristic(enabled) {
+            heuristicSelect.value = enabled ? 'true' : 'false';
+            heuristicStatus.textContent = enabled ? 'Filtering before AI' : 'AI only (no pre-filter)';
+            heuristicStatus.className = 'small mt-1 ' + (enabled ? 'text-success' : 'text-danger');
+        }
+
         fetch('/api/dashboard/info')
             .then(r => r.json())
             .then(info => {
@@ -303,6 +327,9 @@
 
                 // Sync the enforcement dropdown and warn when not actually blocking.
                 applyDryRun(info.dryRun, info.dryRunReason);
+
+                // Sync the heuristic detection switch.
+                applyHeuristic(info.heuristicEnabled);
             })
             .catch(err => console.error('Failed to fetch dashboard info', err));
 
@@ -330,6 +357,32 @@
                 .catch(err => {
                     dryRunStatus.textContent = err.message;
                     dryRunStatus.className = 'small mt-1 text-danger';
+                });
+        });
+
+        // Toggle heuristic detection from the dashboard.
+        document.getElementById('btnSetHeuristic').addEventListener('click', function () {
+            const enabled = heuristicSelect.value === 'true';
+
+            // Optimistic: reflect the choice immediately, then confirm with the server.
+            applyHeuristic(enabled);
+
+            fetch('/api/dashboard/heuristic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ heuristicEnabled: enabled })
+            })
+                .then(async r => {
+                    const data = await r.json();
+                    if (!r.ok) { throw new Error(data.error || 'Failed to change heuristic detection.'); }
+                    return data;
+                })
+                .then(data => {
+                    applyHeuristic(data.heuristicEnabled);
+                })
+                .catch(err => {
+                    heuristicStatus.textContent = err.message;
+                    heuristicStatus.className = 'small mt-1 text-danger';
                 });
         });
 

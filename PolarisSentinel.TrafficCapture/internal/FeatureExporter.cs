@@ -4,31 +4,9 @@ namespace PolarisSentinel.TrafficCapture.Internal;
 
 internal static class FeatureExporter
 {
-    // Human-readable name of each index in FlowFeatureVector.Features.
-    public static readonly string[] FeatureNames =
-    {
-        "flow_duration_ms",
-        "total_fwd_packets",
-        "total_bwd_packets",
-        "total_fwd_bytes",
-        "total_bwd_bytes",
-        "pkt_len_min",
-        "pkt_len_max",
-        "pkt_len_mean",
-        "pkt_len_std",
-        "fwd_iat_mean_ms",
-        "fwd_iat_std_ms",
-        "fwd_iat_max_ms",
-        "fwd_iat_min_ms",
-        "bwd_iat_mean_ms",
-        "bwd_iat_std_ms",
-        "bwd_iat_max_ms",
-        "bwd_iat_min_ms",
-        "flow_bytes_per_ms",
-        "flow_pkts_per_ms",
-        "down_up_ratio"
-            
-    };
+    // The feature schema has one source of truth in Core, so the capture layer, the alert
+    // snapshot and the models cannot drift apart.
+    public static readonly string[] FeatureNames = FlowSnapshot.FeatureNames;
 
     public static FlowFeatureVector Export(FlowRecord flow, FlowKey key, string sourceIp, ushort sourcePort, string destinationIp, ushort destinationPort, byte protocol)
     {

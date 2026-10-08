@@ -28,8 +28,14 @@ namespace PolarisSentinel.Web.Service
         // Hard cap so a flood cannot grow the history without bound.
         public const int MaxLiveRecords = 20000;
 
+        // Hard cap on how many records a single dashboard poll returns.
+        public const int MaxRecentRecords = 1000;
+
+        // Newest records are enqueued at the back, so insert and trim are O(1). The old
+        // List.Insert(0, ..) shifted the whole 20k window on every record, holding _lock and
+        // blocking the dashboard reads behind it - that is what froze the UI under a flood.
         private readonly object _lock = new();
-        private readonly List<(DateTime Timestamp, DetectionRecord Record)> _live = new();
+        private readonly Queue<(DateTime Timestamp, DetectionRecord Record)> _live = new();
 
         // Application-lifetime counters, reset only when the application restarts.
         public int CapturedFlowCount { get; private set; }
@@ -83,11 +89,11 @@ namespace PolarisSentinel.Web.Service
 
                 // Every classified flow is kept, so the monitor shows the full window
                 // rather than only the alerts.
-                _live.Insert(0, (now, record));
+                _live.Enqueue((now, record));
 
-                if (_live.Count > MaxLiveRecords)
+                while (_live.Count > MaxLiveRecords)
                 {
-                    _live.RemoveRange(MaxLiveRecords, _live.Count - MaxLiveRecords);
+                    _live.Dequeue();
                 }
             }
 
@@ -101,6 +107,7 @@ namespace PolarisSentinel.Web.Service
             lock (_lock)
             {
                 _live.Clear();
+                var restored = new List<(DateTime Timestamp, DetectionRecord Record)>();
 
                 foreach (var record in records)
                 {
@@ -121,7 +128,7 @@ namespace PolarisSentinel.Web.Service
                         string.Empty,
                         string.Empty);
 
-                    _live.Add((record.CreatedAt, detection));
+                    restored.Add((record.CreatedAt, detection));
 
                     CapturedFlowCount++;
                     switch (record.Verdict)
@@ -143,12 +150,15 @@ namespace PolarisSentinel.Web.Service
                     }
                 }
 
-                // Keep newest first, matching the live insert order.
-                _live.Sort((a, b) => b.Timestamp.CompareTo(a.Timestamp));
-
-                if (_live.Count > MaxLiveRecords)
+                // Oldest first, so the newest stays at the back like the live path.
+                foreach (var entry in restored.OrderBy(e => e.Timestamp))
                 {
-                    _live.RemoveRange(MaxLiveRecords, _live.Count - MaxLiveRecords);
+                    _live.Enqueue(entry);
+                }
+
+                while (_live.Count > MaxLiveRecords)
+                {
+                    _live.Dequeue();
                 }
             }
         }
@@ -160,14 +170,9 @@ namespace PolarisSentinel.Web.Service
             lock (_lock)
             {
                 int before = _live.Count;
-                int keep = _live.FindIndex(entry => entry.Timestamp >= cutoff);
-                if (keep < 0)
+                while (_live.Count > 0 && _live.Peek().Timestamp < cutoff)
                 {
-                    _live.Clear();
-                }
-                else if (keep > 0)
-                {
-                    _live.RemoveRange(keep, _live.Count - keep);
+                    _live.Dequeue();
                 }
                 return before - _live.Count;
             }
@@ -187,7 +192,9 @@ namespace PolarisSentinel.Web.Service
                     normal = NormalCount,
                     suspicious = SuspiciousCount,
                     malicious = MaliciousCount,
-                    recent = _live.Select(e => e.Record).ToArray()
+                    // Newest first, and only the most recent window: serialising all 20k
+                    // records on every dashboard poll is what stalls the browser.
+                    recent = _live.Reverse().Take(MaxRecentRecords).Select(e => e.Record).ToArray()
                 };
             }
         }

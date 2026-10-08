@@ -3,6 +3,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Services;
 
 namespace PolarisSentinel.Application;
 
@@ -14,6 +15,7 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly IFirewallEnforcer _firewall;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DetectionPipeline> _logger;
+    private readonly DetectionRuntimeState? _detection;
 
     // Alert ids are allocated by scanning the table for the highest "A-n". Flows complete
     // concurrently (one DI scope each), so two detections in a burst can compute the same
@@ -26,18 +28,24 @@ public class DetectionPipeline : IDetectionPipeline
         IPolicyEngine policy,
         IFirewallEnforcer firewall,
         IUnitOfWork unitOfWork,
-        ILogger<DetectionPipeline> logger)
+        ILogger<DetectionPipeline> logger,
+        DetectionRuntimeState? detection = null)
     {
         _inference = inference;
         _policy = policy;
         _firewall = firewall;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _detection = detection;
     }
 
     public DetectionOutcome ProcessFlow(FlowFeatureVector flow, IReadOnlyList<Policy> policies)
     {
         var verdict = flow.PreFilterVerdict;
+
+        // Heuristic triage can be switched off from the dashboard; then nothing is filtered and
+        // every flow is handed to the AI engine for a verdict.
+        bool heuristic = _detection?.HeuristicEnabled ?? true;
 
         // Only inbound traffic (remote -> local) is treated as an attack. Outbound flows are
         // still captured and shown on the dashboard, but this system defends the host, so it
@@ -58,7 +66,7 @@ public class DetectionPipeline : IDetectionPipeline
         // A known attack is alerted and blocked from the pre-filter verdict. The AI engine
         // still runs so its opinion is recorded on the alert (the heuristic verdict stays
         // authoritative for blocking).
-        if (verdict is { IsKnownAttack: true })
+        if (heuristic && verdict is { IsKnownAttack: true })
         {
             var alert = BuildPreFilterAlert(flow, verdict);
 
@@ -82,7 +90,7 @@ public class DetectionPipeline : IDetectionPipeline
             return Evaluate(alert, policies, malicious: true);
         }
 
-        if (verdict is not { IsSuspicious: true })
+        if (heuristic && verdict is not { IsSuspicious: true })
         {
             return new DetectionOutcome
             {

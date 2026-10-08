@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
+using PolarisSentinel.Core.Services;
 
 namespace PolarisSentinel.Web.Controllers;
 
@@ -15,11 +16,13 @@ public class DashboardApiController : ControllerBase
 {
     private readonly IFirewallEnforcer _firewall;
     private readonly IModelCombinationService _combinations;
+    private readonly DetectionRuntimeState _detection;
 
-    public DashboardApiController(IFirewallEnforcer firewall, IModelCombinationService combinations)
+    public DashboardApiController(IFirewallEnforcer firewall, IModelCombinationService combinations, DetectionRuntimeState detection)
     {
         _firewall = firewall;
         _combinations = combinations;
+        _detection = detection;
     }
 
     // Active rule count and the current AI model combination.
@@ -34,7 +37,9 @@ public class DashboardApiController : ControllerBase
             activeModelDisplay = ModelCombinations.DisplayName(_combinations.ActiveCombination),
             // Surface dry-run so the operator knows enforcement is not actually happening.
             dryRun = _firewall.IsDryRun,
-            dryRunReason = _firewall.DryRunReason
+            dryRunReason = _firewall.DryRunReason,
+            // Heuristic (rule-based) triage switch.
+            heuristicEnabled = _detection.HeuristicEnabled
         });
     }
 
@@ -62,6 +67,20 @@ public class DashboardApiController : ControllerBase
         var (dryRun, reason) = _firewall.SetDryRun(request.DryRun);
         return Ok(new { dryRun, dryRunReason = reason });
     }
+
+    // Turn heuristic (rule-based) detection on/off from the dashboard. Off means every flow
+    // is handed straight to the AI engine instead of being filtered first.
+    [HttpPost("heuristic")]
+    public IActionResult SetHeuristic([FromBody] SetHeuristicRequest request)
+    {
+        return Ok(new { heuristicEnabled = _detection.SetHeuristicEnabled(request.HeuristicEnabled) });
+    }
+}
+
+// Request body for toggling heuristic detection.
+public class SetHeuristicRequest
+{
+    public bool HeuristicEnabled { get; set; }
 }
 
 // Request body for toggling firewall dry-run.
