@@ -7,4 +7,4 @@ Stop-Process -Name PolarisSentinel.Web -ErrorAction SilentlyContinue
 $seedPassword = Read-Host "Adam20020418@" -AsSecureString
 $env:AdminSeed__Password = [System.Net.NetworkCredential]::new("", $seedPassword).Password
 
-dotnet run --project .\PolarisSentinel.Web\PolarisSentinel.Web.csproj --launch-profile http -- --Firewall:DryRun=true --Evaluation:DefaultDatasetPath=../ml/artifacts/cic_test_dataset.csv
+dotnet run --project .\PolarisSentinel.Web\PolarisSentinel.Web.csproj --launch-profile http -- --Firewall:DryRun=true --Evaluation:DefaultDatasetPath=../ml/artifacts/cic_demo_dataset.csv
