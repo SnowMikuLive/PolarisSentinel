@@ -15,6 +15,10 @@ public class Alert
     // Null for rule-based pre-filter alerts, which carry no model probability.
     public float? ConfidenceScore { get; set; }
 
+    // True when the reported source address was fabricated (random-source flood). An address
+    // block cannot stop such traffic, so the policy engine monitors instead of blocking.
+    public bool SpoofedSource { get; set; }
+
     public string? Description { get; set; }
 
     // 5-tuple

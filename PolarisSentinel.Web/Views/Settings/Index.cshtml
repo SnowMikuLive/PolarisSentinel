@@ -37,60 +37,29 @@
 
 @section Scripts{
     <script>
-        //Background Service status inference
-    // Reuses the existing /api/capture/devices: current!=null means Running, otherwise Stopped.
-    function renderServiceStatus(isRunning){
-        const state=document.getElementById('serviceState');
-        if(isRunning){
-            state.className='text-success';
-            state.textContent='Running';
-        }else{
-            state.className='text-danger';
-            state.textContent='Stopped';
+        // Reuses the existing /api/capture/devices: current!=null means Running, otherwise Stopped.
+        function renderServiceStatus(isRunning) {
+            const state = document.getElementById('serviceState');
+            state.className = isRunning ? 'text-success' : 'text-danger';
+            state.textContent = isRunning ? 'Running' : 'Stopped';
         }
-    }
 
-    // define handleFetchError
-    function handleFetchError(err){
-        console.error('Failed to Fetch capture status',err)
-        var state=document.getElementById('serviceState');
-        state.className='text-muted';
-        state.textContent='Unknown';
-    }
+        function handleFetchError(err) {
+            console.error('Failed to fetch capture status', err);
+            const state = document.getElementById('serviceState');
+            state.className = 'text-muted';
+            state.textContent = 'Unknown';
+        }
 
-    function handleFetchData(data){
-        renderServiceStatus(!!data.current);
-    }
+        function refreshServiceStatus() {
+            fetch('/api/capture/devices')
+                .then(response => response.json())
+                .then(data => renderServiceStatus(!!data.current))
+                .catch(handleFetchError);
+        }
 
-    function parseJson(response){
-        return response.json();
-    }
-
-    // Fetch device list once and infer status from the current fiels
-    //     function refreshServiceStatus(){
-    //         fetch('/api/capture/devices')
-    //              .then(r=>r.json())
-    //              .then(data=>renderServiceStatus(!!data.current))
-    //              .catch(err=>{
-    //                  console.error=document.getElementById('serviceState')
-    //                  state.className='text-muted';
-    //                  state.textContent='Unknown';
-    //              }
-        
-    //         function handleFetchData(data){
-    //             renderServiceStatus(!!data.current);
-    //         }
-    //         function parseJson(response){
-    //             return response.json();
-    //         }
-            function refreshServiceStatus(){
-                fetch('/api/capture/devices')
-                    .then(parseJson)
-                    .then(handleFetchData)
-                    .catch(handleFetchError);
-            }
-             refreshServiceStatus();
-            //Poll every 10 seconds
-            setInterval(refreshServiceStatus,10000);
+        refreshServiceStatus();
+        // Poll every 10 seconds.
+        setInterval(refreshServiceStatus, 10000);
         </script>
 }

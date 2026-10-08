@@ -8,11 +8,6 @@
     <h2 class="text-primary">Policies</h2>
     <p class="text-muted">Matching conditions and the firewall action applied to a matching alert.</p>
 
-    @if (TempData["success"] != null)
-    {
-        <div class="alert alert-success">@TempData["success"]</div>
-    }
-
     <div class="d-flex gap-2 mb-3">
         <a asp-action="Create" class="btn btn-primary">Create New</a>
         <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all policies? Linked rules keep their history but lose the policy link.');">

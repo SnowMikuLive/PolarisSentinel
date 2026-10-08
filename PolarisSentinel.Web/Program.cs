@@ -208,7 +208,7 @@ namespace PolarisSentinel
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
             {
-                app.UseExceptionHandler("/Home/Error");
+                app.UseExceptionHandler("/error");
                 app.UseHsts();
                 app.UseHttpsRedirection();
             }
@@ -231,6 +231,9 @@ namespace PolarisSentinel
                 pattern: "{controller=Dashboard}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
+
+            // Target of UseExceptionHandler in Production (no HomeController in this app).
+            app.MapGet("/error", () => Results.Problem(statusCode: StatusCodes.Status500InternalServerError));
 
             // Load the bundled test dataset so the Charts page has rows before any upload.
             var datasetService = app.Services.GetRequiredService<TestDatasetService>();

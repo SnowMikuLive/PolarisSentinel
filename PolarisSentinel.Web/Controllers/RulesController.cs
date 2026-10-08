@@ -6,6 +6,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -93,10 +94,6 @@ namespace PolarisSentinel.Web.Controllers
 
             return View(rules);
         }
-
-        // Case-insensitive substring test that tolerates null fields.
-        private static bool Contains(string? value, string term) =>
-            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
         public IActionResult Details(string? id)
         {

@@ -240,6 +240,7 @@ public class DetectionPipeline : IDetectionPipeline
             DetectionSource = DetectionSource.HeuristicBased,
             AttackType = verdict.AttackType!,
             ConfidenceScore = null,
+            SpoofedSource = verdict.IsSpoofedSource,
             Description = verdict.Description,
             SourceIp = sourceIp,
             SourcePort = flow.SourcePort,

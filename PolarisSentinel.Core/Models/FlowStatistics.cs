@@ -38,8 +38,4 @@ public class FlowStatistics
 
     public double FwdPacketsPerSecond =>
         DurationSeconds > 0 ? FwdPackets / DurationSeconds : FwdPackets;
-
-    public double DownUpRatio => BwdBytes > 0
-        ? (double)FwdBytes / BwdBytes
-        : (FwdBytes > 0 ? double.MaxValue : 1.0);
 }

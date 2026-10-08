@@ -12,8 +12,8 @@ using PolarisSentinel.DataAccess.Data;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     [DbContext(typeof(SentinelDbContext))]
-    [Migration("20261007102902_new")]
-    partial class @new
+    [Migration("20261008082711_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -225,6 +225,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.Property<int>("SourcePort")
                         .HasColumnType("int");
 
+                    b.Property<bool>("SpoofedSource")
+                        .HasColumnType("bit");
+
                     b.Property<int>("SynCount")
                         .HasColumnType("int");
 
@@ -316,9 +319,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             Id = "P-2",
                             Action = "BlockInboundIp",
                             AttackType = "PortScan",
-                            BlockDurationMinutes = 60,
+                            BlockDurationMinutes = 30,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of a Random Forest port scan detection.",
+                            Description = "Block the scanning source of a Random Forest port scan detection (reconnaissance: short block).",
                             DetectionSource = "RandomForest",
                             IsEnabled = true,
                             Name = "Random Forest PortScan",
@@ -332,9 +335,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             Id = "P-3",
                             Action = "BlockInboundIp",
                             AttackType = "BruteForce",
-                            BlockDurationMinutes = 60,
+                            BlockDurationMinutes = 120,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of a Random Forest brute force detection.",
+                            Description = "Block the source of a Random Forest brute force detection (credential attack: long block).",
                             DetectionSource = "RandomForest",
                             IsEnabled = true,
                             Name = "Random Forest BruteForce",
@@ -348,9 +351,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             Id = "P-4",
                             Action = "BlockInboundIp",
                             AttackType = "PortScan",
-                            BlockDurationMinutes = 60,
+                            BlockDurationMinutes = 30,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of any rule-based port scan detection.",
+                            Description = "Block the scanning source of any rule-based port scan detection (reconnaissance: short block).",
                             DetectionSource = "HeuristicBased",
                             IsEnabled = true,
                             Name = "Heuristic PortScan",
@@ -363,9 +366,9 @@ namespace PolarisSentinel.DataAccess.Migrations
                             Id = "P-5",
                             Action = "BlockInboundIp",
                             AttackType = "BruteForce",
-                            BlockDurationMinutes = 60,
+                            BlockDurationMinutes = 120,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of any rule-based brute force detection.",
+                            Description = "Block the source of any rule-based brute force detection (credential attack: long block).",
                             DetectionSource = "HeuristicBased",
                             IsEnabled = true,
                             Name = "Heuristic BruteForce",
@@ -376,15 +379,15 @@ namespace PolarisSentinel.DataAccess.Migrations
                         new
                         {
                             Id = "P-6",
-                            Action = "BlockInboundIp",
+                            Action = "Monitor",
                             AttackType = "Unknown_Anomaly",
-                            BlockDurationMinutes = 60,
+                            BlockDurationMinutes = 0,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of an Isolation Forest abnormal behavior.",
+                            Description = "Surface an unnamed Isolation Forest anomaly for review. Monitor-only: an unnamed anomaly is suspicious, not a confirmed attack.",
                             DetectionSource = "IsolationForest",
                             IfThreshold = 0.7f,
                             IsEnabled = true,
-                            Name = "Isolation Forest abnormal",
+                            Name = "Isolation Forest anomaly",
                             Priority = 90,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
@@ -396,7 +399,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             AttackType = "DoS",
                             BlockDurationMinutes = 60,
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
-                            Description = "Block the source of a Random Forest DoS detection.",
+                            Description = "Block the source of a Random Forest DoS detection (availability attack).",
                             DetectionSource = "RandomForest",
                             IsEnabled = true,
                             Name = "Random Forest DoS",
@@ -538,6 +541,33 @@ namespace PolarisSentinel.DataAccess.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.ToTable("TrafficRecords", (string)null);
+                });
+
+            modelBuilder.Entity("PolarisSentinel.Core.Models.UserSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CaptureDevice")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool?>("DryRun")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("HeuristicEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ModelCombination")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("UserSettings", (string)null);
                 });
 
             modelBuilder.Entity("PolarisSentinel.DataAccess.Data.ApplicationUser", b =>

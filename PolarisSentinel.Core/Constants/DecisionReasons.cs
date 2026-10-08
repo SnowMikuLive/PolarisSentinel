@@ -12,6 +12,9 @@ public static class DecisionReasons
     // The Isolation Forest reported an unnamed anomaly; a human decides.
     public const string UnknownAnomaly = "unknown_anomaly";
 
+    // The source addresses were spoofed, so no firewall rule can stop the traffic.
+    public const string SpoofedSource = "spoofed_source";
+
     // No enabled policy matched the alert.
     public const string NoMatchingPolicy = "no_matching_policy";
 
@@ -29,6 +32,7 @@ public static class DecisionReasons
     {
         Benign => "Traffic classified as benign.",
         UnknownAnomaly => "Unnamed anomaly detected; monitored for a human decision.",
+        SpoofedSource => "Source addresses were spoofed; no address block is possible, so this is monitored only.",
         NoMatchingPolicy => "No enabled policy matched this alert.",
         PolicyAllow => "Allowed by a matching policy.",
         PolicyMonitor => "Monitored by a matching policy (no block).",
