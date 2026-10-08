@@ -59,8 +59,6 @@ internal static class FeatureExporter
             Protocol = protocol,
             FlowStartTime = flow.StartTime,
             FlowEndTime = flow.LastSeenTime,
-            TotalPackets = flow.TotalPackets,
-            TotalBytes = flow.TotalBytes,
             SynCount = flow.SynCount,
             AckCount = flow.AckCount,
             FinCount = flow.FinCount,

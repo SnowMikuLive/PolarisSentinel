@@ -6,6 +6,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -73,10 +74,6 @@ namespace PolarisSentinel.Web.Controllers
             TempData["success"] = $"Policy {policy.Id} {(policy.IsEnabled ? "enabled" : "disabled")}.";
             return RedirectToAction(nameof(Index));
         }
-
-        // Case-insensitive substring test that tolerates null fields.
-        private static bool Contains(string? value, string term) =>
-            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {

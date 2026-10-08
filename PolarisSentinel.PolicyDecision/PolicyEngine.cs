@@ -43,6 +43,14 @@ public class PolicyEngine : IPolicyEngine
             return Decision.Monitor(alert, DecisionReasons.UnknownAnomaly);
         }
 
+        // A spoofed/random-source flood cannot be stopped by a firewall rule: the reported
+        // source addresses are fabricated, so an address block would match nothing real. The
+        // detection is still recorded, but the decision stays monitor-only.
+        if (alert.SpoofedSource)
+        {
+            return Decision.Monitor(alert, DecisionReasons.SpoofedSource);
+        }
+
         var match = SelectPolicy(alert, policies);
         if (match == null)
         {

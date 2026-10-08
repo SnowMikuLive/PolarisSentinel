@@ -404,3 +404,6 @@ CLAUDE.local.md
 .windsurf/
 .codex/
 AGENTS.md
+
+# Static analysis scanner output
+.sonarqube/

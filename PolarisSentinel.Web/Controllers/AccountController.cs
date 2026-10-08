@@ -117,11 +117,9 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Login));
         }
 
-        //[HttpGet]
-        //[AllowAnonymous]
-        //public IActionResult AccessDenied()
-        //{
-        //    return View();
-        //}
+        // Target of the cookie auth AccessDeniedPath configured in Program.cs.
+        [HttpGet]
+        [AllowAnonymous]
+        public IActionResult AccessDenied() => View();
     }
 }

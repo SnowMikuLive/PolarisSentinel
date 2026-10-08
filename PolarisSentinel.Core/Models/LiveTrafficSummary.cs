@@ -1,7 +1,6 @@
 namespace PolarisSentinel.Core.Models;
 public class LiveTrafficSummary
 {
-    public required DateTime Timestamp { get; init; }
     public required double PacketsPerSecond { get; init; }
     public required double BytesPerSecond { get; init; }
     public long Bytes { get; init; }

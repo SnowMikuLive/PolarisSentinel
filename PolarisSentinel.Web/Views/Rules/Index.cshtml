@@ -8,11 +8,6 @@
     <h2 class="text-primary">Firewall Rules</h2>
     <p class="text-muted">Rules created by PolarisSentinel or added manually.</p>
 
-    @if (TempData["success"] != null)
-    {
-        <div class="alert alert-success">@TempData["success"]</div>
-    }
-
 <div class="d-flex gap-2 mb-3">
     <a asp-action="Create" class="btn btn-primary">Create New</a>
     <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all managed firewall rules?');">

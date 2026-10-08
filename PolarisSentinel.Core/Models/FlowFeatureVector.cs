@@ -14,9 +14,6 @@ public class FlowFeatureVector
     public required DateTime FlowStartTime { get; init; }
     public required DateTime FlowEndTime { get; init; }
 
-    public long TotalPackets { get; init; }
-    public long TotalBytes { get; init; }
-
     // TCP flag counters, carried through for alert detail and policy decisions.
     public int SynCount { get; init; }
     public int AckCount { get; init; }

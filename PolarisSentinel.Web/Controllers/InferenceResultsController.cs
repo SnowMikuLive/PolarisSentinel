@@ -4,6 +4,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Interfaces;
 using System.Globalization;
 using System.Text;
+using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
@@ -57,10 +58,6 @@ namespace PolarisSentinel.Web.Controllers
 
             return View(alerts);
         }
-
-        // Case-insensitive substring test that tolerates null fields.
-        private static bool Contains(string? value, string term) =>
-            !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
 
         // Deletes every stored alert. Linked rules keep their AlertId as a historical
         // reference; the FK is ON DELETE SET NULL, so those rules simply lose the link.

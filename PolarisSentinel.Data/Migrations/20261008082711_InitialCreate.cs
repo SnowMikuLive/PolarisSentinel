@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PolarisSentinel.DataAccess.Migrations
 {
     /// <inheritdoc />
-    public partial class @new : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -21,6 +21,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                     DetectionSource = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
                     AttackType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     ConfidenceScore = table.Column<float>(type: "real", nullable: true),
+                    SpoofedSource = table.Column<bool>(type: "bit", nullable: false),
                     Description = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     SourceIp = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: false),
                     SourcePort = table.Column<int>(type: "int", nullable: false),
@@ -128,6 +129,22 @@ namespace PolarisSentinel.DataAccess.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_TrafficRecords", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserSettings",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    DryRun = table.Column<bool>(type: "bit", nullable: true),
+                    ModelCombination = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
+                    CaptureDevice = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                    HeuristicEnabled = table.Column<bool>(type: "bit", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserSettings", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -278,12 +295,12 @@ namespace PolarisSentinel.DataAccess.Migrations
                 values: new object[,]
                 {
                     { "P-1", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based DoS detection.", "HeuristicBased", null, true, "Heuristic DoS", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-2", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest port scan detection.", "RandomForest", null, true, "Random Forest PortScan", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-3", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest brute force detection.", "RandomForest", null, true, "Random Forest BruteForce", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-4", "BlockInboundIp", "PortScan", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based port scan detection.", "HeuristicBased", null, true, "Heuristic PortScan", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-5", "BlockInboundIp", "BruteForce", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based brute force detection.", "HeuristicBased", null, true, "Heuristic BruteForce", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-6", "BlockInboundIp", "Unknown_Anomaly", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of an Isolation Forest abnormal behavior.", "IsolationForest", 0.7f, true, "Isolation Forest abnormal", 90, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
-                    { "P-7", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest DoS detection.", "RandomForest", null, true, "Random Forest DoS", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
+                    { "P-2", "BlockInboundIp", "PortScan", 30, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the scanning source of a Random Forest port scan detection (reconnaissance: short block).", "RandomForest", null, true, "Random Forest PortScan", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-3", "BlockInboundIp", "BruteForce", 120, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest brute force detection (credential attack: long block).", "RandomForest", null, true, "Random Forest BruteForce", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-4", "BlockInboundIp", "PortScan", 30, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the scanning source of any rule-based port scan detection (reconnaissance: short block).", "HeuristicBased", null, true, "Heuristic PortScan", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-5", "BlockInboundIp", "BruteForce", 120, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of any rule-based brute force detection (credential attack: long block).", "HeuristicBased", null, true, "Heuristic BruteForce", 100, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-6", "Monitor", "Unknown_Anomaly", 0, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Surface an unnamed Isolation Forest anomaly for review. Monitor-only: an unnamed anomaly is suspicious, not a confirmed attack.", "IsolationForest", 0.7f, true, "Isolation Forest anomaly", 90, null, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" },
+                    { "P-7", "BlockInboundIp", "DoS", 60, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "Block the source of a Random Forest DoS detection (availability attack).", "RandomForest", null, true, "Random Forest DoS", 90, 0.7f, new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified), "admin" }
                 });
 
             migrationBuilder.CreateIndex(
@@ -374,6 +391,9 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             migrationBuilder.DropTable(
                 name: "TrafficRecords");
+
+            migrationBuilder.DropTable(
+                name: "UserSettings");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

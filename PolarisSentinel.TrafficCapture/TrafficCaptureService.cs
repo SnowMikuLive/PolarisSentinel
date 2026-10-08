@@ -22,7 +22,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private readonly int _flowIdleTimeoutSeconds;
     private readonly System.Threading.Timer _expiryTimer;
     private readonly System.Threading.Timer _liveSummaryTimer;
-    public static string[] FeatureNames => Internal.FeatureExporter.FeatureNames;
     private ICaptureDevice? _device;
 
     // Guards the device snapshot cache so concurrent API calls do not race.
@@ -511,8 +510,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 Protocol = featureVector.Protocol,
                 FlowStartTime = featureVector.FlowStartTime,
                 FlowEndTime = featureVector.FlowEndTime,
-                TotalPackets = featureVector.TotalPackets,
-                TotalBytes = featureVector.TotalBytes,
                 SynCount = featureVector.SynCount,
                 AckCount = featureVector.AckCount,
                 FinCount = featureVector.FinCount,
@@ -610,7 +607,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         OnLiveTrafficSummary?.Invoke(this, new LiveTrafficSummary
         {
-            Timestamp = now,
             PacketsPerSecond = packets / elapsedSeconds,
             BytesPerSecond = bytes / elapsedSeconds,
             Bytes = bytes,
