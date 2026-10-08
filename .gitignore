@@ -71,6 +71,8 @@ ml/artifacts/*
 !ml/artifacts/inference_cases.json
 !ml/artifacts/cic_test_dataset.csv
 !ml/artifacts/cic_test_dataset.json
+!ml/artifacts/cic_demo_dataset.csv
+!ml/artifacts/cic_demo_dataset.json
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 

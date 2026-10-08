@@ -10,6 +10,7 @@
     int pageSize = ViewBag.PageSize ?? 20;
     int datasetCount = ViewBag.DatasetCount ?? 0;
     string? datasetName = ViewBag.DatasetName;
+    bool isDemo = string.Equals(datasetName, "cic_demo_dataset.csv", StringComparison.OrdinalIgnoreCase);
     int startIndex = (page - 1) * pageSize;
 }
 
@@ -19,6 +20,14 @@
         Test a model combination on a real flow and compare all five combinations on the loaded dataset.
         The models are not retrained here; the live pre-filter is not used.
     </p>
+
+    @if (isDemo)
+    {
+        <div class="alert alert-info">
+            Curated CIC demonstration samples selected using the RF/IF results.
+            These Benign-versus-attack metrics are for this demo, not an independent performance test.
+        </div>
+    }
 
     @if (TempData["success"] != null)
     {
@@ -31,7 +40,7 @@
 
     <div class="card shadow-sm border-primary mb-3">
         <div class="card-header bg-primary text-white">
-            Test Dataset
+            @(isDemo ? "Demonstration Dataset" : "Test Dataset")
         </div>
         <div class="card-body">
             <form asp-action="Upload" method="post" enctype="multipart/form-data" class="row align-items-end">
