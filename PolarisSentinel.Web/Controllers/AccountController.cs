@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using PolarisSentinel.DataAccess.Data;
@@ -39,7 +39,6 @@ namespace PolarisSentinel.Web.Controllers
 
                 if (result.Succeeded)
                 {
-                    // A seeded account must change its password before anything else.
                     var user = await _userManager.FindByNameAsync(model.Username!);
                     if (user is { MustChangePassword: true })
                     {
@@ -117,7 +116,6 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Login));
         }
 
-        // Target of the cookie auth AccessDeniedPath configured in Program.cs.
         [HttpGet]
         [AllowAnonymous]
         public IActionResult AccessDenied() => View();

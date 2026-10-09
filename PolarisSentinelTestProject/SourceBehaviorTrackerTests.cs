@@ -20,7 +20,15 @@ public class SourceBehaviorTrackerTests
     private static PacketObservation Syn(int port, int msOffset, bool inbound = true) =>
         new(Attacker, Victim, port, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset), IsInbound: inbound);
 
-    // A scan touching many distinct ports is caught even though each port is its own flow.
+    private static PacketObservation Fin(int port, int msOffset) =>
+        new(Attacker, Victim, port, ProtocolNumbers.Tcp, IsSyn: false, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset), IsInbound: true, IsFin: true);
+
+    private static PacketObservation UdpProbe(int port, int msOffset) =>
+        new(Attacker, Victim, port, ProtocolNumbers.Udp, IsSyn: false, IsRst: false, PacketSize: 40, Start.AddMilliseconds(msOffset), IsInbound: true);
+
+    private static PacketObservation SynAck(int localPort, int msOffset) =>
+        new(Victim, Attacker, localPort, ProtocolNumbers.Tcp, IsSyn: true, IsRst: false, PacketSize: 60, Start.AddMilliseconds(msOffset), IsInbound: true, IsFin: false, IsAck: true);
+
     [TestMethod]
     public void PortScan_ManyDistinctPorts_ShouldBeDetected()
     {
@@ -38,8 +46,6 @@ public class SourceBehaviorTrackerTests
         Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
     }
 
-    // A DoS from one IP spread across many destination ports: each port is its own short
-    // flow, so the per-flow pre-filter misses it; the aggregate packet count catches it.
     [TestMethod]
     public void MultiPortDos_OneSourceManyPorts_ShouldBeDetected()
     {
@@ -60,7 +66,6 @@ public class SourceBehaviorTrackerTests
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
     }
 
-    // The fast-path returns a verdict the instant a threshold is crossed, without expiry.
     [TestMethod]
     public void EvaluateFast_ShouldFireImmediatelyOnThreshold()
     {
@@ -83,7 +88,6 @@ public class SourceBehaviorTrackerTests
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
     }
 
-    // Many packets on each port is a client with real sessions, not a scanner.
     [TestMethod]
     public void BusyMultiPortClient_ShouldNotBeReportedAsAScan()
     {
@@ -103,8 +107,6 @@ public class SourceBehaviorTrackerTests
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
     }
 
-    // A modest hping3 style SYN flood: a handful of SYNs with no handshake from one source is
-    // enough at maximum sensitivity, instead of waiting for a full flood volume.
     [TestMethod]
     public void ModestSynFlood_ShouldBeDetected()
     {
@@ -121,7 +123,6 @@ public class SourceBehaviorTrackerTests
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
     }
 
-    // The host's own outbound connections are not attacks against it, so they are not tracked.
     [TestMethod]
     public void OutboundPackets_ShouldBeIgnored()
     {
@@ -137,5 +138,65 @@ public class SourceBehaviorTrackerTests
 
         Assert.IsNull(verdict);
         Assert.IsNull(tracker.Evaluate(Attacker, Start.AddSeconds(2)));
+    }
+
+    [TestMethod]
+    public void FinScan_ManyDistinctPorts_ShouldBeDetectedImmediately()
+    {
+        var tracker = CreateTracker();
+        PreFilterResult? verdict = null;
+
+        for (int i = 0; i < 5; i++)
+        {
+            var packet = Fin(port: 2000 + i, msOffset: i);
+            tracker.Observe(packet);
+            verdict = tracker.EvaluateFast(packet);
+            if (verdict is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.IsNotNull(verdict);
+        Assert.IsTrue(verdict.IsKnownAttack);
+        Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
+    }
+
+    [TestMethod]
+    public void UdpScan_ServicePorts_ShouldBeDetectedImmediately()
+    {
+        var tracker = CreateTracker();
+        PreFilterResult? verdict = null;
+
+        for (int i = 0; i < 5; i++)
+        {
+            var packet = UdpProbe(port: 100 + i, msOffset: i);
+            tracker.Observe(packet);
+            verdict = tracker.EvaluateFast(packet);
+            if (verdict is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.IsNotNull(verdict);
+        Assert.IsTrue(verdict.IsKnownAttack);
+        Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
+    }
+
+    [TestMethod]
+    public void SynAckReplies_ShouldNotBeTreatedAsProbes()
+    {
+        var tracker = CreateTracker();
+        PreFilterResult? verdict = null;
+
+        for (int i = 0; i < 10; i++)
+        {
+            var packet = SynAck(localPort: 50000 + i, msOffset: i);
+            tracker.Observe(packet);
+            verdict = tracker.EvaluateFast(packet);
+        }
+
+        Assert.IsNull(verdict);
     }
 }

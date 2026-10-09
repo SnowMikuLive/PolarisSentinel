@@ -21,9 +21,6 @@ namespace PolarisSentinel.Web.Service
         private readonly TrafficHistoryService _history;
         private readonly ILogger<TrafficBroadcastService> _logger;
 
-        // Bounded so a flood cannot queue unbounded SignalR work. The pump sends one record at
-        // a time; when the queue is full the record is dropped from the live push (it is still
-        // recorded in the state window and persisted), which keeps the host responsive.
         private const int BroadcastQueueCapacity = 2000;
         private readonly Channel<DetectionRecord> _broadcasts =
             Channel.CreateBounded<DetectionRecord>(new BoundedChannelOptions(BroadcastQueueCapacity)
@@ -52,11 +49,9 @@ namespace PolarisSentinel.Web.Service
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            // Subscribe before starting capture so no early events are missed.
             _trafficCaptureService.OnLiveTrafficSummary += OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
 
-            // Single writer so the pipeline never awaits SignalR directly.
             _ = Task.Run(PumpBroadcastsAsync);
 
             try
@@ -82,7 +77,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Runs one completed flow through the application use case and records the outcome.
         private async void OnFlowCompletedHandler(object? sender, FlowFeatureVector flow)
         {
             try
@@ -98,12 +92,8 @@ namespace PolarisSentinel.Web.Service
 
                 var record = _state.Record(outcome);
 
-                // Persist for long-term history so charts survive a restart.
                 _history.Enqueue(DetectionStateService.ToTrafficRecord(record));
 
-                // Hand the push to the single background writer instead of awaiting SignalR
-                // here. Under a flood thousands of these fire at once; awaiting each one
-                // swamped the host and the browser.
                 _broadcasts.Writer.TryWrite(record);
             }
             catch (Exception ex)
@@ -112,8 +102,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Drains the broadcast queue and sends one message at a time. A client disconnect or
-        // slow consumer slows only this loop, never the detection pipeline.
         private async Task PumpBroadcastsAsync()
         {
             try

@@ -1,11 +1,9 @@
-﻿using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.TrafficCapture.Internal;
 
 internal static class FeatureExporter
 {
-    // The feature schema has one source of truth in Core, so the capture layer, the alert
-    // snapshot and the models cannot drift apart.
     public static readonly string[] FeatureNames = FlowSnapshot.FeatureNames;
 
     public static FlowFeatureVector Export(FlowRecord flow, FlowKey key, string sourceIp, ushort sourcePort, string destinationIp, ushort destinationPort, byte protocol)
@@ -20,7 +18,6 @@ internal static class FeatureExporter
             ? (float)(flow.TotalPackets / durationMs)
             : 0;
 
-        // Matches the training script: down_up_ratio = bwd_pkts / fwd_pkts
         float downUpRatio = flow.FwdPackets > 0
             ? (float)((double)flow.BwdPackets / flow.FwdPackets)
             : 0;

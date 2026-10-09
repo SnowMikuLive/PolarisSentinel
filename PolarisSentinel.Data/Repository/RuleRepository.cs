@@ -20,7 +20,6 @@ public class RuleRepository : IRuleRepository
         _context.Rules.Add(rule);
     }
 
-    // Single aggregate instead of a full-table read (see AlertRepository.NextIdAsync).
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
         int max = await _context.Database.SqlQuery<int>(
@@ -52,15 +51,11 @@ public class RuleRepository : IRuleRepository
 
     public void Update(Rule rule)
     {
-        // Rules are read with AsNoTracking(), so the passed-in instance is detached.
-        // Load the tracked row and copy only the scalar columns across so EF never
-        // tries to re-attach (and re-insert) a principal row.
         var tracked = _context.Rules
             .FirstOrDefault(r => r.Id == rule.Id);
 
         if (tracked is null)
         {
-            // No existing row (e.g. an entity created in-memory): attach just this rule.
             _context.Rules.Attach(rule);
             _context.Entry(rule).State = EntityState.Modified;
             return;
@@ -83,7 +78,6 @@ public class RuleRepository : IRuleRepository
 
     public void Remove(Rule rule)
     {
-        // Remove the tracked row to avoid attaching the same rule twice.
         var existing = _context.Rules.Find(rule.Id);
         if (existing != null)
         {

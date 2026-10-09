@@ -30,8 +30,6 @@ public sealed class SentinelDbInitializer
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        // Apply pending migrations first; without this the schema and seed data stay
-        // stale and enum values such as the renamed DetectionSource fail to map.
         await _db.Database.MigrateAsync(cancellationToken);
         _logger.LogInformation("Database migrations applied.");
 
@@ -43,8 +41,6 @@ public sealed class SentinelDbInitializer
 
         if (string.IsNullOrWhiteSpace(_options.Password))
         {
-            // Fail loudly: silently creating a known default password would be
-            // a security hole. Set AdminSeed:Password (or AdminSeed__Password).
             _logger.LogWarning(
                 "AdminSeed:Password is not configured. Skipping admin creation. " +
                 "Set it via user-secrets or the AdminSeed__Password environment variable.");
@@ -65,7 +61,6 @@ public sealed class SentinelDbInitializer
                 UserName = _options.UserName,
                 Email = _options.Email,
                 EmailConfirmed = true,
-                // The seeded password is a known default, so force a change on first login.
                 MustChangePassword = true
             };
 

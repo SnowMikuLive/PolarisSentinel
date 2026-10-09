@@ -231,8 +231,9 @@
                     devices.forEach(d=>{
                         const option=document.createElement('option');
                         option.value=d.deviceName;
-                        // Tag Wi-Fi so the auto-selected default is obvious.
-                        option.textContent=d.displayName+(d.isWifi?' [Wi-Fi]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
+                        // Tag the interface AutoStart would pick, so the default is obvious
+                        // for any NIC type (Wi-Fi, Ethernet, etc.).
+                        option.textContent=d.displayName+(d.isDefault?' [default]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
                         deviceSelect.appendChild(option);
                         if(d.isCurrent)currentValue=d.deviceName;
                     });

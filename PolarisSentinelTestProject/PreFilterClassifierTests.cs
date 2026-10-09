@@ -23,7 +23,6 @@ public class PreFilterClassifierTests
         DurationSeconds = 0.2
     };
 
-    // A burst of small one-way UDP probes is forwarded to the AI engine as a suspected scan.
     [TestMethod]
     public void UdpProbeBurst_ShouldBeScanned()
     {
@@ -33,7 +32,6 @@ public class PreFilterClassifierTests
         Assert.AreEqual("PortScan: UDP port scan", verdict.Description);
     }
 
-    // A short payload-heavy one-way UDP flow is media/bulk traffic, not a probe burst.
     [TestMethod]
     public void BulkOneWayUdp_ShouldNotBeScanned()
     {
@@ -42,8 +40,6 @@ public class PreFilterClassifierTests
         Assert.IsFalse(verdict.IsSuspicious);
     }
 
-    // Ordinary two-way web traffic is unrelated to DoS/port scan/brute force, so it is
-    // classified as normal and never forwarded to the AI engine.
     [TestMethod]
     public void OrdinaryWebTraffic_ShouldBeNormal()
     {
@@ -67,8 +63,6 @@ public class PreFilterClassifierTests
         Assert.IsFalse(verdict.IsKnownAttack);
     }
 
-    // A brute-force target port (SSH) is relevant even without a signature match, so it is
-    // forwarded to the AI engine for a verdict.
     [TestMethod]
     public void AuthPortTraffic_ShouldBeRelevant()
     {
@@ -89,8 +83,6 @@ public class PreFilterClassifierTests
         Assert.IsTrue(verdict.IsSuspicious);
     }
 
-    // A probe that had to be retransmitted is a scan signature, and it is only a handful of
-    // packets, so it must be classified before the small-flow gate.
     [TestMethod]
     public void SynProbe_ShouldBeScanned()
     {
@@ -112,4 +104,42 @@ public class PreFilterClassifierTests
         Assert.AreEqual("PortScan: TCP SYN port scan", verdict.Description);
     }
 
+    [TestMethod]
+    public void OneWayProbeBurst_ShouldBeScanned()
+    {
+        var flow = new FlowStatistics
+        {
+            Protocol = ProtocolNumbers.Tcp,
+            DestinationPort = 8080,
+            FwdPackets = 6,
+            BwdPackets = 0,
+            PacketSizeMean = 40,
+            DurationSeconds = 0.4
+        };
+
+        var verdict = Create().Classify(flow);
+
+        Assert.IsTrue(verdict.IsSuspicious);
+        Assert.AreEqual("PortScan: Port probe burst (no replies)", verdict.Description);
+    }
+
+    [TestMethod]
+    public void FilteredSynProbes_ShouldBeScanned()
+    {
+        var flow = new FlowStatistics
+        {
+            Protocol = ProtocolNumbers.Tcp,
+            DestinationPort = 4444,
+            FwdPackets = 3,
+            BwdPackets = 0,
+            SynCount = 3,
+            DurationSeconds = 0.5,
+            PacketSizeMean = 60
+        };
+
+        var verdict = Create().Classify(flow);
+
+        Assert.IsTrue(verdict.IsSuspicious);
+        Assert.AreEqual("PortScan: TCP SYN scan (filtered)", verdict.Description);
+    }
 }

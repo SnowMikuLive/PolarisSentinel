@@ -24,7 +24,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Loads rows from CSV text; returns false with an error message when invalid.
         public bool Load(string fileName, string content, out string? error)
         {
             if (!CsvFlowParser.TryParse(content, out var rows, out error))
@@ -40,7 +39,6 @@ namespace PolarisSentinel.Web.Service
             return true;
         }
 
-        // A page of rows (1-based index) for display.
         public IReadOnlyList<LabeledFlow> GetPage(int startIndex, int count)
         {
             lock (_lock)

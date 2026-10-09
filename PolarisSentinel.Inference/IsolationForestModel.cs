@@ -21,7 +21,6 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
 
     public IReadOnlyList<string> FeatureNames { get; }
 
-    // Raw decision_function value below which the flow is considered anomalous.
     private double AnomalyThreshold { get; }
 
     public IsolationForestModel(string modelPath, IReadOnlyList<string> classifierFeatureNames)
@@ -51,8 +50,6 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
     {
         double score = RawScore(flow);
 
-        // The raw decision_function value is not a probability: lower means more anomalous.
-        // It is mapped onto 0..1 here so that a higher score always means stronger anomaly evidence.
         float confidence = Normalize(score);
 
         return new InferenceResult
@@ -63,7 +60,6 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
         };
     }
 
-    // True when the raw score is below the model's anomaly threshold.
     public bool IsAnomaly(FlowFeatureVector flow) => RawScore(flow) < AnomalyThreshold;
 
     private double RawScore(FlowFeatureVector flow)
@@ -79,7 +75,6 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
         return results.First(r => r.Name == "scores").AsEnumerable<float>().First();
     }
 
-    // The calibration points map to 0.60 and 0.95; confidence stays capped at 0.99.
     private float Normalize(double score)
     {
         double span = _scoreAtAlertConfidence - _scoreAtHighConfidence;

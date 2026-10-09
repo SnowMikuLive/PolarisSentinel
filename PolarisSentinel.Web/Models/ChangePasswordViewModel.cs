@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PolarisSentinel.Web.Models
 {
-    // Change password view model, used for the forced first-login change.
     public class ChangePasswordViewModel
     {
         [Required(ErrorMessage = "Current password is required.")]

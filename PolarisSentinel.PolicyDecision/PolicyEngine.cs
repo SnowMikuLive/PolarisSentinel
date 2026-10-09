@@ -24,9 +24,6 @@ public class PolicyEngine : IPolicyEngine
             throw new ArgumentNullException(nameof(alert));
         }
 
-        // The Isolation Forest only reports unnamed anomalies, so its attack type is
-        // always Unknown_Anomaly. Normalise here so a mislabelled alert cannot match a
-        // named-attack policy or slip past the monitor-only rule below.
         if (alert.DetectionSource == DetectionSource.IsolationForest)
         {
             alert.AttackType = AttackTypes.UnknownAnomaly;
@@ -37,15 +34,11 @@ public class PolicyEngine : IPolicyEngine
             return Decision.Monitor(alert, DecisionReasons.Benign);
         }
 
-        // Unknown anomalies are monitored for a human decision.
         if (alert.AttackType == AttackTypes.UnknownAnomaly)
         {
             return Decision.Monitor(alert, DecisionReasons.UnknownAnomaly);
         }
 
-        // A spoofed/random-source flood cannot be stopped by a firewall rule: the reported
-        // source addresses are fabricated, so an address block would match nothing real. The
-        // detection is still recorded, but the decision stays monitor-only.
         if (alert.SpoofedSource)
         {
             return Decision.Monitor(alert, DecisionReasons.SpoofedSource);
@@ -71,7 +64,6 @@ public class PolicyEngine : IPolicyEngine
         return Decision.Block(alert, match, DecisionReasons.PolicyBlock);
     }
 
-    // Highest priority wins; ties fall back to the older policy, then the id, for determinism.
     private static Policy? SelectPolicy(Alert alert, IReadOnlyList<Policy> policies)
     {
         return policies

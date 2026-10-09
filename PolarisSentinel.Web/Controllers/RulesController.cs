@@ -30,7 +30,6 @@ namespace PolarisSentinel.Web.Controllers
             string? search = null,
             string? sort = null)
         {
-            // Start from the full list, then apply each filter in turn.
             var rules = _firewall.GetAllRules();
 
             if (status.HasValue)
@@ -48,7 +47,6 @@ namespace PolarisSentinel.Web.Controllers
                 rules = rules.Where(r => r.Action == action.Value).ToList();
             }
 
-            // Free-text search across the fields an operator scans by.
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -64,7 +62,6 @@ namespace PolarisSentinel.Web.Controllers
                     .ToList();
             }
 
-            // Sorting: newest first by default, matching the "what just happened" focus.
             rules = sort switch
             {
                 "expires" => rules.OrderBy(r => r.ExpiresAt ?? DateTime.MaxValue).ToList(),
@@ -106,9 +103,6 @@ namespace PolarisSentinel.Web.Controllers
             return View(rule);
         }
 
-        // The optional query values let the Inference Results page open this form with
-        // an alert's 5-tuple already filled in; the operator only has to confirm.
-        // alertId / policyId are carried through so the created rule keeps its origin.
         public IActionResult Create(
             string? alertId = null,
             string? policyId = null,
@@ -237,7 +231,6 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.Statuses = new SelectList(Enum.GetValues<RuleStatus>());
         }
 
-        // Surfaces the domain validation errors on ModelState for the form.
         private void AddValidationErrors(Rule rule)
         {
             foreach (var (field, message) in _rules.Validate(rule))

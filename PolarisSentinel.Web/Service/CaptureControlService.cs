@@ -21,30 +21,32 @@ public class CaptureControlService
 
     public string? CurrentDevice => _currentDevice;
 
-    // Auto-select: prefer the device the user last chose (it follows them across restarts),
-    // then Wi-Fi, then Ethernet, then the first device.
     public void AutoStart()
     {
-        var devices = _capture.GetAvailableDevices().ToList();
-        string? saved = _settings?.Read().CaptureDevice;
-
-        var selected =
-            (!string.IsNullOrEmpty(saved) ? devices.FirstOrDefault(d => d.DeviceName == saved) : null) ??
-            devices.FirstOrDefault(d =>
-                d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase)) ??
-            devices.FirstOrDefault(d =>
-                d.DisplayName.Contains("Ethernet", StringComparison.OrdinalIgnoreCase)) ??
-            devices.FirstOrDefault();
-
+        var selected = GetDefaultDeviceName();
         if (selected != null)
         {
-            // Startup selection is not a user choice, so it is not persisted.
-            SwitchTo(selected.DeviceName, persist: false);
+            SwitchTo(selected, persist: false);
         }
     }
 
-    // Never let device enumeration throw: a failure here would return HTTP 500 from
-    // /api/capture/devices and blank out the UI's network-interface selector.
+    public string? GetDefaultDeviceName()
+    {
+        var devices = GetDevices().ToList();
+        if (devices.Count == 0)
+        {
+            return null;
+        }
+
+        string? saved = _settings?.Read().CaptureDevice;
+        if (!string.IsNullOrEmpty(saved) && devices.Any(d => d.DeviceName == saved))
+        {
+            return saved;
+        }
+
+        return devices[0].DeviceName;
+    }
+
     public IEnumerable<NetworkInterfaceInfo> GetDevices()
     {
         try
@@ -58,10 +60,6 @@ public class CaptureControlService
         }
     }
 
-    // Switches capture to the given device. Retries once, because a NIC that was
-    // just hammered by a flood can briefly refuse to reopen; the retry re-resolves
-    // the device from a freshly refreshed list. persist is true for an explicit user
-    // choice, which is then saved and restored on the next start.
     public bool SwitchTo(string deviceName, bool persist = true)
     {
         lock (_lock)

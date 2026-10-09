@@ -29,41 +29,27 @@ namespace PolarisSentinel
 
             builder.Services.AddControllersWithViews();
 
-            // camelCase JSON so frontend JS can read properties directly.
             builder.Services.AddSignalR()
                 .AddJsonProtocol(options =>
                 {
                     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
                 });
 
-            // Firewall configuration (DryRun, sweep interval).
             builder.Services.Configure<FirewallOptions>(
                 builder.Configuration.GetSection("Firewall"));
 
-            // Persisted user choices (dry-run, model combination, capture device, heuristic
-            // switch) live in the database (single row), so they follow the database instead
-            // of the Windows account.
             builder.Services.AddSingleton<IUserSettingsStore, DbUserSettingsStore>();
 
-            // Runtime-toggleable heuristic detection (dashboard switch), persisted like the
-            // other user settings.
             builder.Services.AddSingleton(sp => new DetectionRuntimeState(
                 heuristicEnabled: true,
                 sp.GetRequiredService<IUserSettingsStore>()));
 
-            // Addresses an active rule currently blocks, so the dashboard can show the traffic
-            // the firewall is dropping (the capture driver sits below the firewall and still
-            // sees those packets).
             builder.Services.AddSingleton<BlockedTrafficState>();
 
-            // Runtime-toggleable enforcement state, seeded from configuration or the user's
-            // saved choice. The dashboard can flip DryRun after startup; a singleton so every
-            // enforcer sees the change.
             builder.Services.AddSingleton(sp => new FirewallRuntimeState(
                 sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun,
                 sp.GetRequiredService<IUserSettingsStore>()));
 
-            // Traffic capture runs on machine-wide defaults; per-user tuning is applied by the pipeline.
             builder.Services.AddSingleton<ITrafficCaptureService>(sp =>
             {
                 var config = sp.GetRequiredService<IConfiguration>();
@@ -72,8 +58,6 @@ namespace PolarisSentinel
                 int flowIdleTimeoutSeconds = (section.GetValue<int?>("FlowIdleTimeoutMilliseconds") ?? 120000) / 1000;
                 int liveSummaryIntervalSeconds = section.GetValue<int?>("LiveSummaryIntervalSeconds") ?? 5;
 
-                // Detection sensitivity preset (High/Balanced/Low). Individual thresholds
-                // may still be overridden here; null keeps the preset value.
                 var sensitivity = DetectionThresholds.ParseSensitivity(section.GetValue<string>("Sensitivity"));
                 var thresholds = DetectionThresholds.Resolve(
                     sensitivity,
@@ -87,17 +71,14 @@ namespace PolarisSentinel
                     sp.GetRequiredService<DetectionRuntimeState>());
             });
 
-            // Clean up old rules before capture starts.
             builder.Services.AddHostedService<FirewallRuleSweeper>();
 
             builder.Services.AddHostedService<TrafficBroadcastService>();
 
-            // Clears the live traffic window every 24 hours.
             builder.Services.AddHostedService<LiveTrafficWindowService>();
 
             builder.Host.UseWindowsService();
 
-            //Tray icon only in desktop mode, not when running as a Windows service.
             if (!WindowsServiceHelpers.IsWindowsService())
             {
                 builder.Services.AddHostedService<TrayIconService>();
@@ -114,7 +95,6 @@ namespace PolarisSentinel
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
 
-            // Initial admin account (password from user-secrets / env var).
             builder.Services.Configure<AdminSeedOptions>(
                 builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 
@@ -132,10 +112,8 @@ namespace PolarisSentinel
 
             builder.Services.AddSingleton<CaptureControlService>();
 
-            // Labeled test rows for the Inference Results page (default CSV or uploaded).
             builder.Services.AddSingleton<TestDatasetService>();
 
-            // RF + IF models, wrapped by the combination service that runs the five configurations.
             string modelPath = Path.GetFullPath(Path.Combine(
                 builder.Environment.ContentRootPath,
                 builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
@@ -165,21 +143,16 @@ namespace PolarisSentinel
             builder.Services.AddSingleton<EvaluationService>(sp =>
                 new EvaluationService(sp.GetRequiredService<IModelCombinationService>()));
 
-            // Cooldown timing.
             builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
-            // Policy engine evaluates alerts against the supplied policies.
             builder.Services.AddSingleton<IPolicyEngine>(sp =>
                 new PolicyEngine(sp.GetRequiredService<ILogger<PolicyEngine>>()));
 
-            // Process-wide Windows Firewall gateway: owns the COM handle, the administrator
-            // check and the dry-run evaluation, so the per-flow enforcer never opens COM.
             builder.Services.AddSingleton<IFirewallGateway>(sp =>
                 new WindowsFirewallGateway(
                     sp.GetRequiredService<FirewallRuntimeState>(),
                     sp.GetRequiredService<ILogger<WindowsFirewallGateway>>()));
 
-            // Firewall enforcer stages rules; the pipeline commits them after the alert exists.
             builder.Services.AddScoped<IFirewallEnforcer>(sp =>
                 new WindowsFirewallEnforcer(
                     sp.GetRequiredService<IUnitOfWork>().Rules,
@@ -188,7 +161,6 @@ namespace PolarisSentinel
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
 
-            // Detection pipeline (capture verdict -> inference -> policy -> enforcement).
             builder.Services.AddScoped<IDetectionPipeline>(sp =>
                 new DetectionPipeline(
                     sp.GetRequiredService<IInferenceEngine>(),
@@ -199,26 +171,20 @@ namespace PolarisSentinel
                     sp.GetRequiredService<DetectionRuntimeState>(),
                     sp.GetRequiredService<BlockedTrafficState>()));
 
-            // Application use case: process one completed flow against the enabled policies.
             builder.Services.AddScoped<FlowProcessingService>();
 
-            // Application use case: manual firewall-rule management.
             builder.Services.AddScoped<RuleManagementService>();
 
-            // Application use case: policy validation and id assignment.
             builder.Services.AddScoped<PolicyManagementService>();
 
-            // Detection persistence (single transaction boundary over SentinelDbContext)
             builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
             builder.Services.AddScoped<IAlertRepository>(sp => sp.GetRequiredService<IUnitOfWork>().Alerts);
 
-            // Long-term traffic history (persisted per-day so charts survive a restart).
             builder.Services.AddScoped<ITrafficRecordRepository, TrafficRecordRepository>();
             builder.Services.AddSingleton<TrafficHistoryService>();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/error");
@@ -232,12 +198,10 @@ namespace PolarisSentinel
 
             app.UseAuthorization();
 
-            // Force a password change before any other page is reachable.
             app.UseMiddleware<MustChangePasswordMiddleware>();
 
             app.MapStaticAssets();
 
-            // Web API controllers (includes firewall endpoints).
             app.MapControllers();
             app.MapControllerRoute(
                 name: "default",
@@ -245,10 +209,8 @@ namespace PolarisSentinel
                 .WithStaticAssets();
             app.MapHub<TrafficHub>("/trafficHub");
 
-            // Target of UseExceptionHandler in Production (no HomeController in this app).
             app.MapGet("/error", () => Results.Problem(statusCode: StatusCodes.Status500InternalServerError));
 
-            // Load the bundled test dataset so the Charts page has rows before any upload.
             var datasetService = app.Services.GetRequiredService<TestDatasetService>();
             string defaultDataset = Path.GetFullPath(Path.Combine(
                 app.Environment.ContentRootPath,
@@ -272,7 +234,6 @@ namespace PolarisSentinel
                 app.Logger.LogInformation("No default test dataset at {Path}", defaultDataset);
             }
 
-            // Apply migrations and provision admin (see SentinelDbInitializer).
             await using (var scope = app.Services.CreateAsyncScope())
             {
                 try
@@ -285,12 +246,10 @@ namespace PolarisSentinel
                 {
                     app.Logger.LogError(ex,
                         "Database initialisation failed; check the connection and migrations.");
-                    // Abort startup on migration/seed failure so capture does not run without a DB.
                     throw;
                 }
             }
 
-            //Run the application
             app.Run();
         }
     }

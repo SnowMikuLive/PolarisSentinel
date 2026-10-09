@@ -17,10 +17,11 @@ namespace PolarisSentinel.Web.Controllers
             _captureControl = captureControl;
         }
 
-        // List all devices plus the currently selected one.
         [HttpGet("devices")]
         public IActionResult GetDevices()
         {
+            var defaultDevice = _captureControl.GetDefaultDeviceName();
+
             var devices = _captureControl.GetDevices()
                 .Select(d => new
                 {
@@ -28,14 +29,13 @@ namespace PolarisSentinel.Web.Controllers
                     displayName = d.DisplayName,
                     ipAddress = d.IpAddress,
                     isCurrent = d.DeviceName == _captureControl.CurrentDevice,
-                    isWifi = d.DisplayName.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase)
+                    isDefault = d.DeviceName == defaultDevice
                 })
                 .ToList();
 
             return Ok(new { current = _captureControl.CurrentDevice, devices });
         }
 
-        // Switch capture to the given device.
         [HttpPost("select")]
         public IActionResult Select([FromBody] SelectDeviceRequest request)
         {

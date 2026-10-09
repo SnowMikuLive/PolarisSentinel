@@ -31,7 +31,6 @@ public sealed class MustChangePasswordMiddleware
         await _next(context);
     }
 
-    // Paths that must stay reachable so the user can actually change the password.
     private static bool IsAllowedPath(PathString path)
     {
         string value = path.Value ?? string.Empty;

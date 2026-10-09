@@ -15,12 +15,9 @@ public sealed class DetectionRuntimeState
     public DetectionRuntimeState(bool heuristicEnabled, IUserSettingsStore? settings = null)
     {
         _settings = settings;
-        // A saved user choice wins over the configured default, so it survives a restart.
         _heuristicEnabled = settings?.Read().HeuristicEnabled ?? heuristicEnabled;
     }
 
-    // True when the rule-based pre-filter/tracker gates flows before the AI engine. When
-    // false, every flow is handed to the AI engine for a verdict.
     public bool HeuristicEnabled
     {
         get
@@ -32,7 +29,6 @@ public sealed class DetectionRuntimeState
         }
     }
 
-    // Only a user action reaches this method, so it is the value to persist.
     public bool SetHeuristicEnabled(bool enabled)
     {
         lock (_lock)

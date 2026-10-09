@@ -8,7 +8,6 @@ public interface IPolicyRepository
 
     Task<IReadOnlyList<Policy>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    // Every enabled policy, ordered by priority (highest first).
     Task<IReadOnlyList<Policy>> GetEnabledAsync(CancellationToken cancellationToken = default);
 
     void Add(Policy policy);
@@ -17,6 +16,5 @@ public interface IPolicyRepository
 
     void Remove(Policy policy);
 
-    // Deletes every policy and returns how many rows were removed.
     Task<int> RemoveAllAsync(CancellationToken cancellationToken = default);
 }

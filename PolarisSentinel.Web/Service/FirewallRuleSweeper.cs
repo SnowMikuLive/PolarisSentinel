@@ -52,7 +52,6 @@ namespace PolarisSentinel.Web.Service
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // End the wait when the service stops.
             }
         }
     }

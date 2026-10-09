@@ -13,7 +13,6 @@ public class EvaluationMetrics
 
     public int Total => TruePositives + TrueNegatives + FalsePositives + FalseNegatives;
 
-    // All metrics are null when their denominator is zero, so the UI can show "N/A".
     public double? Accuracy => Ratio(TruePositives + TrueNegatives, Total);
 
     public double? Precision => Ratio(TruePositives, TruePositives + FalsePositives);

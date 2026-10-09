@@ -16,7 +16,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private readonly SourceBehaviorTracker _behavior;
     private readonly DetectionRuntimeState? _detection;
 
-    // True when the rule-based pre-filter/tracker should gate flows before the AI engine.
     private bool HeuristicEnabled => _detection?.HeuristicEnabled ?? true;
 
     private readonly int _flowIdleTimeoutSeconds;
@@ -24,19 +23,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private readonly System.Threading.Timer _liveSummaryTimer;
     private ICaptureDevice? _device;
 
-    // Guards the device snapshot cache so concurrent API calls do not race.
     private readonly object _deviceLock = new();
 
-    // Last known-good device list; never replaced by a smaller (transiently incomplete) one.
     private List<NetworkInterfaceInfo> _cachedDevices = new();
 
-    // The local host's own IP addresses on the capture interface. Used to orient each flow so
-    // the remote endpoint is the source (the endpoint the detection logic reasons about), and
-    // to mark whether a flow is inbound (remote -> local) or outbound (local -> remote).
-    // Populated in Start(); empty means every endpoint is treated as remote.
     private readonly HashSet<string> _localAddresses = new(StringComparer.OrdinalIgnoreCase);
 
-    // Fast-path counters, reset every time OnLiveTrafficSummary fires.
     private long _packetsSinceLastTick;
     private long _bytesSinceLastTick;
     private long _tcpSinceLastTick;
@@ -46,16 +38,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private const int MaxFlowCount = 100000;
 
-    // Expiry runs on a timer thread; cap each cycle by wall-clock time so a flood of
-    // tens of thousands of idle flows cannot stall the timer indefinitely. The
-    // remainder is picked up on the next tick.
     private static readonly TimeSpan ExpiryTimeBudget = TimeSpan.FromMilliseconds(200);
 
-    // Behavioural detection window: a source is judged on the last N seconds of activity.
     private static readonly TimeSpan BehaviorWindow = TimeSpan.FromSeconds(10);
 
-    // Minimum gap between two behavioural alerts for the same source. Short, so an attack in
-    // progress is re-reported continuously instead of only once per half minute.
     private static readonly TimeSpan BehaviorCooldown = TimeSpan.FromSeconds(5);
 
     public event EventHandler<FlowFeatureVector>? OnFlowCompleted;
@@ -72,22 +58,15 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds, BehaviorCooldown);
         _detection = detection;
 
-        // Both timers start suspended and only tick once Start(deviceName) is called.
         _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
         _liveSummaryTimer = new System.Threading.Timer(_ => SafeEmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public IEnumerable<NetworkInterfaceInfo> GetAvailableDevices()
     {
-        // Enumerating the live SharpPcap cache is unstable: Refresh() replaces the
-        // list and can transiently return an incomplete set (adapters disappear),
-        // which made the UI's network-interface selector lose entries after a flood.
-        // Snapshot once, keep the last good list, and only replace it when the new
-        // enumeration is at least as complete.
         return SnapshotDevices();
     }
 
-    // Builds a stable, cached snapshot of the capture devices.
     private List<NetworkInterfaceInfo> SnapshotDevices()
     {
         lock (_deviceLock)
@@ -98,12 +77,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 _cachedDevices = fresh;
             }
 
-            // Never hand back an empty list once a good one has been seen.
             return _cachedDevices.Count > 0 ? new List<NetworkInterfaceInfo>(_cachedDevices) : fresh;
         }
     }
 
-    // Enumerates the current SharpPcap device list defensively.
     private static List<NetworkInterfaceInfo> EnumerateDevices()
     {
         try
@@ -112,7 +89,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch (Exception)
         {
-            // A failed refresh is non-fatal: fall back to whatever is cached.
         }
 
         var devices = new List<NetworkInterfaceInfo>();
@@ -140,8 +116,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 }
                 catch (Exception)
                 {
-                    // Skip a device whose addresses cannot be read rather than failing the
-                    // whole enumeration; still surface it by name so it stays selectable.
                     devices.Add(new NetworkInterfaceInfo
                     {
                         DeviceName = device.Name,
@@ -153,14 +127,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch (Exception)
         {
-            // The whole list threw mid-enumeration; return what we collected so far.
         }
 
         return devices;
     }
 
-    // Resolves a device by name, refreshing and retrying a few times because the
-    // pcap cache can briefly omit a device right after a flood.
     private ICaptureDevice ResolveDevice(string deviceName)
     {
         for (int attempt = 0; attempt < 3; attempt++)
@@ -185,8 +156,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         throw new InvalidOperationException($"No capture device found with name '{deviceName}'.");
     }
 
-    // Records the interface's own addresses so each flow can be oriented and classified by
-    // direction. Falls back to the cached device snapshot when the live device exposes none.
     private void RefreshLocalAddresses(ICaptureDevice device)
     {
         _localAddresses.Clear();
@@ -207,8 +176,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch (Exception)
         {
-            // A device whose addresses cannot be read leaves the set empty; orientation then
-            // falls back to the cached snapshot below.
         }
 
         if (_localAddresses.Count == 0)
@@ -223,32 +190,21 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    // True when the address belongs to this host.
     private bool IsLocalAddress(string ip) => _localAddresses.Contains(ip);
 
-    // Direction of a packet. When the interface exposed no addresses the direction cannot be
-    // determined; treat the flow as inbound (fail-open) so detection still runs, instead of
-    // silently classifying every flow as outbound and detecting nothing.
     private bool IsInboundPacket(string sourceIp, string destinationIp) =>
         _localAddresses.Count == 0 || (IsLocalAddress(destinationIp) && !IsLocalAddress(sourceIp));
 
     public void Start(string deviceName)
     {
-        // The device list is cached by SharpPcap. After a flood the adapter state can
-        // change, so resolve with a retry loop before giving up.
         _device = ResolveDevice(deviceName);
 
-        // Snapshot the interface's own addresses so each flow can be oriented and its
-        // direction (inbound/outbound) classified.
         RefreshLocalAddresses(_device);
 
         _device.OnPacketArrival += OnPacketArrival;
         _device.Open(DeviceModes.Promiscuous, 1000);
         _device.StartCapture();
 
-        // Check for idle flows every second so a finished flow is exported promptly and
-        // the behavioural tracker is pruned often; the fast-path in ProcessPacket already
-        // raises flood alerts the moment they are detected.
         _expiryTimer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         _liveSummaryTimer.Change(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
@@ -260,8 +216,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (_device is not null)
         {
-            // A driver in a bad state can throw here; the handle must still be released
-            // so the next Start() is not blocked by a half-closed device.
             try
             {
                 _device.StopCapture();
@@ -283,7 +237,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             _device = null;
         }
 
-        // Drop accumulated flow state so a restart begins clean.
         _flows.Clear();
     }
 
@@ -295,7 +248,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch (Exception)
         {
-            // A malformed or unsupported packet must never kill the capture thread.
         }
     }
 
@@ -306,11 +258,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         ProcessPacket(parsed, DateTime.Now);
     }
 
-    // Separate parsing from processing so tests can pass sample packets.
     internal void ProcessPacket(Packet parsed, DateTime now)
     {
         IPPacket? ipPacket = parsed.Extract<IPPacket>();
-        if (ipPacket is null) return; // not IPv4/IPv6, nothing we track
+        if (ipPacket is null) return; 
 
         TcpPacket? tcpPacket = parsed.Extract<TcpPacket>();
         UdpPacket? udpPacket = parsed.Extract<UdpPacket>();
@@ -323,14 +274,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
-        // TCP/UDP model features count payload bytes; live counters count the full IP packet.
         Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
         int flowPacketSize = transportPacket is null
             ? packetSize
             : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
-        // Behavioural detection sees every packet, so a scan or flood spread across many
-        // short flows is still caught. Skipped entirely when heuristic detection is off.
         if (HeuristicEnabled)
         {
             var observation = new PacketObservation(
@@ -342,10 +290,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 IsRst: tcpPacket?.Reset ?? false,
                 PacketSize: packetSize,
                 Timestamp: now,
-                IsInbound: IsInboundPacket(srcIp, dstIp));
+                IsInbound: IsInboundPacket(srcIp, dstIp),
+                IsFin: tcpPacket?.Finished ?? false,
+                IsAck: tcpPacket?.Acknowledgment ?? false);
             _behavior.Observe(observation);
 
-            // Emit the alert the instant a threshold is crossed, without waiting for expiry.
             var immediate = _behavior.EvaluateFast(observation);
             if (immediate is not null)
             {
@@ -355,18 +304,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
 
-        // A flood (or a spoofed-source scan) can create flows faster than they expire.
-        // Cap the table so memory stays bounded; the expiry timer drains it afterwards.
         if (_flows.Count >= MaxFlowCount && !_flows.ContainsKey(key))
         {
             return;
         }
 
-        // Orient the flow so the remote endpoint is the source, which is what the detection
-        // logic reasons about (it blocks the source). For an inbound flow the first packet's
-        // source is already remote; for an outbound flow the local host sent first, so the
-        // endpoints are swapped to keep the remote endpoint as the source. When neither or
-        // both endpoints are local, the first packet's order is kept.
         bool srcIsLocal = IsLocalAddress(srcIp);
         bool dstIsLocal = IsLocalAddress(dstIp);
         bool swap = srcIsLocal && !dstIsLocal;
@@ -376,9 +318,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         string flowDestinationIp = swap ? srcIp : dstIp;
         ushort flowDestinationPort = swap ? srcPort : dstPort;
 
-        // Inbound when the remote endpoint is the source we just derived, i.e. the traffic
-        // arrived at this host. Outbound flows are still captured and shown, just not treated
-        // as inbound attacks.
         bool isInbound = IsInboundPacket(srcIp, dstIp);
 
         var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
@@ -393,10 +332,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             IsInbound = isInbound
         });
 
-        // Forward means "the packet's source is the flow's source" (the remote endpoint).
         bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
 
-        lock (flow) // packets for the same flow can arrive back-to-back on the capture thread
+        lock (flow) 
         {
             flow.PacketSizeStats.Add(flowPacketSize);
 
@@ -470,12 +408,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         var timeout = TimeSpan.FromSeconds(_flowIdleTimeoutSeconds);
         var deadline = DateTime.UtcNow + ExpiryTimeBudget;
 
-        // Drop behavioural windows that have gone quiet so the tracker does not grow.
         _behavior.Prune(now);
 
-        // A flood can leave tens of thousands of idle flows at once. Processing them
-        // all in one cycle would block this timer thread, so each cycle runs until a
-        // wall-clock budget is spent; the remainder is picked up on the next tick.
         foreach (var (key, flow) in _flows)
         {
             if (DateTime.UtcNow >= deadline) break;
@@ -484,10 +418,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             lock (flow) { isIdle = now - flow.LastSeenTime > timeout; }
             if (!isIdle) continue;
 
-            if (!_flows.TryRemove(key, out _)) continue; // another thread already removed it
+            if (!_flows.TryRemove(key, out _)) continue; 
 
-            // Behavioural verdict first (across flows), then the per-flow pre-filter. When
-            // heuristic detection is off, every flow is handed to the AI engine instead.
             PreFilterResult verdict;
             if (HeuristicEnabled)
             {
@@ -524,14 +456,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 IsInbound = flow.IsInbound
             };
 
-            // Hand off to the thread pool so a slow subscriber (DB + inference + SignalR)
-            // cannot stall the expiry timer.
             ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));
         }
     }
 
-    // Projects the capture adapter's mutable flow record onto the immutable domain
-    // statistics the pre-filter classifies, so the detection rules stay capture-agnostic.
     private static FlowStatistics ToStatistics(Internal.FlowRecord flow) => new()
     {
         Protocol = flow.Protocol,
@@ -558,11 +486,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch (Exception)
         {
-            // A subscriber fault must not take down the process.
         }
     }
 
-    // Emits a behavioural verdict the instant it is detected, without waiting for expiry.
     private void EmitImmediateAlert(
         string sourceIp,
         ushort sourcePort,
@@ -589,7 +515,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             RstCount = tcpPacket?.Reset == true ? 1 : 0,
             PshCount = tcpPacket?.Push == true ? 1 : 0,
             PreFilterVerdict = verdict,
-            // Only an inbound packet (destination is this host) is an inbound attack.
             IsInbound = IsInboundPacket(sourceIp, destinationIp)
         };
 

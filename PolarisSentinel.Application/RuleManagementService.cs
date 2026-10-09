@@ -20,12 +20,10 @@ public class RuleManagementService
         _unitOfWork = unitOfWork;
     }
 
-    // Validates a rule's 5-tuple and action. Returns the validation errors keyed by field.
     public IReadOnlyDictionary<string, string> Validate(Rule rule)
     {
         var errors = new Dictionary<string, string>();
 
-        // An address rule needs a valid address; a port rule is scoped by its port instead.
         bool addressAction = rule.Action is PolicyAction.BlockInboundIp or PolicyAction.BlockOutboundIp;
         bool portAction = rule.Action is PolicyAction.BlockInboundPort or PolicyAction.BlockOutboundPort;
 
@@ -39,19 +37,16 @@ public class RuleManagementService
             errors[nameof(Rule.DestinationIp)] = "Enter a valid IPv4 address.";
         }
 
-        // ICMP has no ports, so a port-based action cannot be expressed.
         if (portAction && rule.Protocol == ProtocolNumbers.Icmp)
         {
             errors[nameof(Rule.Action)] = "Port actions are not valid for ICMP; use an IP action instead.";
         }
 
-        // A port filter needs a concrete transport protocol.
         if (portAction && rule.Protocol == 0)
         {
             errors[nameof(Rule.Protocol)] = "Port actions require a specific protocol (TCP or UDP), not Any.";
         }
 
-        // Ports are stored as int; reject values the transport layer cannot represent.
         if (rule.SourcePort is { } sourcePort && (sourcePort < 0 || sourcePort > 65535))
         {
             errors[nameof(Rule.SourcePort)] = "Port must be between 0 and 65535.";
@@ -65,8 +60,6 @@ public class RuleManagementService
         return errors;
     }
 
-    // Creates a rule from operator input. When alertId is supplied the rule keeps that
-    // alert's real 5-tuple and origin; otherwise a synthetic alert is built from the input.
     public Rule Create(Rule rule, string? alertId, string? policyId, int? durationValue, string? durationUnit)
     {
         var source = string.IsNullOrEmpty(alertId)
@@ -74,8 +67,6 @@ public class RuleManagementService
             : _unitOfWork.Alerts.GetByIdAsync(alertId).GetAwaiter().GetResult();
         var alert = source ?? BuildManualAlert(rule);
 
-        // Only persist the origin FKs when the referenced rows actually exist: a stale or
-        // crafted alertId/policyId would otherwise violate the Rule foreign keys on insert.
         string? resolvedAlertId = source?.Id;
         string? resolvedPolicyId = string.IsNullOrEmpty(policyId)
             ? null
@@ -126,7 +117,6 @@ public class RuleManagementService
         return removed;
     }
 
-    // Convert value + unit into a duration; default 60 minutes.
     public static TimeSpan ResolveDuration(int? value, string? unit)
     {
         if (!value.HasValue || value.Value <= 0)
@@ -142,7 +132,6 @@ public class RuleManagementService
         };
     }
 
-    // A synthetic alert carrying the operator's 5-tuple; it is never persisted.
     private static Alert BuildManualAlert(Rule rule) => new()
     {
         DetectionSource = DetectionSource.None,

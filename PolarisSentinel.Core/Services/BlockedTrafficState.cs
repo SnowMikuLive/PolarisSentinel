@@ -35,8 +35,6 @@ public sealed class BlockedTrafficState
         }
     }
 
-    // Replaces the registry with the addresses the active rules block. Called by the sweeper,
-    // so a rule that expired stops marking traffic as blocked.
     public void Refresh(IEnumerable<Rule> rules)
     {
         var addresses = rules

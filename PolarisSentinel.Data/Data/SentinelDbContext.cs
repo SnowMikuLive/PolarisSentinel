@@ -24,10 +24,6 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
 
-    // Reads a DetectionSource from the database without throwing on legacy or
-    // unknown values. The enum member PreFilter was renamed to HeuristicBased, so
-    // rows written before the rename must still load; anything unrecognised falls
-    // back to None rather than crashing the query.
     private static readonly ValueConverter<DetectionSource, string> DetectionSourceConverter = new(
         source => source.ToString(),
         value => ParseDetectionSource(value));
@@ -78,7 +74,6 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.SourceIp).HasMaxLength(64);
             e.Property(x => x.DestinationIp).HasMaxLength(64);
-            // Foreign keys only; the Rule model carries no navigation properties.
             e.HasOne<Policy>()
                 .WithMany()
                 .HasForeignKey(x => x.PolicyId)
@@ -118,11 +113,6 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
 
     private static readonly DateTime SeedTimestamp = new DateTime(2026, 9, 26, 0, 0, 0, DateTimeKind.Unspecified);
 
-    // Seed policies: one per (detector, attack family), so every detection the system can
-    // produce has a decision. Block duration follows the harm of the family - reconnaissance is
-    // short-lived, an availability attack is medium, a credential attack is long. An unnamed
-    // Isolation Forest anomaly is deliberately monitor-only: it is suspicious, not a confirmed
-    // attack, and the policy engine never blocks on it (see PolicyEngine.Evaluate).
     private static readonly Policy[] DefaultPolicies =
     {
         new()

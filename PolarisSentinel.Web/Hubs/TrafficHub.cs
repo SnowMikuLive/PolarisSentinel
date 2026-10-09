@@ -4,7 +4,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Hubs
 {
-        //Real-time traffic hub
         public class TrafficHub : Hub
         { 
         }

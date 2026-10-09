@@ -40,7 +40,6 @@ public class TrayIconService : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    // Runs the WinForms message loop so NotifyIcon can raise mouse events.
     private void RunMessageLoop()
     {
         try
@@ -90,7 +89,6 @@ public class TrayIconService : IHostedService, IDisposable
         }
     }
 
-    // Prefer the configured URL; otherwise use the address the server is actually listening on.
     private string ResolveDashboardUrl()
     {
         var configured = _config["Dashboard:Url"];

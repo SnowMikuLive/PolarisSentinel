@@ -27,7 +27,6 @@ namespace PolarisSentinel.Web.Controllers
         {
             var policies = await _uow.Policies.GetAllAsync(cancellationToken);
 
-            // Free-text search across the fields an operator scans by.
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
@@ -40,7 +39,6 @@ namespace PolarisSentinel.Web.Controllers
                     .ToList();
             }
 
-            // Highest priority first by default: that is the order the engine evaluates them.
             policies = sort switch
             {
                 "name" => policies.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList(),
@@ -55,7 +53,6 @@ namespace PolarisSentinel.Web.Controllers
             return View(policies);
         }
 
-        // Quick enable/disable without opening the full edit form.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Toggle(string id, CancellationToken cancellationToken)
@@ -197,8 +194,6 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // Deletes every policy. Rules keep their PolicyId as a historical reference; the
-        // FK is ON DELETE SET NULL, so those rules simply lose the link.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)
@@ -221,7 +216,6 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.AttackTypes = new SelectList(AttackTypes.Selectable);
         }
 
-        // Surfaces the domain validation errors on ModelState for the form.
         private bool Validate(Policy policy)
         {
             foreach (var (field, message) in _policies.Validate(policy))

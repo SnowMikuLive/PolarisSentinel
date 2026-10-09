@@ -19,7 +19,6 @@ public class RandomForestModel : IRandomForestModel, IDisposable
 
     public IReadOnlyList<string> FeatureNames { get; }
 
-    // Minimum probability for the classifier to report a known attack.
     private double ConfidenceThreshold { get; }
 
     public RandomForestModel(string modelPath)
@@ -60,8 +59,6 @@ public class RandomForestModel : IRandomForestModel, IDisposable
             return new InferenceResult { AttackType = AttackTypes.Benign, ConfidenceScore = probability };
         }
 
-        // The model's class names are external labels; only the categories defined by
-        // the AttackType enum may enter the system.
         if (!AttackTypes.TryParse(label, out string known))
         {
             throw new InvalidOperationException(
@@ -76,7 +73,6 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         };
     }
 
-    // True when the classifier reports a known attack above its threshold.
     public bool ExceedsThreshold(InferenceResult result) =>
         result.AttackType != AttackTypes.Benign && result.ConfidenceScore >= ConfidenceThreshold;
 

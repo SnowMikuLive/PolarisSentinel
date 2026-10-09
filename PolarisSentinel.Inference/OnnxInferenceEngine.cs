@@ -41,7 +41,6 @@ public class OnnxInferenceEngine : IInferenceEngine
         };
     }
 
-    // The detection source is the model that produced the final malicious finding.
     private static DetectionSource SourceFor(InferenceResult result)
     {
         if (result.AttackType == AttackTypes.Benign)

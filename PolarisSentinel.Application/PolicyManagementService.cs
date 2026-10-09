@@ -16,8 +16,6 @@ public class PolicyManagementService
         _unitOfWork = unitOfWork;
     }
 
-    // Validates the policy fields against the ranges the policy engine relies on.
-    // Returns the validation errors keyed by field.
     public IReadOnlyDictionary<string, string> Validate(Policy policy)
     {
         var errors = new Dictionary<string, string>();
@@ -52,9 +50,6 @@ public class PolicyManagementService
             errors[nameof(Policy.AttackType)] = "Unknown attack type.";
         }
 
-        // The engine routes Unknown_Anomaly to monitor-only (the Isolation Forest never
-        // names a category), so a blocking action could never fire. Reject it up front
-        // rather than seeding a policy that silently never blocks.
         if (string.Equals(policy.AttackType, AttackTypes.UnknownAnomaly, StringComparison.OrdinalIgnoreCase) &&
             PolicyActions.IsBlocking(policy.Action))
         {
@@ -64,7 +59,6 @@ public class PolicyManagementService
         return errors;
     }
 
-    // Next "P-n" id, scanned from the stored policies.
     public async Task<string> NextPolicyIdAsync(CancellationToken cancellationToken = default)
     {
         var policies = await _unitOfWork.Policies.GetAllAsync(cancellationToken);

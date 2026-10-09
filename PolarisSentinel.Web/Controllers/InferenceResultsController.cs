@@ -24,7 +24,6 @@ namespace PolarisSentinel.Web.Controllers
         {
             var alerts = await _uow.Alerts.GetAllAsync(cancellationToken);
 
-            // Filter by attack type, then free-text search across the fields an operator scans by.
             if (!string.IsNullOrWhiteSpace(attackType))
             {
                 alerts = alerts.Where(a => string.Equals(a.AttackType, attackType, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -45,7 +44,6 @@ namespace PolarisSentinel.Web.Controllers
                     .ToList();
             }
 
-            // Distinct attack types present in the data, for the filter dropdown.
             var all = await _uow.Alerts.GetAllAsync(cancellationToken);
             ViewBag.AttackTypes = all
                 .Select(a => a.AttackType)
@@ -59,8 +57,6 @@ namespace PolarisSentinel.Web.Controllers
             return View(alerts);
         }
 
-        // Deletes every stored alert. Linked rules keep their AlertId as a historical
-        // reference; the FK is ON DELETE SET NULL, so those rules simply lose the link.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)
@@ -70,7 +66,6 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // Export saved alerts and linked rules without changing the firewall.
         [HttpGet]
         public async Task<IActionResult> Export(CancellationToken cancellationToken)
         {
@@ -97,20 +92,17 @@ namespace PolarisSentinel.Web.Controllers
                 csv.AppendLine(string.Join(",", cells.Select(CsvCell)));
             }
 
-            // The BOM lets Excel recognize UTF-8 text.
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
             return File(bytes, "text/csv; charset=utf-8", $"alerts-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
         }
 
         private static string CsvCell(string value)
         {
-            // Keep text from being interpreted as spreadsheet formulas.
             var trimmed = value.TrimStart();
             if (trimmed.Length > 0 && "=+-@".Contains(trimmed[0])) value = "'" + value;
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
 
-        // Alert details (drill-down from the Rules page).
         public async Task<IActionResult> Details(string? id, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(id))

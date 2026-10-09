@@ -23,7 +23,6 @@ public class FlowProcessingService
         _logger = logger;
     }
 
-    // Returns the outcome for the flow, or null when processing failed.
     public async Task<DetectionOutcome?> ProcessAsync(FlowFeatureVector flow, CancellationToken cancellationToken = default)
     {
         try

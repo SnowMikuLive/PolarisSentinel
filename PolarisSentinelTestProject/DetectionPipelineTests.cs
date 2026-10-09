@@ -17,7 +17,6 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class DetectionPipelineTests
 {
-    // A known attack is blocked from the heuristic verdict and a firewall rule is created.
     [TestMethod]
     public void ProcessFlow_KnownAttack_ShouldBlockAndCreateRule()
     {
@@ -34,7 +33,6 @@ public class DetectionPipelineTests
         Assert.HasCount(1, firewall.GetAllRules());
     }
 
-    // A suspicious flow is forwarded to the AI engine, which decides.
     [TestMethod]
     public void ProcessFlow_SuspiciousFlow_ShouldCallInference()
     {
@@ -47,8 +45,6 @@ public class DetectionPipelineTests
         Assert.AreEqual(TrafficVerdict.Malicious, outcome.Verdict);
     }
 
-    // A benign model answer does not erase the heuristic signal: with detection running at
-    // maximum sensitivity the flow is reported as suspicious and monitored, never as normal.
     [TestMethod]
     public void ProcessFlow_BenignInference_ShouldStaySuspicious()
     {
@@ -62,8 +58,6 @@ public class DetectionPipelineTests
         Assert.IsNull(outcome.Alert);
     }
 
-    // An outbound flow is captured and shown, but never treated as an inbound attack: the AI
-    // engine is not called and no alert or rule is produced.
     [TestMethod]
     public void ProcessFlow_OutboundFlow_ShouldNotBeTreatedAsAttack()
     {
@@ -80,8 +74,6 @@ public class DetectionPipelineTests
         Assert.IsEmpty(firewall.GetAllRules());
     }
 
-    // Traffic from a source an active rule already blocks is being dropped by the firewall but
-    // still reaches the capture driver, so it is reported as blocked, not analysed again.
     [TestMethod]
     public void ProcessFlow_BlockedSource_ShouldBeReportedAsBlocked()
     {
@@ -148,7 +140,6 @@ public class DetectionPipelineTests
         FlowStartTime = DateTime.UnixEpoch,
         FlowEndTime = DateTime.UnixEpoch.AddSeconds(1),
         PreFilterVerdict = verdict,
-        // The pipeline only treats inbound flows as attacks; these tests exercise that path.
         IsInbound = isInbound
     };
 
