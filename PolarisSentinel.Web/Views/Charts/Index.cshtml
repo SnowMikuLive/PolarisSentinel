@@ -25,6 +25,8 @@
     {
         <div class="alert alert-info">
             Curated CIC demonstration samples selected using the RF/IF results.
+            This demo focuses on DoS and includes PortScan and BruteForce examples. DDoS is excluded.
+            Isolation Forest misses the BruteForce examples.
             These Benign-versus-attack metrics are for this demo, not an independent performance test.
         </div>
     }
@@ -37,6 +39,7 @@
     {
         <div class="alert alert-danger">@TempData["error"]</div>
     }
+
     <div class="card shadow-sm border-primary mb-3">
         <div class="card-header bg-primary text-white">
             @(isDemo ? "Demonstration Dataset" : "Test Dataset")
