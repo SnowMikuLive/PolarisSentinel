@@ -1,6 +1,5 @@
 namespace PolarisSentinel.Core.Constants;
-
-// Sequential P-/R-/A- id builders for policies, rules, and alerts.
+// Sequential P-/R-/A- ids, reserved across concurrent application requests.
 public static class EntityIds
 {
     public const string PolicyPrefix = "P-";
@@ -8,6 +7,9 @@ public static class EntityIds
     public const string AlertPrefix = "A-";
 
     public const string FirewallRulePrefix = "PolarisSentinel_";
+
+    private static readonly object _idLock = new();
+    private static readonly Dictionary<string, int> _lastReserved = new(StringComparer.Ordinal);
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
 
@@ -26,9 +28,18 @@ public static class EntityIds
         }
         return max;
     }
+    public static int ReserveNextNumber(int storedMax, string prefix)
+    {
+        lock (_idLock)
+        {
+            int next = checked(Math.Max(storedMax, _lastReserved.GetValueOrDefault(prefix)) + 1);
+            _lastReserved[prefix] = next;
+            return next;
+        }
+    }
 
     public static string Next(IEnumerable<string> ids, string prefix, Func<int, string> format) =>
-        format(MaxNumber(ids, prefix) + 1);
+        format(ReserveNextNumber(MaxNumber(ids, prefix), prefix));
 
     public static string FirewallRule(string targetKey) => $"{FirewallRulePrefix}Block_{targetKey}";
 }

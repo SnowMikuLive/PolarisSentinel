@@ -25,7 +25,7 @@ public class AlertRepository : IAlertRepository
         int max = await _context.Database.SqlQuery<int>(
             $"SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Id], {EntityIds.AlertPrefix.Length + 1}, 20) AS INT)), 0) AS [Value] FROM [Alerts]")
             .SingleAsync(cancellationToken);
-        return EntityIds.Alert(max + 1);
+        return EntityIds.Alert(EntityIds.ReserveNextNumber(max, EntityIds.AlertPrefix));
     }
 
     public async Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default)

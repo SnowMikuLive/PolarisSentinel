@@ -25,7 +25,7 @@ public class RuleRepository : IRuleRepository
         int max = await _context.Database.SqlQuery<int>(
             $"SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Id], {EntityIds.RulePrefix.Length + 1}, 20) AS INT)), 0) AS [Value] FROM [Rules]")
             .SingleAsync(cancellationToken);
-        return EntityIds.Rule(max + 1);
+        return EntityIds.Rule(EntityIds.ReserveNextNumber(max, EntityIds.RulePrefix));
     }
 
     public async Task<IReadOnlyList<Rule>> GetAllAsync(CancellationToken cancellationToken = default)

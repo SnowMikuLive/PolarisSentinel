@@ -83,6 +83,12 @@ namespace PolarisSentinel.Web.Controllers
                 return View(model);
             }
 
+            if (string.Equals(model.CurrentPassword, model.NewPassword, StringComparison.Ordinal))
+            {
+                ModelState.AddModelError(nameof(model.NewPassword), "New password must be different from your current password.");
+                return View(model);
+            }
+
             var user = await _userManager.GetUserAsync(User);
             if (user == null)
             {

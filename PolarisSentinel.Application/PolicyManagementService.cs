@@ -63,6 +63,6 @@ public class PolicyManagementService
     {
         var policies = await _unitOfWork.Policies.GetAllAsync(cancellationToken);
         int max = EntityIds.MaxNumber(policies.Select(p => p.Id), EntityIds.PolicyPrefix);
-        return $"{EntityIds.PolicyPrefix}{max + 1}";
+        return $"{EntityIds.PolicyPrefix}{EntityIds.ReserveNextNumber(max, EntityIds.PolicyPrefix)}";
     }
 }
