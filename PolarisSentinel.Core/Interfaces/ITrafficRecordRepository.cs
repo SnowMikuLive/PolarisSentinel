@@ -10,5 +10,7 @@ public interface ITrafficRecordRepository
 
     Task<int> DeleteBeforeAsync(DateTime cutoff, CancellationToken cancellationToken = default);
 
+    Task<int> DeleteAllAsync(CancellationToken cancellationToken = default);
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

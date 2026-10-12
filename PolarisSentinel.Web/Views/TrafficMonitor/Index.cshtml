@@ -268,14 +268,22 @@
                 headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({deviceName:name})
             })
-                .then(r=>{
-                    if(!r.ok)throw new Error('switch failed');
-                    return r.json();
+                .then(r=>r.json().catch(()=>({})).then(body=>({ok:r.ok,body})))
+                .then(({ok,body})=>{
+                    if(!ok)
+                    {
+                        // Surface the server's reason and re-sync so the selector reflects
+                        // the interface that is actually capturing (may be a restored one).
+                        setDeviceStatus(body&&body.error?body.error:'Failed to switch device.',true);
+                        loadDevices();
+                        return;
+                    }
+                    setDeviceStatus('Capturing on '+((body&&body.current)||name),false);
                 })
-                .then(()=>setDeviceStatus('Capturing on '+name,false))
                 .catch(err=>{
                     console.error('Failed to switch device',err);
                     setDeviceStatus('Failed to switch device.',true);
+                    loadDevices();
                 })
                 .finally(()=>{button.disabled=false;});
         });

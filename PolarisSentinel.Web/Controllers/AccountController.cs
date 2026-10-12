@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using PolarisSentinel.DataAccess.Data;
 using PolarisSentinel.Web.Models;
+using PolarisSentinel.Web.Service;
 using System.Threading.Tasks;
 
 namespace PolarisSentinel.Web.Controllers
@@ -11,11 +13,19 @@ namespace PolarisSentinel.Web.Controllers
     {
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IOptions<AdminSeedOptions> _seedOptions;
+        private readonly DefaultPasswordAttemptTracker _defaultPasswordAttempts;
 
-        public AccountController(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager)
+        public AccountController(
+            SignInManager<ApplicationUser> signInManager,
+            UserManager<ApplicationUser> userManager,
+            IOptions<AdminSeedOptions> seedOptions,
+            DefaultPasswordAttemptTracker defaultPasswordAttempts)
         {
             _signInManager = signInManager;
             _userManager = userManager;
+            _seedOptions = seedOptions;
+            _defaultPasswordAttempts = defaultPasswordAttempts;
         }
 
         [HttpGet]
@@ -53,11 +63,48 @@ namespace PolarisSentinel.Web.Controllers
                 }
                 else
                 {
+                    await HandleFailedLoginAsync(model);
                     TempData["error"] = "Invalid username or password.";
                 }
             }
 
             return View(model);
+        }
+
+        // Hidden recovery: after repeated failed sign-ins that used the configured default
+        // password, reset the admin account back to that default so the operator can get back
+        // in. This never changes what the caller sees.
+        private async Task HandleFailedLoginAsync(LoginViewModel model)
+        {
+            var seed = _seedOptions.Value;
+            if (string.IsNullOrEmpty(seed.Password) || string.IsNullOrEmpty(seed.UserName))
+            {
+                return;
+            }
+
+            if (!string.Equals(model.Password, seed.Password, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!_defaultPasswordAttempts.Record(DateTime.UtcNow))
+            {
+                return;
+            }
+
+            var admin = await _userManager.FindByNameAsync(seed.UserName);
+            if (admin is null)
+            {
+                return;
+            }
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(admin);
+            var reset = await _userManager.ResetPasswordAsync(admin, token, seed.Password);
+            if (reset.Succeeded)
+            {
+                admin.MustChangePassword = true;
+                await _userManager.UpdateAsync(admin);
+            }
         }
 
         [HttpGet]

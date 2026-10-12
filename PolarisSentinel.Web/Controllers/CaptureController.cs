@@ -20,20 +20,22 @@ namespace PolarisSentinel.Web.Controllers
         [HttpGet("devices")]
         public IActionResult GetDevices()
         {
-            var defaultDevice = _captureControl.GetDefaultDeviceName();
+            var devices = _captureControl.GetDevices().ToList();
+            var defaultDevice = _captureControl.GetDefaultDeviceName(devices);
+            var current = _captureControl.CurrentDevice;
 
-            var devices = _captureControl.GetDevices()
+            var projection = devices
                 .Select(d => new
                 {
                     deviceName = d.DeviceName,
                     displayName = d.DisplayName,
                     ipAddress = d.IpAddress,
-                    isCurrent = d.DeviceName == _captureControl.CurrentDevice,
+                    isCurrent = d.DeviceName == current,
                     isDefault = d.DeviceName == defaultDevice
                 })
                 .ToList();
 
-            return Ok(new { current = _captureControl.CurrentDevice, devices });
+            return Ok(new { current, devices = projection });
         }
 
         [HttpPost("select")]
@@ -44,13 +46,14 @@ namespace PolarisSentinel.Web.Controllers
                 return BadRequest(new { error = "deviceName is required" });
             }
 
-            var ok = _captureControl.SwitchTo(request.DeviceName);
-            if (!ok)
-            {
-                return NotFound(new { error = "device not found or failed to start" });
-            }
+            var result = _captureControl.SwitchTo(request.DeviceName);
 
-            return Ok(new { current = _captureControl.CurrentDevice });
+            return result.Status switch
+            {
+                CaptureSwitchStatus.Success => Ok(new { current = result.Device }),
+                CaptureSwitchStatus.DeviceNotFound => NotFound(new { error = result.Error, current = result.Device }),
+                _ => StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = result.Error, current = result.Device })
+            };
         }
     }
 

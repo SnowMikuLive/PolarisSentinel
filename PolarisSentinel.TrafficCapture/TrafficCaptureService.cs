@@ -197,13 +197,23 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     public void Start(string deviceName)
     {
-        _device = ResolveDevice(deviceName);
+        var device = ResolveDevice(deviceName);
+        _device = device;
 
-        RefreshLocalAddresses(_device);
-
-        _device.OnPacketArrival += OnPacketArrival;
-        _device.Open(DeviceModes.Promiscuous, 1000);
-        _device.StartCapture();
+        try
+        {
+            RefreshLocalAddresses(device);
+            device.OnPacketArrival += OnPacketArrival;
+            device.Open(DeviceModes.Promiscuous, 1000);
+            device.StartCapture();
+        }
+        catch
+        {
+            try { device.OnPacketArrival -= OnPacketArrival; } catch (Exception) { }
+            try { device.Close(); } catch (Exception) { }
+            _device = null;
+            throw;
+        }
 
         _expiryTimer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         _liveSummaryTimer.Change(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
@@ -274,10 +284,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
-        Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
-        int flowPacketSize = transportPacket is null
-            ? packetSize
-            : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
+        // Packet-length and byte features use the full IP packet length, matching the
+        // CIC-IDS-2017 definitions the model was trained on. Payload-only lengths recorded
+        // payload-free control packets (SYN/ACK/FIN/RST) as zero bytes.
+        int flowPacketSize = packetSize;
 
         if (HeuristicEnabled)
         {

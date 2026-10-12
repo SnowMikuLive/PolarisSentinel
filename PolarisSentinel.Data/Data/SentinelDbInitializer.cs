@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PolarisSentinel.Core.Constants;
+using PolarisSentinel.Core.Enums;
+using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.DataAccess.Data;
 
@@ -32,6 +35,9 @@ public sealed class SentinelDbInitializer
     {
         await _db.Database.MigrateAsync(cancellationToken);
         _logger.LogInformation("Database migrations applied.");
+
+        await EnsureAdditionalPolicyAsync(cancellationToken);
+        await RelaxSeededAiThresholdsAsync(cancellationToken);
 
         if (!_options.Enabled)
         {
@@ -75,6 +81,24 @@ public sealed class SentinelDbInitializer
 
             _logger.LogInformation("Initial admin user '{UserName}' created.", _options.UserName);
         }
+        else if (admin.MustChangePassword)
+        {
+            // The account never completed the forced change, so keep its password aligned with
+            // the configured initial default. A password the operator has already changed
+            // (MustChangePassword == false) is never touched.
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(admin);
+            var aligned = await _userManager.ResetPasswordAsync(admin, resetToken, _options.Password);
+            if (aligned.Succeeded)
+            {
+                _logger.LogInformation("Aligned the seeded admin password with the configured default.");
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Could not align the seeded admin password: {Errors}",
+                    string.Join("; ", aligned.Errors.Select(e => e.Description)));
+            }
+        }
 
         if (!string.IsNullOrEmpty(role) && !await _userManager.IsInRoleAsync(admin, role))
         {
@@ -82,4 +106,70 @@ public sealed class SentinelDbInitializer
         }
     }
 
+    // Adds the Isolation Forest suspicious-traffic policy on databases created before it
+    // existed, so it is present without a new migration.
+    private async Task EnsureAdditionalPolicyAsync(CancellationToken cancellationToken)
+    {
+        const string id = "P-8";
+        if (await _db.Policies.AnyAsync(p => p.Id == id, cancellationToken))
+        {
+            return;
+        }
+
+        _db.Policies.Add(new Policy
+        {
+            Id = id,
+            UserId = "admin",
+            Name = "Isolation Forest suspicious",
+            Description = "Surface Isolation Forest-detected suspicious traffic as a monitor alert, regardless of score.",
+            DetectionSource = DetectionSource.IsolationForest,
+            AttackType = AttackTypes.UnknownAnomaly,
+            Action = PolicyAction.Monitor,
+            BlockDurationMinutes = 0,
+            Priority = 95,
+            IsEnabled = true,
+            CreatedAt = DateTime.Now,
+            UpdatedAt = DateTime.Now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("Added default policy {Id}.", id);
+    }
+
+    // Lowered AI alert threshold applied to the seeded detector policies. Only the built-in
+    // policy ids are touched (never operator-created ones), and thresholds are only lowered,
+    // so an existing database gets the more sensitive models without a new migration.
+    private const float RelaxedAiThreshold = 0.5f;
+
+    private static readonly string[] SeededAiPolicyIds = { "P-2", "P-3", "P-6", "P-7" };
+
+    private async Task RelaxSeededAiThresholdsAsync(CancellationToken cancellationToken)
+    {
+        var policies = await _db.Policies
+            .Where(p => SeededAiPolicyIds.Contains(p.Id))
+            .ToListAsync(cancellationToken);
+
+        bool changed = false;
+        foreach (var policy in policies)
+        {
+            if (policy.DetectionSource == DetectionSource.RandomForest && policy.RfThreshold is > RelaxedAiThreshold)
+            {
+                policy.RfThreshold = RelaxedAiThreshold;
+                policy.UpdatedAt = DateTime.Now;
+                changed = true;
+            }
+            else if (policy.DetectionSource == DetectionSource.IsolationForest && policy.IfThreshold is > RelaxedAiThreshold)
+            {
+                policy.IfThreshold = RelaxedAiThreshold;
+                policy.UpdatedAt = DateTime.Now;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Lowered seeded AI detection thresholds to {Threshold}.", RelaxedAiThreshold);
+        }
+    }
 }

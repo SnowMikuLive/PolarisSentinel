@@ -97,6 +97,20 @@ namespace PolarisSentinel.Web.Service
             return record;
         }
 
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                _live.Clear();
+                CapturedFlowCount = 0;
+                AlertCount = 0;
+                NormalCount = 0;
+                SuspiciousCount = 0;
+                MaliciousCount = 0;
+                BlockedCount = 0;
+            }
+        }
+
         public void Restore(IReadOnlyList<TrafficRecord> records)
         {
             lock (_lock)

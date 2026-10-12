@@ -146,7 +146,7 @@ public class SourceBehaviorTrackerTests
         var tracker = CreateTracker();
         PreFilterResult? verdict = null;
 
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 10; i++)
         {
             var packet = Fin(port: 2000 + i, msOffset: i);
             tracker.Observe(packet);
@@ -168,7 +168,7 @@ public class SourceBehaviorTrackerTests
         var tracker = CreateTracker();
         PreFilterResult? verdict = null;
 
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 10; i++)
         {
             var packet = UdpProbe(port: 100 + i, msOffset: i);
             tracker.Observe(packet);

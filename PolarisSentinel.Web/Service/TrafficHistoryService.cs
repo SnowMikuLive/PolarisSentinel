@@ -47,6 +47,14 @@ public class TrafficHistoryService
         }
     }
 
+    public void DiscardPending()
+    {
+        lock (_lock)
+        {
+            _pending.Clear();
+        }
+    }
+
     public void Enqueue(TrafficRecord record)
     {
         bool shouldFlush;

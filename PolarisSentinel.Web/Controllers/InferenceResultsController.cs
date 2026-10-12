@@ -8,7 +8,7 @@ using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Inference results page: the AI inference results that produced an alert.
+    // Alerts page: the detections (heuristic, Random Forest, Isolation Forest) that produced an alert.
     // Only non-benign detections are stored, so every row here is a real alert.
     [Authorize]
     public class InferenceResultsController : Controller

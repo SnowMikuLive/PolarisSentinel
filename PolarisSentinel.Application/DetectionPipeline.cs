@@ -116,7 +116,12 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        if (!MeetsAlertThreshold(detection, policies))
+        // Isolation Forest anomalies are surfaced as alerts for review even below the policy
+        // threshold: an unnamed anomaly is suspicious rather than a confirmed attack, but it
+        // must still reach the Alerts list.
+        bool isIsolationForestAnomaly = detection.AttackType == AttackTypes.UnknownAnomaly;
+
+        if (!isIsolationForestAnomaly && !MeetsAlertThreshold(detection, policies))
         {
             return new DetectionOutcome
             {

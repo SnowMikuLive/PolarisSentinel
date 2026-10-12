@@ -46,6 +46,8 @@ namespace PolarisSentinel
 
             builder.Services.AddSingleton<BlockedTrafficState>();
 
+            builder.Services.AddSingleton<DefaultPasswordAttemptTracker>();
+
             builder.Services.AddSingleton(sp => new FirewallRuntimeState(
                 sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun,
                 sp.GetRequiredService<IUserSettingsStore>()));

@@ -92,8 +92,8 @@ public class PreFilterClassifierTests
             DestinationPort = 8080,
             FwdPackets = 4,
             BwdPackets = 0,
-            SynCount = 2,
-            RstCount = 2,
+            SynCount = 4,
+            RstCount = 4,
             DurationSeconds = 0.5,
             PacketSizeMean = 60
         };
@@ -130,9 +130,9 @@ public class PreFilterClassifierTests
         {
             Protocol = ProtocolNumbers.Tcp,
             DestinationPort = 4444,
-            FwdPackets = 3,
+            FwdPackets = 5,
             BwdPackets = 0,
-            SynCount = 3,
+            SynCount = 5,
             DurationSeconds = 0.5,
             PacketSizeMean = 60
         };

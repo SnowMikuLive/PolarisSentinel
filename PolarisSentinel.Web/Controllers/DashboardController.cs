@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
@@ -10,15 +11,30 @@ namespace PolarisSentinel.Web.Controllers
     public class DashboardController : Controller
     {
         private readonly DetectionStateService _state;
+        private readonly ITrafficRecordRepository _trafficRecords;
+        private readonly TrafficHistoryService _history;
 
-        public DashboardController(DetectionStateService state)
+        public DashboardController(DetectionStateService state, ITrafficRecordRepository trafficRecords, TrafficHistoryService history)
         {
             _state = state;
+            _trafficRecords = trafficRecords;
+            _history = history;
         }
 
         public IActionResult Index()
         {
             return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveAllLiveTraffic(CancellationToken cancellationToken)
+        {
+            _history.DiscardPending();
+            _state.Clear();
+            await _trafficRecords.DeleteAllAsync(cancellationToken);
+            TempData["success"] = "Live traffic history removed.";
+            return RedirectToAction(nameof(Index));
         }
 
         [HttpGet]

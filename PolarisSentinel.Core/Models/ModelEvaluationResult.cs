@@ -10,7 +10,6 @@ public class LabeledFlow
     public required bool IsMalicious { get; init; }
 }
 
-// The metrics one model combination achieved over the test set.
 public class ModelEvaluationResult
 {
     public required ModelCombination Combination { get; init; }

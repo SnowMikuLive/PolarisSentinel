@@ -5,7 +5,7 @@ using PolarisSentinel.Core.Models;
 namespace PolarisSentinel.Web.Service
 {
     // Holds the labeled test rows loaded from the default dataset or an uploaded CSV,
-    // so the Inference Results page can run a model on a real flow without manual input.
+    // so the Alerts page can run a model on a real flow without manual input.
     public class TestDatasetService
     {
         private readonly object _lock = new();

@@ -14,6 +14,12 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
     private const float MinConfidence = 0.60f;
     private const float MaxConfidence = 0.99f;
 
+    // The raw Isolation Forest score is negative for anomalies (a flow is anomalous when
+    // score < threshold), so relaxing the bar means moving the threshold toward zero. This
+    // keeps the tuned margin to 80%, flagging more flows as anomalous so attacks are easier
+    // to classify, at the cost of more false positives.
+    private const double AnomalyThresholdRelaxation = 0.8;
+
     private readonly InferenceSession _session;
     private readonly string _inputName;
     private readonly double _scoreAtAlertConfidence;
@@ -41,7 +47,7 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
                 "Classifier and anomaly detector were exported with different feature schemas.");
         }
 
-        AnomalyThreshold = ParseDouble(metadata["anomaly_threshold"]);
+        AnomalyThreshold = ParseDouble(metadata["anomaly_threshold"]) * AnomalyThresholdRelaxation;
         _scoreAtAlertConfidence = ParseDouble(metadata["score_at_confidence_060"]);
         _scoreAtHighConfidence = ParseDouble(metadata["score_at_confidence_095"]);
     }

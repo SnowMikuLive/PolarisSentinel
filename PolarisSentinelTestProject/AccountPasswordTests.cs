@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using PolarisSentinel.DataAccess.Data;
 using PolarisSentinel.Web.Controllers;
 using PolarisSentinel.Web.Models;
+using PolarisSentinel.Web.Service;
 
 namespace PolarisSentienlUnitTestProject;
 
@@ -12,7 +15,11 @@ public class AccountPasswordTests
     {
         // Identity is deliberately unavailable: a rejected request must not change
         // the password or clear the account's MustChangePassword flag.
-        var controller = new AccountController(null!, null!);
+        var controller = new AccountController(
+            null!,
+            null!,
+            Options.Create(new AdminSeedOptions()),
+            new DefaultPasswordAttemptTracker());
         var model = new ChangePasswordViewModel
         {
             CurrentPassword = "Initial123!",

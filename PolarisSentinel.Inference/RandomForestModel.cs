@@ -19,6 +19,10 @@ public class RandomForestModel : IRandomForestModel, IDisposable
 
     public IReadOnlyList<string> FeatureNames { get; }
 
+    // Lowered from the exported 0.60 so the classifier accepts its predicted attack more
+    // readily. The exported value is only ever capped downwards, never raised.
+    private const double MaxConfidenceThreshold = 0.50;
+
     private double ConfidenceThreshold { get; }
 
     public RandomForestModel(string modelPath)
@@ -34,7 +38,7 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         var metadata = _session.ModelMetadata.CustomMetadataMap;
         ClassNames = JsonSerializer.Deserialize<string[]>(metadata["class_names"])!;
         FeatureNames = JsonSerializer.Deserialize<string[]>(metadata["feature_names"])!;
-        ConfidenceThreshold = ParseDouble(metadata["rf_confidence_threshold"]);
+        ConfidenceThreshold = Math.Min(ParseDouble(metadata["rf_confidence_threshold"]), MaxConfidenceThreshold);
         _benignIndex = Array.IndexOf(ClassNames.ToArray(), AttackTypes.Benign);
     }
 

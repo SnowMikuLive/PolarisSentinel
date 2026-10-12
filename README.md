@@ -37,13 +37,13 @@ The initial administrator account is provisioned automatically on first startup 
 |----------|-----------------------|
 | URL      | `http://localhost:5180/Account/Login` |
 | Username | `admin`               |
-| Password | `Admin@1234`          |
+| Password | `Admin@123`           |
 
 The default password is configured under `AdminSeed:Password` in `PolarisSentinel.Web/appsettings.json`.
 On first sign-in the account is flagged `MustChangePassword`, so you are forced to set a new password
 before the dashboard becomes reachable.
 
-> **Security note:** `Admin@1234` is a development/demo default only. For any real deployment, remove
+> **Security note:** `Admin@123` is a development/demo default only. For any real deployment, remove
 > `AdminSeed:Password` from `appsettings.json` and supply it through an environment variable or
 > user-secrets instead:
 >
