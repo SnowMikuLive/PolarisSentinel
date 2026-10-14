@@ -1,6 +1,7 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.ModelEvaluationResult>?
 @using PolarisSentinel.Core.Constants
 @using PolarisSentinel.Core.Models
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Charts";
     var results = Model as IReadOnlyList<ModelEvaluationResult> ?? Array.Empty<ModelEvaluationResult>();
@@ -20,6 +21,10 @@
         Test a model combination on a real flow and compare all five combinations on the loaded dataset.
         The models are not retrained here; the live pre-filter is not used.
     </p>
+
+    @* Request token for AJAX POSTs to [ValidateAntiForgeryToken] actions. The JSON request body
+       has no form field to carry it, so the script sends this value in a request header. *@
+    <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
 
     @if (isDemo)
     {
@@ -320,12 +325,31 @@
 
                 fetch('/Charts/Test', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.getElementById('requestVerificationToken').value
+                    },
                     body: JSON.stringify(body)
                 })
                     .then(async r => {
-                        const data = await r.json();
-                        if (!r.ok) { throw new Error(data.error || 'Test failed.'); }
+                        // Read the raw text first. A failed request (antiforgery rejection, server
+                        // error, session expiry) can return an empty or non-JSON body, and calling
+                        // r.json() on that throws "Unexpected end of JSON input". Parsing the text
+                        // defensively turns that into a clear message instead.
+                        const text = await r.text();
+                        let data = null;
+                        if (text) {
+                            try { data = JSON.parse(text); } catch (_) { data = null; }
+                        }
+
+                        if (!r.ok) {
+                            throw new Error((data && data.error) || ('Test failed (HTTP ' + r.status + ').'));
+                        }
+
+                        if (!data) {
+                            throw new Error('The server returned an empty response.');
+                        }
+
                         return data;
                     })
                     .then(showResult)

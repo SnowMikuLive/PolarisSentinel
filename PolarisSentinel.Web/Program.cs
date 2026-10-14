@@ -29,6 +29,12 @@ namespace PolarisSentinel
 
             builder.Services.AddControllersWithViews();
 
+            // Accept the antiforgery request token from the "RequestVerificationToken" header as
+            // well as a form field. HeaderName defaults to null (form fields only), which makes
+            // JavaScript AJAX POSTs to MVC actions marked [ValidateAntiForgeryToken] fail with an
+            // empty 400 response because a JSON request body carries no form field for the token.
+            builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
+
             builder.Services.AddSignalR()
                 .AddJsonProtocol(options =>
                 {
