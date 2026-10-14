@@ -6,7 +6,6 @@ namespace PolarisSentinel.Web.Service
     // midnight, and periodically deletes old rows from the database.
     public class LiveTrafficWindowService : BackgroundService
     {
-        // Rows older than this are deleted from the database.
         private static readonly TimeSpan Retention = TimeSpan.FromDays(7);
 
         private readonly DetectionStateService _state;
@@ -25,7 +24,6 @@ namespace PolarisSentinel.Web.Service
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Bring back today's history before serving traffic.
             await _history.RestoreTodayAsync();
 
             try
@@ -37,7 +35,6 @@ namespace PolarisSentinel.Web.Service
                     var now = _timeProvider.GetLocalNow().DateTime;
                     _state.PruneExpired(now);
 
-                    // Flush anything still pending, then drop rows past the retention window.
                     await _history.FlushAsync();
                     await _history.PruneBeforeAsync(now - Retention);
                 }
@@ -49,7 +46,6 @@ namespace PolarisSentinel.Web.Service
 
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
-            // Make sure queued records are not lost on shutdown.
             await _history.FlushAsync();
             await base.StopAsync(cancellationToken);
         }

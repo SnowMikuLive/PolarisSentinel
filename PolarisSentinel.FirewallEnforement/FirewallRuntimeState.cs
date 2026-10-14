@@ -14,11 +14,9 @@ namespace PolarisSentinel.FirewallEnforement
         public FirewallRuntimeState(bool dryRun, IUserSettingsStore? settings = null)
         {
             _settings = settings;
-            // A saved user choice wins over the configured default, so it survives a restart.
             _dryRun = settings?.Read().DryRun ?? dryRun;
         }
 
-        // True when rules are only recorded, not written to the OS firewall.
         public bool DryRun
         {
             get
@@ -35,7 +33,6 @@ namespace PolarisSentinel.FirewallEnforement
                     _dryRun = value;
                 }
 
-                // Only a user toggle reaches this setter, so this is the setting to persist.
                 _settings?.Update(s => s.DryRun = value);
             }
         }

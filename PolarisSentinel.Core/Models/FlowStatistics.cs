@@ -29,7 +29,6 @@ public class FlowStatistics
 
     public double DurationSeconds { get; init; }
 
-    // Mean and standard deviation of the packet sizes in the flow.
     public double PacketSizeMean { get; init; }
 
     public double PacketSizeStdDev { get; init; }

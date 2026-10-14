@@ -7,7 +7,6 @@ namespace PolarisSentinel.Application.Evaluation;
 // Parses a labeled CIC-IDS-2017 style CSV into flows for offline evaluation.
 public static class CsvFlowParser
 {
-    // The label column accepted in the uploaded dataset.
     public const string LabelColumn = "label";
 
     public static bool TryParse(string content, out IReadOnlyList<LabeledFlow> flows, out string? error)
@@ -58,7 +57,6 @@ public static class CsvFlowParser
             for (int i = 0; i < FlowSnapshot.FeatureNames.Length; i++)
             {
                 string raw = cells[index[FlowSnapshot.FeatureNames[i]]];
-                // Model inputs must be finite numbers.
                 if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) || !float.IsFinite(value))
                 {
                     error = $"Row {row + 1}: '{raw}' is not a valid number for {FlowSnapshot.FeatureNames[i]}.";
@@ -89,7 +87,6 @@ public static class CsvFlowParser
         return true;
     }
 
-    // Minimal CSV splitter: handles quoted fields but not embedded newlines.
     private static List<string> SplitCsv(string line)
     {
         var cells = new List<string>();

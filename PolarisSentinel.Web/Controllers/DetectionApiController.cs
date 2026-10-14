@@ -18,11 +18,9 @@ public class DetectionApiController : ControllerBase
         _state = state;
     }
 
-    // Counters and the live window snapshot.
     [HttpGet("state")]
     public IActionResult State() => Ok(_state.GetSnapshot());
 
-    // Per-minute traffic series for the whole day, for the dashboard line chart.
     [HttpGet("traffic-series")]
     public IActionResult TrafficSeries() => Ok(_state.GetTrafficSeries());
 }

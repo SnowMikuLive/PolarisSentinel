@@ -6,11 +6,8 @@ namespace PolarisSentinel.Core.Interfaces;
 // Creates, updates and removes the Windows Firewall rules managed by Polaris Sentinel.
 public interface IFirewallEnforcer
 {
-    // Applies a policy decision: creates the rule for the alert and stages it.
-    // A null alertId marks a manual rule with no originating alert.
     Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration);
 
-    // Update the scope / action / status of an existing rule.
     Rule? Update(
         string ruleId,
         string sourceIp,
@@ -22,31 +19,21 @@ public interface IFirewallEnforcer
         RuleStatus status,
         TimeSpan duration);
 
-    // Remove one rule by its id.
     bool Remove(string ruleId);
 
-    // Remove every rule this application created.
     int RemoveAll();
 
-    // Remove rules whose expiry has passed.
     int RemoveExpired();
 
-    // Remove OS rules the database no longer tracks, and re-push Active rules that are missing.
     int Reconcile();
 
-    // Every rule this application created.
     IReadOnlyList<Rule> GetAllRules();
 
     Rule? GetById(string ruleId);
 
-    // True when rules are only recorded, not written to the OS firewall. The UI must
-    // surface this so an operator never believes traffic is actually being blocked.
     bool IsDryRun { get; }
 
-    // Why enforcement is in dry-run ("disabled by configuration", "not administrator", ...),
-    // or null when enforcement is live.
     string? DryRunReason { get; }
 
-    // Turns dry-run on/off at runtime and returns the resulting enforcement status.
     (bool DryRun, string? Reason) SetDryRun(bool dryRun);
 }

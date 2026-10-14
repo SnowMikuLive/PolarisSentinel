@@ -18,10 +18,6 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly DetectionRuntimeState? _detection;
     private readonly BlockedTrafficState? _blocked;
 
-    // Alert ids are allocated by scanning the table for the highest "A-n". Flows complete
-    // concurrently (one DI scope each), so two detections in a burst can compute the same
-    // id; the second insert then fails and that alert *and its block* are lost. Serialize
-    // id-assignment through enforcement so a burst can never drop a detection or a defence.
     private static readonly object _persistLock = new();
 
     public DetectionPipeline(
@@ -46,13 +42,8 @@ public class DetectionPipeline : IDetectionPipeline
     {
         var verdict = flow.PreFilterVerdict;
 
-        // Heuristic triage can be switched off from the dashboard; then nothing is filtered and
-        // every flow is handed to the AI engine for a verdict.
         bool heuristic = _detection?.HeuristicEnabled ?? true;
 
-        // Only inbound traffic (remote -> local) is treated as an attack. Outbound flows are
-        // still captured and shown on the dashboard, but this system defends the host, so it
-        // never raises an alert or blocks on traffic the host itself initiated.
         if (!flow.IsInbound)
         {
             return new DetectionOutcome
@@ -66,10 +57,6 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // A source an active rule already blocks is being dropped by Windows Firewall. The
-        // capture driver sits below the firewall, so those packets still arrive: report them
-        // as dropped rather than detecting and analysing the same attack over again. A known
-        // attack keeps its alert below, so the attack type stays on record.
         if (verdict is not { IsKnownAttack: true } && _blocked?.IsBlocked(flow.SourceIp) == true)
         {
             return new DetectionOutcome
@@ -83,16 +70,10 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // A known attack is alerted and blocked from the pre-filter verdict. The AI engine
-        // still runs so its opinion is recorded on the alert (the heuristic verdict stays
-        // authoritative for blocking).
         if (heuristic && verdict is { IsKnownAttack: true })
         {
             var alert = BuildPreFilterAlert(flow, verdict);
 
-            // The heuristic verdict already justifies the alert and the block; the model
-            // opinion is only extra detail on the alert, so a model failure must never lose
-            // the defence.
             try
             {
                 var modelOpinion = _inference.Detect(flow);
@@ -106,7 +87,6 @@ public class DetectionPipeline : IDetectionPipeline
                 _logger.LogWarning(ex, "Model opinion failed for a known attack; enforcing the heuristic verdict.");
             }
 
-            // A heuristic known attack is a confirmed malicious flow regardless of the model.
             return Evaluate(alert, policies, malicious: true);
         }
 
@@ -122,14 +102,9 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // Everything that reaches the AI engine is suspicious traffic; it only becomes
-        // malicious when the inference result is a confirmed attack category.
         var detection = _inference.Detect(flow);
         if (detection.AttackType == AttackTypes.Benign)
         {
-            // The model only knows the attack families it was trained on, so a benign answer
-            // must not erase a behavioural signal: the flow stays suspicious (reported and
-            // monitored) instead of being shown as normal traffic.
             return new DetectionOutcome
             {
                 Verdict = TrafficVerdict.Suspicious,
@@ -141,8 +116,12 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // The AI engine may flag an anomaly below the configured alert threshold.
-        if (!MeetsAlertThreshold(detection, policies))
+        // Isolation Forest anomalies are surfaced as alerts for review even below the policy
+        // threshold: an unnamed anomaly is suspicious rather than a confirmed attack, but it
+        // must still reach the Alerts list.
+        bool isIsolationForestAnomaly = detection.AttackType == AttackTypes.UnknownAnomaly;
+
+        if (!isIsolationForestAnomaly && !MeetsAlertThreshold(detection, policies))
         {
             return new DetectionOutcome
             {
@@ -155,18 +134,11 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // The AI inference result decides the final verdict: only a confirmed attack
-        // category (DoS / PortScan / BruteForce) is malicious; an unnamed anomaly is
-        // suspicious and is monitored rather than treated as a confirmed attack.
         return Evaluate(detection, policies, malicious: AttackTypes.IsMalicious(detection.AttackType));
     }
 
-    // Runs the alert through policy evaluation and, when blocked, firewall enforcement.
-    // The malicious flag is supplied by the caller from the AI inference result, so the
-    // pipeline never labels a flow malicious on the strength of reaching this stage alone.
     private DetectionOutcome Evaluate(Alert alert, IReadOnlyList<Policy> policies, bool malicious)
     {
-        // Only non-benign detections are alerted; a benign flow never reaches persistence.
         if (alert.AttackType == AttackTypes.Benign)
         {
             return new DetectionOutcome
@@ -180,7 +152,6 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // The alert id is assigned here so the firewall rule name can key off it.
         Rule? rule = null;
 
         lock (_persistLock)
@@ -206,14 +177,12 @@ public class DetectionPipeline : IDetectionPipeline
                         alert.AttackType,
                         TimeSpan.FromMinutes(decision.BlockDurationMinutes));
 
-                    // The rule is staged by the enforcer; commit it now that its alert exists.
                     _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
                     _logger.LogInformation(
                         "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
                         alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
 
-                    // Publishes the block immediately; the sweeper re-syncs the registry anyway.
                     if (rule.BlocksAddress)
                     {
                         _blocked?.Add(rule.BlockedIp);
@@ -221,9 +190,6 @@ public class DetectionPipeline : IDetectionPipeline
                 }
                 catch (Exception ex)
                 {
-                    // The alert is already persisted. An enforcement failure (e.g. a policy
-                    // whose action cannot be expressed for this flow) must not abort the
-                    // pipeline or hide the detection; the absent rule name signals it.
                     _logger.LogError(
                         ex, "Failed to enforce the block for alert {AlertId} ({AttackType} from {SourceIp})",
                         alert.Id, alert.AttackType, alert.SourceIp);
@@ -232,8 +198,6 @@ public class DetectionPipeline : IDetectionPipeline
 
             return new DetectionOutcome
             {
-                // Only a confirmed attack is malicious; anything else that produced an alert
-                // (e.g. an unnamed anomaly) stays suspicious.
                 Verdict = malicious ? TrafficVerdict.Malicious : TrafficVerdict.Suspicious,
                 Description = alert.Description ?? decision.Reason,
                 Alert = alert,
@@ -247,7 +211,6 @@ public class DetectionPipeline : IDetectionPipeline
         }
     }
 
-    // An AI alert only counts when it reaches the threshold of a policy that could act on it.
     private static bool MeetsAlertThreshold(Alert alert, IReadOnlyList<Policy> policies)
     {
         return policies
@@ -258,9 +221,6 @@ public class DetectionPipeline : IDetectionPipeline
 
     private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict)
     {
-        // A spoofed/random-source flood cannot be stopped by blocking the (fake) source, so
-        // the endpoints are swapped: the alert's source becomes the flooded destination, and
-        // the inbound-IP policy then blocks traffic to the victim instead of a random IP.
         string sourceIp = verdict.IsSpoofedSource ? flow.DestinationIp : flow.SourceIp;
         string destinationIp = verdict.IsSpoofedSource ? flow.SourceIp : flow.DestinationIp;
 

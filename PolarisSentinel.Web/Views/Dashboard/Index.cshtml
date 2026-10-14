@@ -130,6 +130,10 @@
             <span class="d-flex align-items-center gap-3">
                 <span class="small" id="liveCount">0 record(s)</span>
                 <a asp-controller="Dashboard" asp-action="ExportLiveTraffic" class="btn btn-sm btn-light">Export CSV</a>
+                <form asp-action="RemoveAllLiveTraffic" method="post" class="d-inline"
+                      onsubmit="return confirm('Remove all live traffic history? This deletes the persisted records for the current window.');">
+                    <button type="submit" class="btn btn-sm btn-outline-light">Remove All</button>
+                </form>
             </span>
         </div>
         <div class="card-body p-0">

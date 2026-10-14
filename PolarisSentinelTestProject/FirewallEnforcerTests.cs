@@ -12,7 +12,6 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class FirewallEnforcerUnitTest
 {
-    // Each action maps to the right rule: 5-tuple mirrors the alert, block target follows the action.
     [TestMethod]
     public void Apply_ShouldBuildRuleForEachAction()
     {
@@ -37,7 +36,6 @@ public class FirewallEnforcerUnitTest
         Assert.AreEqual(80, outboundPort.BlockedPort);
     }
 
-    // An address block is protocol-agnostic.
     [TestMethod]
     public void AddressBlock_ShouldBeProtocolAgnostic()
     {
@@ -56,7 +54,6 @@ public class FirewallEnforcerUnitTest
         Assert.AreEqual(0, outbound.Protocol, "An outbound IP block must not inherit the alert protocol.");
     }
 
-    // Rules the database no longer tracks are removed from the OS.
     [TestMethod]
     public void Reconcile_ShouldRemoveUntrackedRules()
     {

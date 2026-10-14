@@ -15,7 +15,6 @@ public class EvaluationService
         _combinations = combinations;
     }
 
-    // Runs every model combination over the same rows and returns one metrics row per combination.
     public IReadOnlyList<ModelEvaluationResult> EvaluateAll(
         IReadOnlyList<LabeledFlow> rows,
         IReadOnlyList<ModelCombination>? combinations = null)

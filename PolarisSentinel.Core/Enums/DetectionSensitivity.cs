@@ -5,12 +5,9 @@ namespace PolarisSentinel.Core.Enums;
 // threshold values live in DetectionThresholds.
 public enum DetectionSensitivity
 {
-    // Conservative: only blatant attacks trip the rules.
     Low,
 
-    // The precision-tuned baseline.
     Balanced,
 
-    // Aggressive: lower floors, catches attacks earlier.
     High
 }

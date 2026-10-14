@@ -20,15 +20,12 @@ public class AlertRepository : IAlertRepository
         _context.Alerts.Add(alert);
     }
 
-    // The next number comes from a single aggregate instead of loading every id: under a
-    // flood the table grows fast and the old full-table read made each insert slower than the
-    // last. TRY_CAST ignores any non-numeric ids.
     public async Task<string> NextIdAsync(CancellationToken cancellationToken = default)
     {
         int max = await _context.Database.SqlQuery<int>(
             $"SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([Id], {EntityIds.AlertPrefix.Length + 1}, 20) AS INT)), 0) AS [Value] FROM [Alerts]")
             .SingleAsync(cancellationToken);
-        return EntityIds.Alert(max + 1);
+        return EntityIds.Alert(EntityIds.ReserveNextNumber(max, EntityIds.AlertPrefix));
     }
 
     public async Task<IReadOnlyList<Alert>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -48,7 +45,6 @@ public class AlertRepository : IAlertRepository
 
     public async Task<int> RemoveAllAsync(CancellationToken cancellationToken = default)
     {
-        // A set-based delete avoids loading every row just to remove it.
         return await _context.Alerts.ExecuteDeleteAsync(cancellationToken);
     }
 }

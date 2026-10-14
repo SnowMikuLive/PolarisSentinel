@@ -13,7 +13,9 @@ public readonly record struct PacketObservation(
     bool IsRst,
     int PacketSize,
     DateTime Timestamp,
-    bool IsInbound = true);
+    bool IsInbound = true,
+    bool IsFin = false,
+    bool IsAck = false);
 
 // Detects aggregate behaviour across many short flows from one source (port scans,
 // brute-force runs, floods) that a single flow cannot reveal. Also tracks a global
@@ -38,14 +40,8 @@ public sealed class SourceBehaviorTracker
     private readonly object _lock = new();
     private readonly Dictionary<string, SourceWindow> _sources = new();
 
-    // Probes seen from each source, kept over a horizon long enough to cover a port range
-    // walked slowly. Separate from the volume window so a scan spread over a minute is not
-    // forgotten between windows.
     private readonly Dictionary<string, ScanWindow> _scans = new();
 
-    // Global window of every observed packet, so a flood spread across many spoofed sources
-    // (where no single source window accumulates) is still visible. Each entry keeps its
-    // source IP so the rule can require genuine source diversity, not just raw volume.
     private readonly Queue<(DateTime Timestamp, string SourceIp)> _globalPackets = new();
     private readonly Dictionary<string, int> _globalSourceCounts = new();
     private DateTime _globalLastFlaggedAt = DateTime.MinValue;
@@ -53,6 +49,8 @@ public sealed class SourceBehaviorTracker
     private const int MaxTrackedSources = 50000;
     private const int MaxScanEntries = 4096;
     private const int MaxPacketsPerProbedHost = 2;
+
+    private const int MaxServicePort = 49151;
     private static readonly TimeSpan ScanPruneInterval = TimeSpan.FromSeconds(1);
 
     public SourceBehaviorTracker(
@@ -74,13 +72,11 @@ public sealed class SourceBehaviorTracker
         _hostSweepDistinctIps = thresholds.HostSweepDistinctIps;
         _synFloodSyns = thresholds.SynFloodSourceSyns;
         _cooldown = cooldown ?? TimeSpan.FromSeconds(30);
-        _scanWindow = scanWindow ?? TimeSpan.FromMinutes(1);
+        _scanWindow = scanWindow ?? TimeSpan.FromMinutes(3);
     }
 
     public void Observe(PacketObservation packet)
     {
-        // Only traffic aimed at this host is analysed. The host's own outbound connections
-        // would otherwise read as scans and floods aimed at the remote side.
         if (!packet.IsInbound)
         {
             return;
@@ -108,12 +104,15 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Records a probe against its destination port and host. Only SYNs and ICMP echo
-    // requests count: the scanned host answers each probe, so counting replies would make
-    // the victim look like the scanner.
     private void ObserveProbe(PacketObservation packet)
     {
-        if (!packet.IsSyn && packet.Protocol != ProtocolNumbers.Icmp)
+        bool isTcpProbe = packet.Protocol == ProtocolNumbers.Tcp &&
+            ((packet.IsSyn && !packet.IsAck) || packet.IsFin);
+        bool isUdpProbe = packet.Protocol == ProtocolNumbers.Udp &&
+            packet.DestinationPort <= MaxServicePort;
+        bool isIcmpProbe = packet.Protocol == ProtocolNumbers.Icmp;
+
+        if (!isTcpProbe && !isUdpProbe && !isIcmpProbe)
         {
             return;
         }
@@ -135,7 +134,6 @@ public sealed class SourceBehaviorTracker
         Bump(scan.Hosts, packet.DestinationIp, packet.Timestamp);
     }
 
-    // Counts a probe against a key, without letting a fast scan grow the map without bound.
     private static void Bump<TKey>(Dictionary<TKey, ScanEntry> map, TKey key, DateTime now) where TKey : notnull
     {
         if (map.TryGetValue(key, out var entry))
@@ -148,7 +146,6 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Drops probes that fell out of the scan window. Throttled because it walks the maps.
     private void PruneScan(ScanWindow scan, DateTime now)
     {
         if (now - scan.LastPrunedAt < ScanPruneInterval)
@@ -175,7 +172,6 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Per-packet check that returns a verdict the moment a threshold is crossed.
     public PreFilterResult? EvaluateFast(PacketObservation packet)
     {
         lock (_lock)
@@ -232,7 +228,6 @@ public sealed class SourceBehaviorTracker
         }
     }
 
-    // Evaluates a source's window on flow expiry. Cooldown-suppressed like EvaluateFast.
     public PreFilterResult? Evaluate(string sourceIp, DateTime now)
     {
         lock (_lock)
@@ -289,14 +284,8 @@ public sealed class SourceBehaviorTracker
 
     private PreFilterResult? Classify(SourceWindow window, ScanWindow? scan)
     {
-        // The snapshot is only built for the verdict that actually fires, so the per-packet
-        // fast-path does not allocate on every observation.
         BehaviorWindowStats Build() => window.Snapshot(_window);
 
-        // Scan rules come first, because they are the more specific signature: a scan crosses
-        // the volume thresholds too, and would otherwise be reported as a generic flood.
-        // Only ports that were probed once or twice count, which is what separates a scanner
-        // walking a port range from a client that holds real sessions on the ports it uses.
         int probedPorts = scan is null ? 0 : scan.Ports.Count(kv => kv.Value.Packets <= _portScanMaxPacketsPerPort);
         if (probedPorts >= _portScanDistinctPorts)
         {
@@ -304,7 +293,6 @@ public sealed class SourceBehaviorTracker
                 $"Port scan: {probedPorts} ports probed from one source", Build());
         }
 
-        // The same test horizontally: a sweep probes many hosts a packet or two each.
         int probedHosts = scan is null ? 0 : scan.Hosts.Count(kv => kv.Value.Packets <= MaxPacketsPerProbedHost);
         if (probedHosts >= _hostSweepDistinctIps)
         {
@@ -312,8 +300,6 @@ public sealed class SourceBehaviorTracker
                 $"Host sweep: {probedHosts} hosts probed from one source", Build());
         }
 
-        // Volume rules: a high packet count is stronger evidence than port spread, and a
-        // multi-port flood would otherwise be mislabelled as a port scan.
         if (window.TotalPackets >= _floodPackets && window.DistinctPorts.Count >= _floodDistinctPorts)
         {
             return PreFilterResult.KnownAttack(AttackTypes.DoS,
@@ -333,9 +319,6 @@ public sealed class SourceBehaviorTracker
                 $"Packet flood: {window.TotalPackets} packets from one source", Build());
         }
 
-        // Horizontal sweep: one source probing many hosts on the same port (or two). The
-        // packets-per-host guard keeps ordinary fan-out (a few packets per host) distinct
-        // from a sweep, which fires a single probe at each target.
         if (window.DistinctDestinationIps.Count >= _hostSweepDistinctIps &&
             window.DistinctPorts.Count <= 2 &&
             window.TotalPackets <= window.DistinctDestinationIps.Count * 2)
@@ -344,9 +327,6 @@ public sealed class SourceBehaviorTracker
                 $"Host sweep: {window.DistinctDestinationIps.Count} hosts probed from one source", Build());
         }
 
-        // Port scan: many distinct destination ports, each probed with only a handful of
-        // packets. The packets-per-port guard stops a client with several real sessions
-        // (many packets per port) from being mistaken for a scanner.
         if (window.DistinctPorts.Count >= _portScanDistinctPorts &&
             window.TotalPackets <= window.DistinctPorts.Count * _portScanMaxPacketsPerPort)
         {
@@ -354,9 +334,6 @@ public sealed class SourceBehaviorTracker
                 $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", Build());
         }
 
-        // Brute force: repeated new connections to an authentication port, each a small
-        // number of packets. Long-lived legitimate sessions send far more packets per
-        // connection, so the packets-per-attempt guard keeps them out of this rule.
         if (window.AuthConnections >= _bruteForceConnections &&
             window.TotalPackets <= window.AuthConnections * _bruteForceMaxPacketsPerAttempt)
         {

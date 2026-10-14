@@ -8,18 +8,14 @@ public class Rule
 {
     public string Id { get; set; } = string.Empty;
 
-    // Windows Firewall rule name, e.g. "PolarisSentinel_Block_BlockInboundIp_203.0.113.10".
     public string Name { get; set; } = string.Empty;
 
-    // The policy that produced this rule; null for manual rules.
     public string? PolicyId { get; set; }
 
-    // The alert that triggered this rule; null for manual rules.
     public string? AlertId { get; set; }
 
     public PolicyAction Action { get; set; }
 
-    // 5-tuple the rule applies to.
     public string? SourceIp { get; set; } = string.Empty;
 
     public int? SourcePort { get; set; }
@@ -38,7 +34,6 @@ public class Rule
 
     public DateTime? ExpiresAt { get; set; }
 
-    // The address the policy action blocks (null when the action blocks a port).
     public string? BlockedIp => Action switch
     {
         PolicyAction.BlockInboundIp => SourceIp,
@@ -46,7 +41,6 @@ public class Rule
         _ => null
     };
 
-    // The port the policy action blocks (null when the action blocks an address).
     public int? BlockedPort => Action switch
     {
         PolicyAction.BlockInboundPort => DestinationPort,

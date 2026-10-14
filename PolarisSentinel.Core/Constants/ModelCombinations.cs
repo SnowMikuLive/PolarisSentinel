@@ -7,7 +7,6 @@ public static class ModelCombinations
 {
     public static readonly ModelCombination[] All = Enum.GetValues<ModelCombination>();
 
-    // Human-readable label shown on the Dashboard, Inference Results and Charts pages.
     public static string DisplayName(ModelCombination combination) => combination switch
     {
         ModelCombination.RandomForestOnly => "Random Forest Only",

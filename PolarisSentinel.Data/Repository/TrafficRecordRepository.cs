@@ -35,6 +35,11 @@ public class TrafficRecordRepository : ITrafficRecordRepository
             .ExecuteDeleteAsync(cancellationToken);
     }
 
+    public async Task<int> DeleteAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.TrafficRecords.ExecuteDeleteAsync(cancellationToken);
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return _context.SaveChangesAsync(cancellationToken);

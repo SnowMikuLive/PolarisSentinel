@@ -41,7 +41,6 @@ namespace PolarisSentinel.Web.Controllers
         {
             PopulateViewBag(page);
 
-            // Results from a previous Evaluate POST (surfaced via TempData so the URL stays /Charts).
             if (TempData["EvaluationResults"] is string json && !string.IsNullOrEmpty(json))
             {
                 var results = System.Text.Json.JsonSerializer.Deserialize<List<ModelEvaluationResult>>(json)
@@ -54,7 +53,6 @@ namespace PolarisSentinel.Web.Controllers
             return View();
         }
 
-        // Upload a labeled CSV to use as the test dataset.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Upload(IFormFile? dataset, CancellationToken cancellationToken)
@@ -83,12 +81,10 @@ namespace PolarisSentinel.Web.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // Runs the selected test row through the selected model combination. Never touches the firewall.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Test([FromBody] ModelTestRequest? request, CancellationToken cancellationToken)
         {
-            // Reject empty requests and undefined model values.
             if (request == null || !ModelState.IsValid ||
                 !Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) ||
                 !Enum.IsDefined(combination))
@@ -122,7 +118,6 @@ namespace PolarisSentinel.Web.Controllers
             });
         }
 
-        // Evaluates every model combination on the loaded dataset.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult Evaluate()
@@ -136,8 +131,6 @@ namespace PolarisSentinel.Web.Controllers
             var rows = _dataset.GetPage(0, _dataset.Count);
             var results = _evaluation.EvaluateAll(rows);
 
-            // POST-Redirect-GET: stash the results and redirect, so a refresh does not
-            // re-run the evaluation and the URL stays on /Charts.
             TempData["EvaluationResults"] = System.Text.Json.JsonSerializer.Serialize(results);
             TempData["EvaluationRowCount"] = rows.Count;
             TempData["EvaluationFileName"] = _dataset.FileName;
@@ -155,7 +148,6 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.ActiveModel = ModelCombinations.DisplayName(_combinations.ActiveCombination);
         }
 
-        // The alert threshold of the highest-priority enabled policy that could act on this alert.
         private async Task<float?> ResolveThresholdAsync(DetectionSource source, CancellationToken cancellationToken)
         {
             var policies = await _uow.Policies.GetEnabledAsync(cancellationToken);

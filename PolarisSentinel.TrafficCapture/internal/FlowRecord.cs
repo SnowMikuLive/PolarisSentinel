@@ -5,7 +5,6 @@ internal sealed class FlowRecord
 {
     public required DateTime StartTime { get; init; }
     public DateTime LastSeenTime { get; set; }
-    // The first packet fixes the endpoints for this flow.
     public string SourceIp { get; init; } = string.Empty;
     public ushort SourcePort { get; init; }
     public string DestinationIp { get; init; } = string.Empty;
@@ -22,7 +21,6 @@ internal sealed class FlowRecord
 
     public DateTime? LastFwdPacketTime { get; set; }
     public DateTime? LastBwdPacketTime { get; set; }
-    //For the prefilter to trigae benign
     public int SynCount { get; set; }
     public int AckCount { get; set; }
     public int FinCount { get; set; }
@@ -34,10 +32,7 @@ internal sealed class FlowRecord
 
     public int DestinationPort { get; internal set; }
 
-    // IP protocol number; set when the flow is created.
     public byte Protocol { get; internal set; }
 
-    // True when the flow arrived at this host (remote -> local). Outbound flows are still
-    // captured and shown on the dashboard, but only inbound flows are treated as attacks.
     public bool IsInbound { get; internal set; }
 }

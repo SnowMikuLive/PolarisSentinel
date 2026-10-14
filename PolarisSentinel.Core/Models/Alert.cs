@@ -12,16 +12,12 @@ public class Alert
 
     public required string AttackType { get; set; }
 
-    // Null for rule-based pre-filter alerts, which carry no model probability.
     public float? ConfidenceScore { get; set; }
 
-    // True when the reported source address was fabricated (random-source flood). An address
-    // block cannot stop such traffic, so the policy engine monitors instead of blocking.
     public bool SpoofedSource { get; set; }
 
     public string? Description { get; set; }
 
-    // 5-tuple
     public required string SourceIp { get; set; }
 
     public int SourcePort { get; set; }
@@ -32,7 +28,6 @@ public class Alert
 
     public byte Protocol { get; set; }
 
-    // TCP flag counters, used for alert detail and pre-filter logic (not ML features).
     public int SynCount { get; set; }
 
     public int AckCount { get; set; }
@@ -43,10 +38,8 @@ public class Alert
 
     public int PshCount { get; set; }
 
-    // JSON snapshot of the 20 ML features plus the TCP flag counters at detection time.
     public string? FlowSnapshotJson { get; set; }
 
-    // JSON snapshot of the aggregate window stats for a behavioural (Heuristic) verdict.
     public string? BehaviorSnapshotJson { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;

@@ -26,7 +26,6 @@ public class ModelCombinationService : IModelCombinationService
         _isolationForest = isolationForest;
         _settings = settings;
 
-        // A saved user choice wins over the default, so the selected model survives a restart.
         if (settings?.Read().ModelCombination is { } saved &&
             Enum.TryParse<ModelCombination>(saved, out var restored))
         {
@@ -54,7 +53,6 @@ public class ModelCombinationService : IModelCombinationService
             _active = combination;
         }
 
-        // Only a user selection reaches this method, so it is the value to persist.
         _settings?.Update(s => s.ModelCombination = combination.ToString());
     }
 
@@ -97,7 +95,6 @@ public class ModelCombinationService : IModelCombinationService
         }
 
         var result = _randomForest.Classify(flow);
-        // IF flagged an anomaly but RF cannot name a known attack: report the anomaly itself.
         if (result.AttackType == AttackTypes.Benign)
         {
             return _isolationForest.Score(flow);
@@ -108,7 +105,6 @@ public class ModelCombinationService : IModelCombinationService
     private InferenceResult RandomForestThenIsolation(FlowFeatureVector flow)
     {
         var result = _randomForest.Classify(flow);
-        // RF only wins when it reports a known attack with enough confidence.
         if (result.AttackType != AttackTypes.Benign && _randomForest.ExceedsThreshold(result))
         {
             return result;
@@ -125,7 +121,6 @@ public class ModelCombinationService : IModelCombinationService
     private InferenceResult Parallel(FlowFeatureVector flow)
     {
         var result = _randomForest.Classify(flow);
-        // A known attack from RF wins; otherwise fall back to the anomaly verdict.
         if (result.AttackType != AttackTypes.Benign)
         {
             return result;

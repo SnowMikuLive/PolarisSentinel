@@ -16,7 +16,6 @@ namespace PolarisSentinel.FirewallEnforement
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
 
-        // One enforcer per flow; serialized so two blocks cannot allocate the same rule id.
         private static readonly object _lock = new object();
 
         public bool IsDryRun => !_gateway.IsEnabled;
@@ -37,7 +36,6 @@ namespace PolarisSentinel.FirewallEnforement
             _logger = logger;
         }
 
-        // Turns dry-run on/off and returns the resulting enforcement status.
         public (bool DryRun, string? Reason) SetDryRun(bool dryRun)
         {
             _state.DryRun = dryRun;
@@ -59,7 +57,6 @@ namespace PolarisSentinel.FirewallEnforement
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
 
-                // Named after the block target so repeated attacks reuse one rule.
                 string target = spec.RemoteAddress ?? spec.LocalPort?.ToString() ?? spec.RemotePort?.ToString() ?? string.Empty;
                 string ruleName = spec.RemoteAddress is not null
                     ? EntityIds.FirewallRule($"{decision.Action}_{target}")
@@ -223,8 +220,6 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        // Removes OS rules the database no longer tracks, and re-pushes Active rules missing
-        // from the OS. Does nothing while enforcement is off.
         public int Reconcile()
         {
             lock (_lock)
@@ -263,7 +258,6 @@ namespace PolarisSentinel.FirewallEnforement
                     }
                 }
 
-                // Re-push Active rules whose Windows entry is missing.
                 foreach (var rule in rules)
                 {
                     if (rule.Status != RuleStatus.Active ||

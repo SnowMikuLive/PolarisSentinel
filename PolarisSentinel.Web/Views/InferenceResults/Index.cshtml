@@ -1,12 +1,12 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.Alert>
 @using PolarisSentinel.Web.Service
 @{
-    ViewData["Title"] = "Inference Results";
+    ViewData["Title"] = "Alerts";
 }
 
 <div class="container-fluid">
-    <h2 class="text-primary">Inference Results</h2>
-    <p class="text-muted">AI inference results that produced an alert. Benign flows are not alerted.</p>
+    <h2 class="text-primary">Alerts</h2>
+    <p class="text-muted">Detections that produced an alert: heuristic attacks, Random Forest classifications and Isolation Forest suspicious traffic. Benign flows are not alerted.</p>
     <div class="d-flex gap-2 mb-2">
         <a asp-action="Export" class="btn btn-outline-primary">Export CSV</a>
         <form asp-action="RemoveAll" method="post" onsubmit="return confirm('Remove all stored alerts? Linked rules keep their history but lose the alert link.');">

@@ -113,7 +113,6 @@ namespace PolarisSentienlUnitTestProject
 
         public string? DisabledReason { get; set; }
 
-        // Rules currently present in the "OS store".
         public IReadOnlyList<string> ManagedNames { get; set; } = Array.Empty<string>();
 
         public List<string> Applied { get; } = new();

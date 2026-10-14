@@ -28,7 +28,6 @@ public sealed class DbUserSettingsStore : IUserSettingsStore
         {
             try
             {
-                // The store is a singleton but the DbContext is scoped, so each call gets a scope.
                 using var scope = _scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<SentinelDbContext>();
                 return db.UserSettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefault() ?? new UserSettings();

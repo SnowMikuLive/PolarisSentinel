@@ -57,7 +57,6 @@ public class PolicyRepository : IPolicyRepository
 
     public async Task<int> RemoveAllAsync(CancellationToken cancellationToken = default)
     {
-        // A set-based delete avoids loading every row just to remove it.
         return await _context.Policies.ExecuteDeleteAsync(cancellationToken);
     }
 }

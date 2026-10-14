@@ -12,10 +12,8 @@ public class TrafficHistoryService
     private readonly ILogger<TrafficHistoryService> _logger;
     private readonly object _lock = new();
 
-    // Records waiting to be flushed to the database.
     private readonly List<TrafficRecord> _pending = new();
 
-    // Flush at most this often, and never keep more than this many pending rows.
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
     private const int MaxPending = 5000;
 
@@ -31,7 +29,6 @@ public class TrafficHistoryService
         _logger = logger;
     }
 
-    // Loads every record created since local midnight into the live window.
     public async Task RestoreTodayAsync()
     {
         try
@@ -50,7 +47,14 @@ public class TrafficHistoryService
         }
     }
 
-    // Queues a record for persistence; flushes when the interval has elapsed.
+    public void DiscardPending()
+    {
+        lock (_lock)
+        {
+            _pending.Clear();
+        }
+    }
+
     public void Enqueue(TrafficRecord record)
     {
         bool shouldFlush;
@@ -66,7 +70,6 @@ public class TrafficHistoryService
         }
     }
 
-    // Writes all pending records to the database.
     public async Task FlushAsync()
     {
         List<TrafficRecord> batch;
@@ -95,7 +98,6 @@ public class TrafficHistoryService
         }
     }
 
-    // Deletes records older than the given cutoff (called by the daily sweeper).
     public async Task PruneBeforeAsync(DateTime cutoff)
     {
         try

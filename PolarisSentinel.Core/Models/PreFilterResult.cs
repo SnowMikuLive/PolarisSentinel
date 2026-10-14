@@ -11,11 +11,8 @@ public class PreFilterResult
 
     public string? Description { get; init; }
 
-    // True when the source cannot be trusted (spoofed/random-source flood): the pipeline
-    // targets the flooded destination instead of the source.
     public bool IsSpoofedSource { get; init; }
 
-    // Aggregate window stats behind a behavioural verdict, for the alert detail page.
     public BehaviorWindowStats? Aggregate { get; init; }
 
     public static PreFilterResult Normal() => new();

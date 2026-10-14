@@ -228,15 +228,25 @@
                     }
                     deviceSelect.innerHTML='';
                     let currentValue=null;
+                    let defaultValue=null;
                     devices.forEach(d=>{
                         const option=document.createElement('option');
                         option.value=d.deviceName;
-                        // Tag Wi-Fi so the auto-selected default is obvious.
-                        option.textContent=d.displayName+(d.isWifi?' [Wi-Fi]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
+                        // Tag the interface AutoStart would pick, so the default is obvious
+                        // for any NIC type (Wi-Fi, Ethernet, etc.).
+                        option.textContent=d.displayName+(d.isDefault?' [default]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
+                        // Show every handle we have on the adapter, so two interfaces that
+                        // share a friendly name can still be told apart.
+                        const details=[d.displayName];
+                        if(d.ipAddress)details.push(d.ipAddress);
+                        if(d.macAddress)details.push(d.macAddress);
+                        if(d.isLoopback)details.push('loopback');
+                        option.title=details.join(' \u00b7 ');
                         deviceSelect.appendChild(option);
                         if(d.isCurrent)currentValue=d.deviceName;
+                        if(d.isDefault)defaultValue=d.deviceName;
                     });
-                    // Prefer the user's selection, then the active device, then the first.
+                    // Prefer the user's selection, then the active device, then the default.
                     if(previous&&[...deviceSelect.options].some(o=>o.value===previous))
                     {
                         deviceSelect.value=previous;
@@ -244,6 +254,10 @@
                     else if(currentValue)
                     {
                         deviceSelect.value=currentValue;
+                    }
+                    else if(defaultValue)
+                    {
+                        deviceSelect.value=defaultValue;
                     }
                     setDeviceStatus(devices.length?'':'No capture devices found.',!devices.length);
                 })
@@ -267,14 +281,22 @@
                 headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({deviceName:name})
             })
-                .then(r=>{
-                    if(!r.ok)throw new Error('switch failed');
-                    return r.json();
+                .then(r=>r.json().catch(()=>({})).then(body=>({ok:r.ok,body})))
+                .then(({ok,body})=>{
+                    if(!ok)
+                    {
+                        // Surface the server's reason and re-sync so the selector reflects
+                        // the interface that is actually capturing (may be a restored one).
+                        setDeviceStatus(body&&body.error?body.error:'Failed to switch device.',true);
+                        loadDevices();
+                        return;
+                    }
+                    setDeviceStatus('Capturing on '+((body&&body.current)||name),false);
                 })
-                .then(()=>setDeviceStatus('Capturing on '+name,false))
                 .catch(err=>{
                     console.error('Failed to switch device',err);
                     setDeviceStatus('Failed to switch device.',true);
+                    loadDevices();
                 })
                 .finally(()=>{button.disabled=false;});
         });

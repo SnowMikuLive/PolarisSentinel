@@ -25,25 +25,20 @@ public class DashboardApiController : ControllerBase
         _detection = detection;
     }
 
-    // Active rule count and the current AI model combination.
     [HttpGet("info")]
     public IActionResult Info()
     {
         return Ok(new
         {
             activeRules = _firewall.GetAllRules().Count(r => r.Status == RuleStatus.Active),
-            // The enum name is what the <select> option values use; the display name is for humans.
             activeModel = _combinations.ActiveCombination.ToString(),
             activeModelDisplay = ModelCombinations.DisplayName(_combinations.ActiveCombination),
-            // Surface dry-run so the operator knows enforcement is not actually happening.
             dryRun = _firewall.IsDryRun,
             dryRunReason = _firewall.DryRunReason,
-            // Heuristic (rule-based) triage switch.
             heuristicEnabled = _detection.HeuristicEnabled
         });
     }
 
-    // Change the live AI model combination from the dashboard.
     [HttpPost("model")]
     public IActionResult SetModel([FromBody] SetActiveModelRequest request)
     {
@@ -60,7 +55,6 @@ public class DashboardApiController : ControllerBase
         });
     }
 
-    // Turn firewall dry-run on/off from the dashboard.
     [HttpPost("dryrun")]
     public IActionResult SetDryRun([FromBody] SetDryRunRequest request)
     {
@@ -68,8 +62,6 @@ public class DashboardApiController : ControllerBase
         return Ok(new { dryRun, dryRunReason = reason });
     }
 
-    // Turn heuristic (rule-based) detection on/off from the dashboard. Off means every flow
-    // is handed straight to the AI engine instead of being filtered first.
     [HttpPost("heuristic")]
     public IActionResult SetHeuristic([FromBody] SetHeuristicRequest request)
     {
@@ -77,19 +69,16 @@ public class DashboardApiController : ControllerBase
     }
 }
 
-// Request body for toggling heuristic detection.
 public class SetHeuristicRequest
 {
     public bool HeuristicEnabled { get; set; }
 }
 
-// Request body for toggling firewall dry-run.
 public class SetDryRunRequest
 {
     public bool DryRun { get; set; }
 }
 
-// Request body for changing the live AI model combination.
 public class SetActiveModelRequest
 {
     public string? ModelCombination { get; set; }

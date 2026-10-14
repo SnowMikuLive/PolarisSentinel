@@ -6,28 +6,20 @@ namespace PolarisSentinel.Core.Constants;
 // so the dashboard can always answer "why was this blocked or allowed?".
 public static class DecisionReasons
 {
-    // No action required: the flow was classified as benign.
     public const string Benign = "benign";
 
-    // The Isolation Forest reported an unnamed anomaly; a human decides.
     public const string UnknownAnomaly = "unknown_anomaly";
 
-    // The source addresses were spoofed, so no firewall rule can stop the traffic.
     public const string SpoofedSource = "spoofed_source";
 
-    // No enabled policy matched the alert.
     public const string NoMatchingPolicy = "no_matching_policy";
 
-    // A matching policy explicitly allowed the traffic.
     public const string PolicyAllow = "policy_allow";
 
-    // A matching policy requested monitoring only.
     public const string PolicyMonitor = "policy_monitor";
 
-    // A matching policy blocked the traffic and a firewall rule was applied.
     public const string PolicyBlock = "policy_block";
 
-    // Plain-language text for each reason code.
     public static string Describe(string reason) => reason switch
     {
         Benign => "Traffic classified as benign.",

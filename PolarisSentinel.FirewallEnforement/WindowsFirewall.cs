@@ -3,7 +3,6 @@ using PolarisSentinel.Core.Constants;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Windows Firewall COM wrapper
     [SupportedOSPlatform("windows")]
     internal class WindowsFirewall
     {
@@ -46,8 +45,6 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             target.Name = rule.Name;
-            // INetFwRule requires Protocol, then ports, then addresses to be set in that order.
-            // 256 = any protocol; 0 is not a valid Windows Firewall protocol value.
             target.Protocol = rule.Protocol == 0 ? 256 : rule.Protocol;
             SetPorts(target, rule);
             target.RemoteAddresses = rule.RemoteAddress;
@@ -56,14 +53,12 @@ namespace PolarisSentinel.FirewallEnforement
             target.Profiles = int.MaxValue;
             target.Enabled = rule.Enabled;
 
-            // Update the existing rule when extending; do not Add again.
             if (existing == null)
             {
                 _rules.Add(target);
             }
         }
 
-        // Ports are only valid for TCP/UDP; for Any and ICMP they must be left unset.
         private static void SetPorts(dynamic target, FirewallStoredRule rule)
         {
             bool portCapable = rule.Protocol is ProtocolNumbers.Tcp or ProtocolNumbers.Udp;
@@ -94,7 +89,6 @@ namespace PolarisSentinel.FirewallEnforement
             }
         }
 
-        // Names of the managed rules currently present in Windows Firewall.
         public IReadOnlyList<string> ListManagedNames()
         {
             var names = new List<string>();

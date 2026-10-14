@@ -1,21 +1,20 @@
 namespace PolarisSentinel.Core.Constants;
-
-// Sequential P-/R-/A- id builders for policies, rules, and alerts.
+// Sequential P-/R-/A- ids, reserved across concurrent application requests.
 public static class EntityIds
 {
     public const string PolicyPrefix = "P-";
     public const string RulePrefix = "R-";
     public const string AlertPrefix = "A-";
 
-    // Prefix for managed Windows Firewall rule names.
     public const string FirewallRulePrefix = "PolarisSentinel_";
+
+    private static readonly object _idLock = new();
+    private static readonly Dictionary<string, int> _lastReserved = new(StringComparer.Ordinal);
 
     public static string Rule(int number) => $"{RulePrefix}{number}";
 
-    // Sequential alert id, e.g. "A-1".
     public static string Alert(int number) => $"{AlertPrefix}{number}";
 
-    // The highest numeric suffix among ids with the given prefix, or 0 when none exist.
     public static int MaxNumber(IEnumerable<string> ids, string prefix)
     {
         int max = 0;
@@ -29,11 +28,18 @@ public static class EntityIds
         }
         return max;
     }
+    public static int ReserveNextNumber(int storedMax, string prefix)
+    {
+        lock (_idLock)
+        {
+            int next = checked(Math.Max(storedMax, _lastReserved.GetValueOrDefault(prefix)) + 1);
+            _lastReserved[prefix] = next;
+            return next;
+        }
+    }
 
-    // The next sequential id: one past the highest existing number for the prefix.
     public static string Next(IEnumerable<string> ids, string prefix, Func<int, string> format) =>
-        format(MaxNumber(ids, prefix) + 1);
+        format(ReserveNextNumber(MaxNumber(ids, prefix), prefix));
 
-    // Build the managed firewall rule name from the block target.
     public static string FirewallRule(string targetKey) => $"{FirewallRulePrefix}Block_{targetKey}";
 }

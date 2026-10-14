@@ -8,7 +8,6 @@ namespace PolarisSentinel.Core.Constants;
 // and IPv6 are out of scope.
 public static class NetworkAddress
 {
-    // Normalises a bare IPv4 address to its canonical dotted-quad form.
     public static bool TryNormalize(string value, out string normalized)
     {
         normalized = string.Empty;
@@ -22,7 +21,6 @@ public static class NetworkAddress
         return true;
     }
 
-    // True when the value is a valid IPv4 address.
     public static bool IsValid(string? value) =>
         !string.IsNullOrWhiteSpace(value) && TryNormalize(value, out _);
 }

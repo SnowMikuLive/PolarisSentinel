@@ -7,7 +7,6 @@ namespace PolarisSentinel.Core.Models;
 // (see Resolve) without touching code. Lower numbers mean more sensitive.
 public sealed record DetectionThresholds
 {
-    // --- PreFilter: single-flow signatures (reported as Suspicious for the AI to confirm) ---
     public int MinPacketsForAnalysis { get; init; }
     public int SynFloodSyns { get; init; }
     public int UdpFloodPackets { get; init; }
@@ -25,15 +24,10 @@ public sealed record DetectionThresholds
     public int BruteForceSyns { get; init; }
     public double FlatTrafficStdDev { get; init; }
 
-    // --- PreFilter: relevance gate (which flows are worth sending to the AI engine) ---
-    // A flow is forwarded only when it shows a signal relevant to DoS, port scanning or
-    // brute force. These are weaker than the attack signatures above: they mark "worth
-    // analysing", not "attack". Flows matching none are unrelated traffic and are skipped.
     public int RelevanceMinPackets { get; init; }
     public int RelevanceMinSyns { get; init; }
     public int RelevanceMinAcks { get; init; }
 
-    // --- SourceBehaviorTracker: cross-flow aggregates (KnownAttack -> blocks) ---
     public int PortScanDistinctPorts { get; init; }
     public int PortScanMaxPacketsPerPort { get; init; }
     public int BruteForceConnections { get; init; }
@@ -46,7 +40,6 @@ public sealed record DetectionThresholds
     public int HostSweepDistinctIps { get; init; }
     public int SynFloodSourceSyns { get; init; }
 
-    // The threshold set for a sensitivity preset.
     public static DetectionThresholds Preset(DetectionSensitivity sensitivity) => sensitivity switch
     {
         DetectionSensitivity.Low => Low,
@@ -54,7 +47,6 @@ public sealed record DetectionThresholds
         _ => High
     };
 
-    // Applies configuration overrides (null keeps the preset value) on top of a preset.
     public static DetectionThresholds Resolve(
         DetectionSensitivity sensitivity,
         int? minPackets = null,
@@ -74,13 +66,9 @@ public sealed record DetectionThresholds
         };
     }
 
-    // Parses a configured sensitivity name; unknown or missing falls back to High.
     public static DetectionSensitivity ParseSensitivity(string? value) =>
         Enum.TryParse<DetectionSensitivity>(value, ignoreCase: true, out var parsed) ? parsed : DetectionSensitivity.High;
 
-    // Maximum sensitivity: tuned for demonstration, where every attack in the test set has to
-    // be flagged and blocked. Values are deliberately far below the levels real traffic would
-    // tolerate, so an attack is caught within the first packets rather than after a burst.
     public static readonly DetectionThresholds High = new()
     {
         MinPacketsForAnalysis = 2,
@@ -92,18 +80,18 @@ public sealed record DetectionThresholds
         IcmpFloodPacketsPerSecond = 3,
         IcmpPingFloodPackets = 3,
         IcmpPingFloodPacketsPerSecond = 3,
-        ScanSyns = 1,
-        FinRstScanPackets = 0,
-        UdpScanPackets = 2,
-        UdpScanMaxPayload = 400,
-        IcmpSweepPackets = 2,
+        ScanSyns = 3,
+        FinRstScanPackets = 3,
+        UdpScanPackets = 5,
+        UdpScanMaxPayload = 200,
+        IcmpSweepPackets = 8,
         BruteForceSyns = 1,
         FlatTrafficStdDev = 10,
         RelevanceMinPackets = 4,
         RelevanceMinSyns = 2,
         RelevanceMinAcks = 2,
-        PortScanDistinctPorts = 2,
-        PortScanMaxPacketsPerPort = 6,
+        PortScanDistinctPorts = 6,
+        PortScanMaxPacketsPerPort = 3,
         BruteForceConnections = 2,
         BruteForceMaxPacketsPerAttempt = 20,
         IcmpFloodSourcePackets = 5,
@@ -115,7 +103,6 @@ public sealed record DetectionThresholds
         SynFloodSourceSyns = 8
     };
 
-    // The precision-tuned baseline.
     public static readonly DetectionThresholds Balanced = new()
     {
         MinPacketsForAnalysis = 3,
@@ -150,7 +137,6 @@ public sealed record DetectionThresholds
         SynFloodSourceSyns = 100
     };
 
-    // Conservative: only blatant attacks.
     public static readonly DetectionThresholds Low = new()
     {
         MinPacketsForAnalysis = 4,

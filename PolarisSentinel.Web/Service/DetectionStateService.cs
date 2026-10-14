@@ -25,26 +25,19 @@ namespace PolarisSentinel.Web.Service
     // Singleton runtime counters and the live traffic window for the current day.
     public class DetectionStateService
     {
-        // Hard cap so a flood cannot grow the history without bound.
         public const int MaxLiveRecords = 20000;
 
-        // Hard cap on how many records a single dashboard poll returns.
         public const int MaxRecentRecords = 1000;
 
-        // Newest records are enqueued at the back, so insert and trim are O(1). The old
-        // List.Insert(0, ..) shifted the whole 20k window on every record, holding _lock and
-        // blocking the dashboard reads behind it - that is what froze the UI under a flood.
         private readonly object _lock = new();
         private readonly Queue<(DateTime Timestamp, DetectionRecord Record)> _live = new();
 
-        // Application-lifetime counters, reset only when the application restarts.
         public int CapturedFlowCount { get; private set; }
         public int AlertCount { get; private set; }
         public int NormalCount { get; private set; }
         public int SuspiciousCount { get; private set; }
         public int MaliciousCount { get; private set; }
 
-        // Traffic the firewall dropped because its source is blocked.
         public int BlockedCount { get; private set; }
 
         public DetectionRecord Record(DetectionOutcome outcome)
@@ -93,8 +86,6 @@ namespace PolarisSentinel.Web.Service
                     AlertCount++;
                 }
 
-                // Every classified flow is kept, so the monitor shows the full window
-                // rather than only the alerts.
                 _live.Enqueue((now, record));
 
                 while (_live.Count > MaxLiveRecords)
@@ -106,8 +97,20 @@ namespace PolarisSentinel.Web.Service
             return record;
         }
 
-        // Seeds the window with records restored from the database (today's history).
-        // Counters are rebuilt from the restored records so the cards match the table.
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                _live.Clear();
+                CapturedFlowCount = 0;
+                AlertCount = 0;
+                NormalCount = 0;
+                SuspiciousCount = 0;
+                MaliciousCount = 0;
+                BlockedCount = 0;
+            }
+        }
+
         public void Restore(IReadOnlyList<TrafficRecord> records)
         {
             lock (_lock)
@@ -159,7 +162,6 @@ namespace PolarisSentinel.Web.Service
                     }
                 }
 
-                // Oldest first, so the newest stays at the back like the live path.
                 foreach (var entry in restored.OrderBy(e => e.Timestamp))
                 {
                     _live.Enqueue(entry);
@@ -172,7 +174,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Drops records created before local midnight. Called by the sweeper and on each read.
         public int PruneExpired(DateTime now)
         {
             var cutoff = now.Date;
@@ -202,14 +203,11 @@ namespace PolarisSentinel.Web.Service
                     suspicious = SuspiciousCount,
                     malicious = MaliciousCount,
                     blocked = BlockedCount,
-                    // Newest first, and only the most recent window: serialising all 20k
-                    // records on every dashboard poll is what stalls the browser.
                     recent = _live.Reverse().Take(MaxRecentRecords).Select(e => e.Record).ToArray()
                 };
             }
         }
 
-        // The whole live window, oldest first (not capped like GetSnapshot).
         public IReadOnlyList<DetectionRecord> GetLiveRecords()
         {
             var now = DateTime.Now;
@@ -221,8 +219,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Per-minute flow counts for the whole day, oldest first, for the line chart. Normal
-        // and blocked traffic are counted separately so the chart can draw them as two lines.
         public object GetTrafficSeries()
         {
             var now = DateTime.Now;
@@ -247,7 +243,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // Converts a live record into a persistable row.
         public static TrafficRecord ToTrafficRecord(DetectionRecord record)
         {
             return new TrafficRecord

@@ -108,7 +108,6 @@ namespace PolarisSentinel.FirewallEnforement
                     return false;
                 }
 
-                // An address rule sets the remote address; a port rule leaves it as "*".
                 string? ip = string.IsNullOrWhiteSpace(spec.RemoteAddress)
                     ? "*"
                     : NormalizeIp(spec.RemoteAddress!);
@@ -149,7 +148,6 @@ namespace PolarisSentinel.FirewallEnforement
 
             lock (_lock)
             {
-                // Cleanup must work in dry-run, so open a handle when enforcement is off.
                 var firewall = _firewall ?? new WindowsFirewall();
                 firewall.Remove(ruleName);
             }

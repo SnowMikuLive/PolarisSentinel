@@ -1,29 +1,42 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    //Authorize attribute ensures that only authenticated users can access the dashboard
     [Authorize]
     public class DashboardController : Controller
     {
         private readonly DetectionStateService _state;
+        private readonly ITrafficRecordRepository _trafficRecords;
+        private readonly TrafficHistoryService _history;
 
-        public DashboardController(DetectionStateService state)
+        public DashboardController(DetectionStateService state, ITrafficRecordRepository trafficRecords, TrafficHistoryService history)
         {
             _state = state;
+            _trafficRecords = trafficRecords;
+            _history = history;
         }
 
         public IActionResult Index()
         {
-            // Real data is pushed via SignalR.
             return View();
         }
 
-        // Downloads the Live Traffic window (today) as CSV.
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveAllLiveTraffic(CancellationToken cancellationToken)
+        {
+            _history.DiscardPending();
+            _state.Clear();
+            await _trafficRecords.DeleteAllAsync(cancellationToken);
+            TempData["success"] = "Live traffic history removed.";
+            return RedirectToAction(nameof(Index));
+        }
+
         [HttpGet]
         public IActionResult ExportLiveTraffic()
         {
@@ -53,12 +66,10 @@ namespace PolarisSentinel.Web.Controllers
                 csv.AppendLine(string.Join(",", cells.Select(CsvCell)));
             }
 
-            // The BOM lets Excel recognize UTF-8 text.
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray();
             return File(bytes, "text/csv; charset=utf-8", $"live-traffic-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
         }
 
-        // Quotes a CSV cell and neutralises spreadsheet formula injection.
         private static string CsvCell(string value)
         {
             var trimmed = value.TrimStart();
