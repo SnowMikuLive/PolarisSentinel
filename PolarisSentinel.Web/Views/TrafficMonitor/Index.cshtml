@@ -228,16 +228,25 @@
                     }
                     deviceSelect.innerHTML='';
                     let currentValue=null;
+                    let defaultValue=null;
                     devices.forEach(d=>{
                         const option=document.createElement('option');
                         option.value=d.deviceName;
                         // Tag the interface AutoStart would pick, so the default is obvious
                         // for any NIC type (Wi-Fi, Ethernet, etc.).
                         option.textContent=d.displayName+(d.isDefault?' [default]':'')+(d.ipAddress?' ('+d.ipAddress+')':'');
+                        // Show every handle we have on the adapter, so two interfaces that
+                        // share a friendly name can still be told apart.
+                        const details=[d.displayName];
+                        if(d.ipAddress)details.push(d.ipAddress);
+                        if(d.macAddress)details.push(d.macAddress);
+                        if(d.isLoopback)details.push('loopback');
+                        option.title=details.join(' \u00b7 ');
                         deviceSelect.appendChild(option);
                         if(d.isCurrent)currentValue=d.deviceName;
+                        if(d.isDefault)defaultValue=d.deviceName;
                     });
-                    // Prefer the user's selection, then the active device, then the first.
+                    // Prefer the user's selection, then the active device, then the default.
                     if(previous&&[...deviceSelect.options].some(o=>o.value===previous))
                     {
                         deviceSelect.value=previous;
@@ -245,6 +254,10 @@
                     else if(currentValue)
                     {
                         deviceSelect.value=currentValue;
+                    }
+                    else if(defaultValue)
+                    {
+                        deviceSelect.value=defaultValue;
                     }
                     setDeviceStatus(devices.length?'':'No capture devices found.',!devices.length);
                 })

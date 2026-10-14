@@ -30,8 +30,10 @@ namespace PolarisSentinel.Web.Controllers
                     deviceName = d.DeviceName,
                     displayName = d.DisplayName,
                     ipAddress = d.IpAddress,
-                    isCurrent = d.DeviceName == current,
-                    isDefault = d.DeviceName == defaultDevice
+                    macAddress = d.MacAddress,
+                    isLoopback = d.IsLoopback,
+                    isCurrent = string.Equals(d.DeviceName, current, StringComparison.OrdinalIgnoreCase),
+                    isDefault = string.Equals(d.DeviceName, defaultDevice, StringComparison.OrdinalIgnoreCase)
                 })
                 .ToList();
 

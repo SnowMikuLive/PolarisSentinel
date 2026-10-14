@@ -46,13 +46,23 @@ public class CaptureControlService
             return null;
         }
 
+        // A saved choice may be stored by device name or by friendly display name, so match
+        // either. This keeps the operator's selection across libpcap device-name drift
+        // (reboots, driver reinstalls, adapter re-enables).
         string? saved = _settings?.Read().CaptureDevice;
-        if (!string.IsNullOrEmpty(saved) && devices.Any(d => d.DeviceName == saved))
+        var savedDevice = devices.FirstOrDefault(d => d.Matches(saved));
+        if (savedDevice is not null)
         {
-            return saved;
+            return savedDevice.DeviceName;
         }
 
-        return devices[0].DeviceName;
+        // Otherwise choose a real, routable adapter instead of trusting enumeration order,
+        // which can otherwise put loopback or a disconnected virtual NIC first.
+        var fallback = devices.FirstOrDefault(d => !d.IsLoopback && !string.IsNullOrEmpty(d.IpAddress))
+            ?? devices.FirstOrDefault(d => !d.IsLoopback)
+            ?? devices[0];
+
+        return fallback.DeviceName;
     }
 
     public IEnumerable<NetworkInterfaceInfo> GetDevices()
@@ -77,17 +87,33 @@ public class CaptureControlService
 
         lock (_lock)
         {
-            if (string.Equals(_currentDevice, deviceName, StringComparison.Ordinal))
+            // Fast path: re-selecting the active device is a no-op. This also avoids a
+            // spurious "not found" when an adapter is still capturing but momentarily
+            // missing from enumeration.
+            if (string.Equals(_currentDevice, deviceName, StringComparison.OrdinalIgnoreCase))
             {
-                return new CaptureSwitchResult(CaptureSwitchStatus.Success, deviceName, null);
+                return new CaptureSwitchResult(CaptureSwitchStatus.Success, _currentDevice, null);
             }
 
-            // Reject an unknown device before tearing down a working capture. When enumeration
-            // returned nothing we cannot pre-validate, so fall through and let Start report it.
+            // Resolve the requested name to the canonical device the capture layer knows, so
+            // matching is consistent even when the caller passed the friendly display name or
+            // a differently-cased value. When enumeration returned nothing we cannot
+            // pre-validate, so fall through and let Start report the problem.
             var devices = GetDevices().ToList();
-            if (devices.Count > 0 && !devices.Any(d => d.DeviceName == deviceName))
+            if (devices.Count > 0)
             {
-                return new CaptureSwitchResult(CaptureSwitchStatus.DeviceNotFound, null, $"No capture device named '{deviceName}'.");
+                var known = devices.FirstOrDefault(d => d.Matches(deviceName));
+                if (known is null)
+                {
+                    return new CaptureSwitchResult(CaptureSwitchStatus.DeviceNotFound, null, $"No capture device named '{deviceName}'.");
+                }
+
+                deviceName = known.DeviceName;
+
+                if (string.Equals(_currentDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new CaptureSwitchResult(CaptureSwitchStatus.Success, deviceName, null);
+                }
             }
 
             string? previous = _currentDevice;
@@ -123,7 +149,7 @@ public class CaptureControlService
             // The switch failed after Stop(), so capture is down. Report that honestly and
             // bring the previous device back if we can, so monitoring survives a bad selection.
             _currentDevice = null;
-            if (!string.IsNullOrEmpty(previous) && !string.Equals(previous, deviceName, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(previous) && !string.Equals(previous, deviceName, StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {

@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
 using PacketDotNet;
 using SharpPcap;
 using SharpPcap.LibPcap;
@@ -72,7 +74,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         lock (_deviceLock)
         {
             var fresh = EnumerateDevices();
-            if (fresh.Count >= _cachedDevices.Count)
+
+            // Replace the cache whenever enumeration yields anything, so an unplugged or
+            // disabled adapter stops being offered as a selectable-but-dead entry. Only
+            // fall back to the last known list when a transient failure returns nothing,
+            // which keeps the selector from blanking out mid-capture.
+            if (fresh.Count > 0)
             {
                 _cachedDevices = fresh;
             }
@@ -83,6 +90,107 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private static List<NetworkInterfaceInfo> EnumerateDevices()
     {
+        var devices = new List<NetworkInterfaceInfo>();
+
+        try
+        {
+            foreach (var device in RefreshCaptureDevices())
+            {
+                devices.Add(DescribeDevice(device));
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        // A deterministic order keeps the selector stable between refreshes and makes the
+        // fallback choice predictable: real, addressed adapters first, loopback last.
+        return devices
+            .OrderBy(d => d.IsLoopback)
+            .ThenBy(d => string.IsNullOrEmpty(d.IpAddress))
+            .ThenBy(d => d.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static NetworkInterfaceInfo DescribeDevice(ICaptureDevice device)
+    {
+        var name = device.Name ?? string.Empty;
+        var description = string.IsNullOrWhiteSpace(device.Description) ? name : device.Description;
+
+        string? ip = null;
+        string? mac = null;
+
+        if (device is LibPcapLiveDevice liveDevice)
+        {
+            try
+            {
+                ip = SelectPreferredAddress(liveDevice.Addresses.Select(a => a.Addr?.ipAddress));
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                mac = liveDevice.MacAddress?.ToString();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        var isLoopback = name.Contains("loopback", StringComparison.OrdinalIgnoreCase)
+            || description.Contains("loopback", StringComparison.OrdinalIgnoreCase);
+
+        return new NetworkInterfaceInfo
+        {
+            DeviceName = name,
+            DisplayName = description,
+            IpAddress = ip,
+            IsLoopback = isLoopback,
+            MacAddress = mac
+        };
+    }
+
+    // Prefer a routable IPv4 address so the selector shows the address operators recognise.
+    // IPv6 link-local (fe80::), loopback and APIPA (169.254.x.x) addresses are noise and are
+    // only used when nothing better exists.
+    private static string? SelectPreferredAddress(IEnumerable<IPAddress?> addresses)
+    {
+        var usable = addresses.Where(a => a is not null).Select(a => a!).ToList();
+        if (usable.Count == 0)
+        {
+            return null;
+        }
+
+        return usable
+            .OrderBy(AddressRank)
+            .Select(a => a.ToString())
+            .First();
+
+        static int AddressRank(IPAddress address)
+        {
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                if (IPAddress.IsLoopback(address)) return 3;
+                if (IsApipaV4(address)) return 2;
+                return 0;
+            }
+
+            if (IPAddress.IsLoopback(address)) return 4;
+            if (address.IsIPv6LinkLocal) return 3;
+            return 1;
+        }
+
+        static bool IsApipaV4(IPAddress address)
+        {
+            var bytes = address.GetAddressBytes();
+            return bytes.Length == 4 && bytes[0] == 169 && bytes[1] == 254;
+        }
+    }
+
+    private static IReadOnlyList<ICaptureDevice> RefreshCaptureDevices()
+    {
         try
         {
             CaptureDeviceList.Instance.Refresh();
@@ -91,60 +199,21 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
         }
 
-        var devices = new List<NetworkInterfaceInfo>();
-
-        try
-        {
-            foreach (var device in CaptureDeviceList.Instance)
-            {
-                try
-                {
-                    string? ip = null;
-                    if (device is LibPcapLiveDevice liveDevice)
-                    {
-                        ip = liveDevice.Addresses
-                            .Select(a => a.Addr?.ipAddress?.ToString())
-                            .FirstOrDefault(a => a is not null);
-                    }
-
-                    devices.Add(new NetworkInterfaceInfo
-                    {
-                        DeviceName = device.Name,
-                        DisplayName = device.Description ?? device.Name,
-                        IpAddress = ip
-                    });
-                }
-                catch (Exception)
-                {
-                    devices.Add(new NetworkInterfaceInfo
-                    {
-                        DeviceName = device.Name,
-                        DisplayName = device.Description ?? device.Name,
-                        IpAddress = null
-                    });
-                }
-            }
-        }
-        catch (Exception)
-        {
-        }
-
-        return devices;
+        return CaptureDeviceList.Instance.ToList();
     }
 
-    private ICaptureDevice ResolveDevice(string deviceName)
+    private static ICaptureDevice ResolveDevice(string deviceName)
     {
         for (int attempt = 0; attempt < 3; attempt++)
         {
-            try
-            {
-                CaptureDeviceList.Instance.Refresh();
-            }
-            catch (Exception)
-            {
-            }
+            var devices = RefreshCaptureDevices();
 
-            var match = CaptureDeviceList.Instance.FirstOrDefault(d => d.Name == deviceName);
+            // Match the device name first, then the friendly description, both ignoring case.
+            // Falling back to the description lets a saved selection survive a device-name
+            // change (e.g. a driver reinstall that reassigns the libpcap GUID).
+            var match = devices.FirstOrDefault(d => string.Equals(d.Name, deviceName, StringComparison.OrdinalIgnoreCase))
+                ?? devices.FirstOrDefault(d => string.Equals(d.Description, deviceName, StringComparison.OrdinalIgnoreCase));
+
             if (match is not null)
             {
                 return match;
@@ -180,11 +249,26 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (_localAddresses.Count == 0)
         {
-            foreach (var info in SnapshotDevices())
+            // The live device exposed no addresses, so fall back to the enumerated list.
+            // Prefer the selected device's own address; only widen to every adapter if the
+            // selected device cannot be identified, so inbound detection stays accurate.
+            var snapshot = SnapshotDevices();
+            var selectedIp = snapshot
+                .FirstOrDefault(d => string.Equals(d.DeviceName, device.Name, StringComparison.OrdinalIgnoreCase))
+                ?.IpAddress;
+
+            if (!string.IsNullOrEmpty(selectedIp))
             {
-                if (!string.IsNullOrEmpty(info.IpAddress))
+                _localAddresses.Add(selectedIp);
+            }
+            else
+            {
+                foreach (var info in snapshot)
                 {
-                    _localAddresses.Add(info.IpAddress);
+                    if (!string.IsNullOrEmpty(info.IpAddress))
+                    {
+                        _localAddresses.Add(info.IpAddress);
+                    }
                 }
             }
         }

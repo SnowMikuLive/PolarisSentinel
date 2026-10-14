@@ -104,6 +104,62 @@ public class CaptureControlServiceTests
         Assert.AreEqual("devB", service.GetDefaultDeviceName(devices));
     }
 
+    [TestMethod]
+    public void GetDefaultDeviceName_SkipsLoopbackAndAddresslessAdapters()
+    {
+        var capture = new FakeTrafficCaptureService();
+        capture.AddDevice("loopback", isLoopback: true);
+        capture.AddDevice("noIp");
+        capture.AddDevice("real", ip: "10.0.0.5");
+        var service = Create(capture, out _);
+        var devices = capture.GetAvailableDevices().ToList();
+
+        Assert.AreEqual("real", service.GetDefaultDeviceName(devices));
+    }
+
+    [TestMethod]
+    public void GetDefaultDeviceName_SavedDisplayName_ResolvesToDeviceName()
+    {
+        var capture = new FakeTrafficCaptureService();
+        capture.AddDevice("\\Device\\NPF_{AAA}", displayName: "Ethernet");
+        capture.AddDevice("\\Device\\NPF_{BBB}", displayName: "Wi-Fi");
+        var service = Create(capture, out var store);
+        store.Settings.CaptureDevice = "wi-fi";
+        var devices = capture.GetAvailableDevices().ToList();
+
+        Assert.AreEqual("\\Device\\NPF_{BBB}", service.GetDefaultDeviceName(devices));
+    }
+
+    [TestMethod]
+    public void SwitchTo_MatchesByDeviceName_CaseInsensitive_AndNormalises()
+    {
+        var capture = new FakeTrafficCaptureService();
+        capture.AddDevice("\\Device\\NPF_{AAA}", displayName: "Ethernet");
+        var service = Create(capture, out _);
+
+        var result = service.SwitchTo("\\device\\npf_{aaa}");
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("\\Device\\NPF_{AAA}", service.CurrentDevice);
+        Assert.AreEqual("\\Device\\NPF_{AAA}", capture.RunningDevice);
+    }
+
+    [TestMethod]
+    public void SwitchTo_UnknownDevice_DoesNotEnumerateThenStop()
+    {
+        var capture = new FakeTrafficCaptureService();
+        capture.AddDevice("devA");
+        var service = Create(capture, out _);
+        Assert.IsTrue(service.SwitchTo("devA").Success);
+
+        var result = service.SwitchTo("devB");
+
+        Assert.AreEqual(CaptureSwitchStatus.DeviceNotFound, result.Status);
+        Assert.AreEqual("devA", service.CurrentDevice);
+        Assert.AreEqual("devA", capture.RunningDevice);
+        Assert.AreEqual(1, capture.StopCalls);
+    }
+
     private static CaptureControlService Create(FakeTrafficCaptureService capture, out FakeUserSettingsStore store)
     {
         store = new FakeUserSettingsStore();
@@ -132,8 +188,14 @@ public class CaptureControlServiceTests
         public event EventHandler<FlowFeatureVector>? OnFlowCompleted { add { } remove { } }
         public event EventHandler<LiveTrafficSummary>? OnLiveTrafficSummary { add { } remove { } }
 
-        public void AddDevice(string name) =>
-            _devices.Add(new NetworkInterfaceInfo { DeviceName = name, DisplayName = name });
+        public void AddDevice(string name, string? displayName = null, string? ip = null, bool isLoopback = false) =>
+            _devices.Add(new NetworkInterfaceInfo
+            {
+                DeviceName = name,
+                DisplayName = displayName ?? name,
+                IpAddress = ip,
+                IsLoopback = isLoopback
+            });
 
         public void FailStartWithNotFound(string name) => _notFound.Add(name);
 
