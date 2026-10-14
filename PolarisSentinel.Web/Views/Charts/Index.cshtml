@@ -162,16 +162,66 @@
 
                         @if (datasetCount > pageSize)
                         {
-                            <nav class="mt-2">
-                                <ul class="pagination pagination-sm mb-0">
-                                    @for (int p = 1; p <= (datasetCount + pageSize - 1) / pageSize; p++)
-                                    {
-                                        <li class="page-item @(p == page ? "active" : "")">
-                                            <a class="page-link" asp-action="Index" asp-route-page="@p">@p</a>
-                                        </li>
-                                    }
-                                </ul>
-                            </nav>
+                            // Windowed pager: only a bounded set of page links so the tab row can
+                            // never grow past the card width, no matter how many rows are loaded.
+                            int totalPages = (datasetCount + pageSize - 1) / pageSize;
+                            int window = 2;
+                            int firstShown = Math.Max(1, page - window);
+                            int lastShown = Math.Min(totalPages, page + window);
+
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                                <nav aria-label="Test row pages" style="max-width: 100%; min-width: 0;">
+                                    <ul class="pagination pagination-sm mb-0 flex-wrap">
+                                        @if (page > 1)
+                                        {
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="1" aria-label="First">&laquo;</a></li>
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(page - 1)" aria-label="Previous">&lsaquo;</a></li>
+                                        }
+                                        else
+                                        {
+                                            <li class="page-item disabled"><span class="page-link" aria-hidden="true">&laquo;</span></li>
+                                            <li class="page-item disabled"><span class="page-link" aria-hidden="true">&lsaquo;</span></li>
+                                        }
+
+                                        @if (firstShown > 1)
+                                        {
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="1">1</a></li>
+                                            if (firstShown > 2)
+                                            {
+                                                <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                                            }
+                                        }
+
+                                        @for (int p = firstShown; p <= lastShown; p++)
+                                        {
+                                            <li class="page-item @(p == page ? "active" : "")">
+                                                <a class="page-link" asp-action="Index" asp-route-page="@p">@p</a>
+                                            </li>
+                                        }
+
+                                        @if (lastShown < totalPages)
+                                        {
+                                            if (lastShown < totalPages - 1)
+                                            {
+                                                <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                                            }
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@totalPages">@totalPages</a></li>
+                                        }
+
+                                        @if (page < totalPages)
+                                        {
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@(page + 1)" aria-label="Next">&rsaquo;</a></li>
+                                            <li class="page-item"><a class="page-link" asp-action="Index" asp-route-page="@totalPages" aria-label="Last">&raquo;</a></li>
+                                        }
+                                        else
+                                        {
+                                            <li class="page-item disabled"><span class="page-link" aria-hidden="true">&rsaquo;</span></li>
+                                            <li class="page-item disabled"><span class="page-link" aria-hidden="true">&raquo;</span></li>
+                                        }
+                                    </ul>
+                                </nav>
+                                <span class="text-muted small text-nowrap">Page @(page) of @(totalPages)</span>
+                            </div>
                         }
                     }
                 </div>
