@@ -340,7 +340,10 @@
                 Metrics by Model Combination
             </div>
             <div class="card-body">
-                <canvas id="metricsChart" height="120"></canvas>
+                @* Fixed-height wrapper so the chart fills a larger area (maintainAspectRatio is off). *@
+                <div style="position: relative; height: 440px;">
+                    <canvas id="metricsChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -437,21 +440,64 @@
             const recall = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.Recall)));
             const f1 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.F1Score)));
 
+            // Shared bar styling so the four metrics read as one group per combination.
+            const metricStyle = { borderWidth: 1, borderRadius: 4, maxBarThickness: 46 };
+            const pct = function (value) { return (value * 100).toFixed(1) + '%'; };
+
             new Chart(document.getElementById('metricsChart').getContext('2d'), {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Accuracy', data: accuracy, backgroundColor: '#0d6efd' },
-                        { label: 'Precision', data: precision, backgroundColor: '#198754' },
-                        { label: 'Recall', data: recall, backgroundColor: '#ffc107' },
-                        { label: 'F1-score', data: f1, backgroundColor: '#dc3545' }
+                        { label: 'Accuracy', data: accuracy, backgroundColor: 'rgba(13,110,253,0.85)', borderColor: '#0d6efd', ...metricStyle },
+                        { label: 'Precision', data: precision, backgroundColor: 'rgba(25,135,84,0.85)', borderColor: '#198754', ...metricStyle },
+                        { label: 'Recall', data: recall, backgroundColor: 'rgba(255,193,7,0.9)', borderColor: '#ffc107', ...metricStyle },
+                        { label: 'F1-score', data: f1, backgroundColor: 'rgba(220,53,69,0.85)', borderColor: '#dc3545', ...metricStyle }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, max: 1 } }
+                    interaction: { mode: 'index', intersect: false },
+                    layout: { padding: { top: 8, right: 8 } },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { usePointStyle: true, boxWidth: 10, padding: 16 }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Accuracy, Precision, Recall and F1-score by combination',
+                            color: '#6c757d',
+                            font: { size: 13, weight: 'normal' },
+                            padding: { bottom: 10 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    const v = ctx.parsed.y;
+                                    return ctx.dataset.label + ': ' + (v == null ? 'N/A' : pct(v));
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            grid: { color: 'rgba(0,0,0,0.06)' },
+                            ticks: {
+                                // Percentage gridlines: 0%, 10%, 20%, ... 100% instead of only 0 and 1.
+                                stepSize: 0.1,
+                                callback: function (value) { return (value * 100).toFixed(0) + '%'; }
+                            },
+                            title: { display: true, text: 'Score' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { autoSkip: false, maxRotation: 30, minRotation: 0 }
+                        }
+                    }
                 }
             });
             </text>

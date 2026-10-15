@@ -258,6 +258,8 @@
         function applyState(state) {
             document.getElementById('c-captured').textContent = state.capturedFlows;
             document.getElementById('c-alerts').textContent = state.alerts;
+            // Rules are added by the pipeline as flows are blocked, so keep this card live too.
+            document.getElementById('c-rules').textContent = state.activeRules;
             verdictChart.data.datasets[0].data = [state.normal, state.suspicious, state.malicious, state.blocked];
             verdictChart.update();
             renderLive(state.recent);

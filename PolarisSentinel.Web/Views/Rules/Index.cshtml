@@ -148,7 +148,7 @@
                                 <td>
                                     @if (!string.IsNullOrEmpty(item.AlertId))
                                     {
-                                        <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@item.AlertId">@item.AlertId</a>
+                                        <a asp-controller="Alerts" asp-action="Details" asp-route-id="@item.AlertId">@item.AlertId</a>
                                     }
                                     else
                                     {

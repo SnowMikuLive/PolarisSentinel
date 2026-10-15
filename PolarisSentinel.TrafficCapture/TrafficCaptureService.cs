@@ -375,6 +375,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             ? packetSize
             : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
+        // Decide the per-packet heuristic verdict first, but hold the emission until the flow
+        // below has been updated: that way the alert carries real features from the flow so far
+        // instead of a meaningless all-zero vector that the AI engine would otherwise classify.
+        PreFilterResult? immediateVerdict = null;
         if (HeuristicEnabled)
         {
             var observation = new PacketObservation(
@@ -391,76 +395,76 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 IsAck: tcpPacket?.Acknowledgment ?? false);
             _behavior.Observe(observation);
 
-            var immediate = _behavior.EvaluateFast(observation);
-            if (immediate is not null)
-            {
-                EmitImmediateAlert(srcIp, srcPort, dstIp, dstPort, protocol, tcpPacket, immediate, now);
-            }
+            immediateVerdict = _behavior.EvaluateFast(observation);
         }
 
         var key = Internal.FlowKey.Create(srcIp, srcPort, dstIp, dstPort, protocol);
 
-        if (_flows.Count >= MaxFlowCount && !_flows.ContainsKey(key))
+        Internal.FlowRecord? flow = null;
+        if (_flows.Count < MaxFlowCount || _flows.ContainsKey(key))
         {
-            return;
+            bool srcIsLocal = IsLocalAddress(srcIp);
+            bool dstIsLocal = IsLocalAddress(dstIp);
+            bool swap = srcIsLocal && !dstIsLocal;
+
+            string flowSourceIp = swap ? dstIp : srcIp;
+            ushort flowSourcePort = swap ? dstPort : srcPort;
+            string flowDestinationIp = swap ? srcIp : dstIp;
+            ushort flowDestinationPort = swap ? srcPort : dstPort;
+
+            bool isInbound = IsInboundPacket(srcIp, dstIp);
+
+            flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
+            {
+                StartTime = now,
+                LastSeenTime = now,
+                Protocol = protocol,
+                DestinationPort = flowDestinationPort,
+                SourceIp = flowSourceIp,
+                SourcePort = flowSourcePort,
+                DestinationIp = flowDestinationIp,
+                IsInbound = isInbound
+            });
+
+            bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
+
+            lock (flow)
+            {
+                flow.PacketSizeStats.Add(flowPacketSize);
+
+                if (isForward)
+                {
+                    flow.FwdPackets++;
+                    flow.FwdBytes += flowPacketSize;
+                    if (flow.LastFwdPacketTime is { } lastFwd)
+                        flow.FwdIatStats.Add((now - lastFwd).TotalMilliseconds);
+                    flow.LastFwdPacketTime = now;
+                }
+                else
+                {
+                    flow.BwdPackets++;
+                    flow.BwdBytes += flowPacketSize;
+                    if (flow.LastBwdPacketTime is { } lastBwd)
+                        flow.BwdIatStats.Add((now - lastBwd).TotalMilliseconds);
+                    flow.LastBwdPacketTime = now;
+                }
+
+                if (tcpPacket is not null)
+                {
+                    if (tcpPacket.Synchronize) flow.SynCount++;
+                    if (tcpPacket.Acknowledgment) flow.AckCount++;
+                    if (tcpPacket.Finished) flow.FinCount++;
+                    if (tcpPacket.Reset) flow.RstCount++;
+                    if (tcpPacket.Push) flow.PshCount++;
+                }
+
+                flow.LastSeenTime = now;
+            }
         }
 
-        bool srcIsLocal = IsLocalAddress(srcIp);
-        bool dstIsLocal = IsLocalAddress(dstIp);
-        bool swap = srcIsLocal && !dstIsLocal;
-
-        string flowSourceIp = swap ? dstIp : srcIp;
-        ushort flowSourcePort = swap ? dstPort : srcPort;
-        string flowDestinationIp = swap ? srcIp : dstIp;
-        ushort flowDestinationPort = swap ? srcPort : dstPort;
-
-        bool isInbound = IsInboundPacket(srcIp, dstIp);
-
-        var flow = _flows.GetOrAdd(key, _ => new Internal.FlowRecord
+        if (immediateVerdict is not null)
         {
-            StartTime = now,
-            LastSeenTime = now,
-            Protocol = protocol,
-            DestinationPort = flowDestinationPort,
-            SourceIp = flowSourceIp,
-            SourcePort = flowSourcePort,
-            DestinationIp = flowDestinationIp,
-            IsInbound = isInbound
-        });
-
-        bool isForward = srcIp == flow.SourceIp && srcPort == flow.SourcePort;
-
-        lock (flow) 
-        {
-            flow.PacketSizeStats.Add(flowPacketSize);
-
-            if (isForward)
-            {
-                flow.FwdPackets++;
-                flow.FwdBytes += flowPacketSize;
-                if (flow.LastFwdPacketTime is { } lastFwd)
-                    flow.FwdIatStats.Add((now - lastFwd).TotalMilliseconds);
-                flow.LastFwdPacketTime = now;
-            }
-            else
-            {
-                flow.BwdPackets++;
-                flow.BwdBytes += flowPacketSize;
-                if (flow.LastBwdPacketTime is { } lastBwd)
-                    flow.BwdIatStats.Add((now - lastBwd).TotalMilliseconds);
-                flow.LastBwdPacketTime = now;
-            }
-
-            if (tcpPacket is not null)
-            {
-                if (tcpPacket.Synchronize) flow.SynCount++;
-                if (tcpPacket.Acknowledgment) flow.AckCount++;
-                if (tcpPacket.Finished) flow.FinCount++;
-                if (tcpPacket.Reset) flow.RstCount++;
-                if (tcpPacket.Push) flow.PshCount++;
-            }
-
-            flow.LastSeenTime = now;
+            EmitImmediateAlert(flow, key, srcIp, srcPort, dstIp, dstPort, protocol, tcpPacket, immediateVerdict, now);
         }
     }
 
@@ -586,6 +590,8 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     }
 
     private void EmitImmediateAlert(
+        Internal.FlowRecord? flow,
+        Internal.FlowKey key,
         string sourceIp,
         ushort sourcePort,
         string destinationIp,
@@ -595,24 +601,46 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         PreFilterResult verdict,
         DateTime now)
     {
-        var completed = new FlowFeatureVector
+        FlowFeatureVector completed;
+
+        if (flow is not null)
         {
-            Features = new float[Internal.FeatureExporter.FeatureNames.Length],
-            SourceIp = sourceIp,
-            SourcePort = sourcePort,
-            DestinationIp = destinationIp,
-            DestinationPort = destinationPort,
-            Protocol = protocol,
-            FlowStartTime = now,
-            FlowEndTime = now,
-            SynCount = tcpPacket?.Synchronize == true ? 1 : 0,
-            AckCount = tcpPacket?.Acknowledgment == true ? 1 : 0,
-            FinCount = tcpPacket?.Finished == true ? 1 : 0,
-            RstCount = tcpPacket?.Reset == true ? 1 : 0,
-            PshCount = tcpPacket?.Push == true ? 1 : 0,
-            PreFilterVerdict = verdict,
-            IsInbound = IsInboundPacket(sourceIp, destinationIp)
-        };
+            // Export the flow's accumulated statistics so the AI engine and the stored alert
+            // snapshot see the same real 20-feature vector the idle-expiry path produces.
+            lock (flow)
+            {
+                completed = Internal.FeatureExporter.Export(
+                    flow, key,
+                    sourceIp: flow.SourceIp, sourcePort: flow.SourcePort,
+                    destinationIp: flow.DestinationIp, destinationPort: (ushort)flow.DestinationPort,
+                    protocol: flow.Protocol,
+                    preFilterVerdict: verdict,
+                    isInbound: flow.IsInbound);
+            }
+        }
+        else
+        {
+            // The flow table is full and this flow is untracked, so fall back to a lightweight
+            // vector from the single triggering packet rather than dropping the alert.
+            completed = new FlowFeatureVector
+            {
+                Features = new float[Internal.FeatureExporter.FeatureNames.Length],
+                SourceIp = sourceIp,
+                SourcePort = sourcePort,
+                DestinationIp = destinationIp,
+                DestinationPort = destinationPort,
+                Protocol = protocol,
+                FlowStartTime = now,
+                FlowEndTime = now,
+                SynCount = tcpPacket?.Synchronize == true ? 1 : 0,
+                AckCount = tcpPacket?.Acknowledgment == true ? 1 : 0,
+                FinCount = tcpPacket?.Finished == true ? 1 : 0,
+                RstCount = tcpPacket?.Reset == true ? 1 : 0,
+                PshCount = tcpPacket?.Push == true ? 1 : 0,
+                PreFilterVerdict = verdict,
+                IsInbound = IsInboundPacket(sourceIp, destinationIp)
+            };
+        }
 
         ThreadPool.QueueUserWorkItem(_ => RaiseFlowCompleted(completed));
     }

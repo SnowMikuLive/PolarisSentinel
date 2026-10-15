@@ -6,41 +6,50 @@ internal static class FeatureExporter
 {
     public static readonly string[] FeatureNames = FlowSnapshot.FeatureNames;
 
-    public static FlowFeatureVector Export(FlowRecord flow, FlowKey key, string sourceIp, ushort sourcePort, string destinationIp, ushort destinationPort, byte protocol)
+    public static FlowFeatureVector Export(
+        FlowRecord flow,
+        FlowKey key,
+        string sourceIp,
+        ushort sourcePort,
+        string destinationIp,
+        ushort destinationPort,
+        byte protocol,
+        PreFilterResult? preFilterVerdict = null,
+        bool isInbound = false)
     {
-        float durationMs = (float)(flow.DurationSeconds * 1000);
+        float durationMs = Clamp(flow.DurationSeconds * 1000);
 
         float bytesPerMs = durationMs > 0
-           ? (float)(flow.TotalBytes / durationMs)
+           ? Clamp(flow.TotalBytes / (double)durationMs)
            : 0;
 
         float pktsPerMs = durationMs > 0
-            ? (float)(flow.TotalPackets / durationMs)
+            ? Clamp(flow.TotalPackets / (double)durationMs)
             : 0;
 
         float downUpRatio = flow.FwdPackets > 0
-            ? (float)((double)flow.BwdPackets / flow.FwdPackets)
+            ? Clamp((double)flow.BwdPackets / flow.FwdPackets)
             : 0;
 
         float[] features =
         {
             durationMs,
-            flow.FwdPackets,
-            flow.BwdPackets,
-            flow.FwdBytes,
-            flow.BwdBytes,
-            (float)flow.PacketSizeStats.Min,
-            (float)flow.PacketSizeStats.Max,
-            (float)flow.PacketSizeStats.Mean,
-            (float)flow.PacketSizeStats.StdDev,
-            (float)flow.FwdIatStats.Mean,
-            (float)flow.FwdIatStats.StdDev,
-            (float)flow.FwdIatStats.Max,
-            (float)flow.FwdIatStats.Min,
-            (float)flow.BwdIatStats.Mean,
-            (float)flow.BwdIatStats.StdDev,
-            (float)flow.BwdIatStats.Max,
-            (float)flow.BwdIatStats.Min,
+            Clamp(flow.FwdPackets),
+            Clamp(flow.BwdPackets),
+            Clamp(flow.FwdBytes),
+            Clamp(flow.BwdBytes),
+            Clamp(flow.PacketSizeStats.Min),
+            Clamp(flow.PacketSizeStats.Max),
+            Clamp(flow.PacketSizeStats.Mean),
+            Clamp(flow.PacketSizeStats.StdDev),
+            Clamp(flow.FwdIatStats.Mean),
+            Clamp(flow.FwdIatStats.StdDev),
+            Clamp(flow.FwdIatStats.Max),
+            Clamp(flow.FwdIatStats.Min),
+            Clamp(flow.BwdIatStats.Mean),
+            Clamp(flow.BwdIatStats.StdDev),
+            Clamp(flow.BwdIatStats.Max),
+            Clamp(flow.BwdIatStats.Min),
             bytesPerMs,
             pktsPerMs,
             downUpRatio
@@ -60,7 +69,16 @@ internal static class FeatureExporter
             AckCount = flow.AckCount,
             FinCount = flow.FinCount,
             RstCount = flow.RstCount,
-            PshCount = flow.PshCount
+            PshCount = flow.PshCount,
+            PreFilterVerdict = preFilterVerdict,
+            IsInbound = isInbound
         };
     }
+
+    // The training pipeline clamps every feature with np.maximum(value, 0), so mirroring that
+    // keeps the live vector on the same distribution the models were fitted on. It also stops
+    // NaN/Infinity (which an empty stats bucket or a stalled clock can produce) from poisoning
+    // the ONNX output, where a single bad value would otherwise distort every prediction.
+    private static float Clamp(double value) =>
+        double.IsFinite(value) && value > 0 ? (float)value : 0f;
 }

@@ -78,7 +78,7 @@
                 <dd class="col-sm-9">
                     @if (!string.IsNullOrEmpty(Model.AlertId))
                     {
-                        <a asp-controller="InferenceResults" asp-action="Details" asp-route-id="@Model.AlertId">@Model.AlertId</a>
+                        <a asp-controller="Alerts" asp-action="Details" asp-route-id="@Model.AlertId">@Model.AlertId</a>
                     }
                     else
                     {

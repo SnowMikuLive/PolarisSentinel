@@ -188,7 +188,9 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        public object GetSnapshot()
+        // activeRules is supplied by the caller (the firewall owns the rule store) so this
+        // service stays free of any firewall dependency.
+        public object GetSnapshot(int activeRules)
         {
             var now = DateTime.Now;
             PruneExpired(now);
@@ -199,6 +201,7 @@ namespace PolarisSentinel.Web.Service
                 {
                     capturedFlows = CapturedFlowCount,
                     alerts = AlertCount,
+                    activeRules,
                     normal = NormalCount,
                     suspicious = SuspiciousCount,
                     malicious = MaliciousCount,

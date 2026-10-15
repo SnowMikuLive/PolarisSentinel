@@ -11,11 +11,11 @@ namespace PolarisSentinel.Web.Controllers
     // Alerts page: the detections (heuristic, Random Forest, Isolation Forest) that produced an alert.
     // Only non-benign detections are stored, so every row here is a real alert.
     [Authorize]
-    public class InferenceResultsController : Controller
+    public class AlertsController : Controller
     {
         private readonly IUnitOfWork _uow;
 
-        public InferenceResultsController(IUnitOfWork uow)
+        public AlertsController(IUnitOfWork uow)
         {
             _uow = uow;
         }
