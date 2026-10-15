@@ -368,10 +368,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
-        // Packet-length and byte features use the full IP packet length, matching the
-        // CIC-IDS-2017 definitions the model was trained on. Payload-only lengths recorded
-        // payload-free control packets (SYN/ACK/FIN/RST) as zero bytes.
-        int flowPacketSize = packetSize;
+        // CIC-IDS-2017 length features use TCP/UDP payload bytes, including zero for
+        // payload-free control packets. Live counters above still use the full IP length.
+        Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
+        int flowPacketSize = transportPacket is null
+            ? packetSize
+            : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
         if (HeuristicEnabled)
         {
