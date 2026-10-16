@@ -383,26 +383,20 @@ __pycache__/
 # Intermediate prepared datasets (regenerable via scripts)
 ml/data/
 
-# Cursor
-.cursor/
-.cursorrules
-.cursorignore
-
 # GitHub Copilot
 .github/copilot-instructions.md
-
-# Claude Code
 .claude/
 CLAUDE.md
 CLAUDE.local.md
 .mcp.json
-
-# Other AI agents / editors
 .aider*
 .continue/
 .cline/
 .windsurf/
 .codex/
+.cursor/
+.cursorrules
+.cursorignore
 AGENTS.md
 
 # Static analysis scanner output
