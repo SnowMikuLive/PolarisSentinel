@@ -7,6 +7,7 @@ namespace PolarisSentinel.Web.Controllers
     // API for listing and switching capture devices.
     [Authorize]
     [ApiController]
+    [ValidateAntiForgeryToken]
     [Route("api/capture")]
     public class CaptureController : ControllerBase
     {

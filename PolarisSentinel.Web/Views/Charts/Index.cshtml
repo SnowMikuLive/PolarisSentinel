@@ -1,7 +1,6 @@
 @model IReadOnlyList<PolarisSentinel.Core.Models.ModelEvaluationResult>?
 @using PolarisSentinel.Core.Constants
 @using PolarisSentinel.Core.Models
-@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Charts";
     var results = Model as IReadOnlyList<ModelEvaluationResult> ?? Array.Empty<ModelEvaluationResult>();
@@ -21,10 +20,6 @@
         Test a model combination on a real flow and compare all five combinations on the loaded dataset.
         The models are not retrained here; the live pre-filter is not used.
     </p>
-
-    @* Request token for AJAX POSTs to [ValidateAntiForgeryToken] actions. The JSON request body
-       has no form field to carry it, so the script sends this value in a request header. *@
-    <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
 
     @if (isDemo)
     {

@@ -17,6 +17,9 @@ namespace PolarisSentinel.Web.Controllers
     {
         private const int PageSize = 20;
 
+        // Cap the uploaded evaluation CSV so a large body cannot exhaust the process.
+        private const long MaxUploadBytes = 10 * 1024 * 1024;
+
         private readonly EvaluationService _evaluation;
         private readonly TestDatasetService _dataset;
         private readonly IInferenceEngine _inference;
@@ -55,11 +58,19 @@ namespace PolarisSentinel.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequestSizeLimit(MaxUploadBytes)]
         public async Task<IActionResult> Upload(IFormFile? dataset, CancellationToken cancellationToken)
         {
             if (dataset == null || dataset.Length == 0)
             {
                 TempData["error"] = "Select a CSV file to load.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // The parser needs flow rows, not arbitrary files; keep the surface small.
+            if (!string.Equals(Path.GetExtension(dataset.FileName), ".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["error"] = "Only .csv files can be loaded.";
                 return RedirectToAction(nameof(Index));
             }
 

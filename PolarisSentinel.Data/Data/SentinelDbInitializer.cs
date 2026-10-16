@@ -73,31 +73,15 @@ public sealed class SentinelDbInitializer
             var created = await _userManager.CreateAsync(admin, _options.Password);
             if (!created.Succeeded)
             {
-                _logger.LogError(
-                    "Failed to create the initial admin user: {Errors}",
+                _logger.LogCritical(
+                    "Failed to create the initial admin user: {Errors}. Fix the configured " +
+                    "AdminSeed:Password (it must satisfy the Identity password policy) and restart, " +
+                    "otherwise no account can sign in.",
                     string.Join("; ", created.Errors.Select(e => e.Description)));
                 return;
             }
 
             _logger.LogInformation("Initial admin user '{UserName}' created.", _options.UserName);
-        }
-        else if (admin.MustChangePassword)
-        {
-            // The account never completed the forced change, so keep its password aligned with
-            // the configured initial default. A password the operator has already changed
-            // (MustChangePassword == false) is never touched.
-            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(admin);
-            var aligned = await _userManager.ResetPasswordAsync(admin, resetToken, _options.Password);
-            if (aligned.Succeeded)
-            {
-                _logger.LogInformation("Aligned the seeded admin password with the configured default.");
-            }
-            else
-            {
-                _logger.LogWarning(
-                    "Could not align the seeded admin password: {Errors}",
-                    string.Join("; ", aligned.Errors.Select(e => e.Description)));
-            }
         }
 
         if (!string.IsNullOrEmpty(role) && !await _userManager.IsInRoleAsync(admin, role))

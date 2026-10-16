@@ -11,6 +11,7 @@ namespace PolarisSentinel.Web.Controllers;
 // composition root stays wiring-only.
 [Authorize]
 [ApiController]
+[ValidateAntiForgeryToken]
 [Route("api/dashboard")]
 public class DashboardApiController : ControllerBase
 {

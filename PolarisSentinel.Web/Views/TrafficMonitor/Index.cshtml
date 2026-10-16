@@ -278,7 +278,10 @@
             setDeviceStatus('Switching...',false);
             fetch('/api/capture/select',{
                 method:'POST',
-                headers:{'Content-Type':'application/json'},
+                headers:{
+                    'Content-Type':'application/json',
+                    'RequestVerificationToken':document.getElementById('requestVerificationToken').value
+                },
                 body:JSON.stringify({deviceName:name})
             })
                 .then(r=>r.json().catch(()=>({})).then(body=>({ok:r.ok,body})))

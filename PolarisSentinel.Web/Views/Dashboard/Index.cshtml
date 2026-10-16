@@ -363,7 +363,10 @@
 
             fetch('/api/dashboard/dryrun', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.getElementById('requestVerificationToken').value
+                },
                 body: JSON.stringify({ dryRun: dryRun })
             })
                 .then(async r => {
@@ -390,7 +393,10 @@
 
             fetch('/api/dashboard/heuristic', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.getElementById('requestVerificationToken').value
+                },
                 body: JSON.stringify({ heuristicEnabled: enabled })
             })
                 .then(async r => {
@@ -418,7 +424,10 @@
 
             fetch('/api/dashboard/model', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.getElementById('requestVerificationToken').value
+                },
                 body: JSON.stringify({ modelCombination: selectedValue })
             })
                 .then(async r => {

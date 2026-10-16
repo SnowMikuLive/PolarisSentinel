@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+﻿@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -10,6 +11,9 @@
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/css/toastr.min.css"/>
 </head>
 <body>
+    @* Request token for AJAX POSTs to [ValidateAntiForgeryToken] actions: a JSON body has no
+       form field to carry it, so the scripts send this value in a request header. *@
+    <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container-fluid">
@@ -74,13 +78,13 @@
     @if (TempData["success"] != null)
     {
         <script type="text/javascript">
-                toastr.success('@TempData["success"]');
+                toastr.success(@Json.Serialize(TempData["success"]));
         </script>
     }
     @if (TempData["error"] != null)
     {
         <script type="text/javascript">
-                toastr.error('@TempData["error"]');
+                toastr.error(@Json.Serialize(TempData["error"]));
         </script>
     }
     @await RenderSectionAsync("Scripts", required: false)

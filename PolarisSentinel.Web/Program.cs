@@ -52,8 +52,6 @@ namespace PolarisSentinel
 
             builder.Services.AddSingleton<BlockedTrafficState>();
 
-            builder.Services.AddSingleton<DefaultPasswordAttemptTracker>();
-
             builder.Services.AddSingleton(sp => new FirewallRuntimeState(
                 sp.GetRequiredService<IOptions<FirewallOptions>>().Value.DryRun,
                 sp.GetRequiredService<IUserSettingsStore>()));
@@ -98,7 +96,17 @@ namespace PolarisSentinel
             builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = false;
-                options.Password.RequiredLength = 6;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+
+                // Lock the account after repeated failed sign-ins instead of allowing
+                // unlimited password guessing.
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<SentinelDbContext>();
@@ -215,7 +223,9 @@ namespace PolarisSentinel
                 name: "default",
                 pattern: "{controller=Dashboard}/{action=Index}/{id?}")
                 .WithStaticAssets();
-            app.MapHub<TrafficHub>("/trafficHub");
+            // The dashboard feed carries the full flow 5-tuple, the attack type and the
+            // firewall action, so it must never be readable without a signed-in session.
+            app.MapHub<TrafficHub>("/trafficHub").RequireAuthorization();
 
             app.MapGet("/error", () => Results.Problem(statusCode: StatusCodes.Status500InternalServerError));
 
