@@ -4,9 +4,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
-// Application use case: run one completed flow through the detection pipeline using the
-// currently enabled policies. Presentation layers call this instead of orchestrating the
-// pipeline, repositories, and policy lookup themselves.
 public class FlowProcessingService
 {
     private readonly IDetectionPipeline _pipeline;

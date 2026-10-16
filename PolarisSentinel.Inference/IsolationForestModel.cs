@@ -8,16 +8,11 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference;
 
-// Isolation Forest anomaly detector backed by an ONNX model.
 public class IsolationForestModel : IIsolationForestModel, IDisposable
 {
     private const float MinConfidence = 0.60f;
     private const float MaxConfidence = 0.99f;
 
-    // The raw Isolation Forest score is negative for anomalies (a flow is anomalous when
-    // score < threshold), so relaxing the bar means moving the threshold toward zero. This
-    // keeps the tuned margin to 80%, flagging more flows as anomalous so attacks are easier
-    // to classify, at the cost of more false positives.
     private const double AnomalyThresholdRelaxation = 0.8;
 
     private readonly InferenceSession _session;
@@ -78,7 +73,7 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
         var input = new DenseTensor<float>(flow.Features, new int[] { 1, FeatureNames.Count });
         using var results = _session.Run(
             new NamedOnnxValue[] { NamedOnnxValue.CreateFromTensor(_inputName, input) });
-        return results.First(r => r.Name == "scores").AsEnumerable<float>().First();
+        return results.First(r => r.Name == "scores").AsTensor<float>().ToArray()[0];
     }
 
     private float Normalize(double score)

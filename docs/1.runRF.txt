@@ -1,4 +1,4 @@
-cd "c:\Users\chaiz\OneDrive\桌面\PolarisSentinel"
+# 在仓库根目录（含 PolarisSentinel.slnx 的那一层）执行
 
 python -m venv ml\.venv
 ml\.venv\Scripts\Activate.ps1

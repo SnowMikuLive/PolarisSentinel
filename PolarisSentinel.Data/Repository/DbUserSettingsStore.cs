@@ -7,9 +7,6 @@ using PolarisSentinel.DataAccess.Data;
 
 namespace PolarisSentinel.DataAccess.Repository;
 
-// Persists the operator's choices in the database (a single row), so they follow the
-// database rather than the Windows account. A failure degrades to defaults instead of
-// failing startup, matching the previous file-based behaviour.
 public sealed class DbUserSettingsStore : IUserSettingsStore
 {
     private readonly IServiceScopeFactory _scopes;

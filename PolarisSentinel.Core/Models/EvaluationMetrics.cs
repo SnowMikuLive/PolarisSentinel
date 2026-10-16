@@ -1,6 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// Binary classification metrics for one AI model combination over a labeled test set.
 public class EvaluationMetrics
 {
     public int TruePositives { get; init; }

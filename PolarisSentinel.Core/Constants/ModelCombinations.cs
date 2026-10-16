@@ -2,7 +2,6 @@ namespace PolarisSentinel.Core.Constants;
 
 using PolarisSentinel.Core.Enums;
 
-// Display names and helpers for the five AI engine configurations.
 public static class ModelCombinations
 {
     public static readonly ModelCombination[] All = Enum.GetValues<ModelCombination>();

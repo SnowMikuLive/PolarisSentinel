@@ -2,8 +2,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Restores today's traffic history on startup, prunes the in-memory window at
-    // midnight, and periodically deletes old rows from the database.
+
     public class LiveTrafficWindowService : BackgroundService
     {
         private static readonly TimeSpan Retention = TimeSpan.FromDays(7);

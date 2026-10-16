@@ -3,28 +3,31 @@ using System.Drawing;
 using System.Windows.Forms;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Hosting;
 
 namespace PolarisSentinel.Web.Service;
 
-// Shows a tray icon that opens the web dashboard. Only runs when the app is
-// started as a desktop app, not as a Windows service (no UI in session 0).
-//
-// NotifyIcon needs a WinForms message loop to receive mouse events. ASP.NET Core
-// has no such loop, so we run one on a dedicated STA thread.
 public class TrayIconService : IHostedService, IDisposable
 {
     private readonly IConfiguration _config;
     private readonly IServer _server;
     private readonly ILogger<TrayIconService> _logger;
+    private readonly IHostApplicationLifetime _lifetime;
     private Thread? _uiThread;
     private System.Windows.Forms.ApplicationContext? _context;
     private NotifyIcon? _icon;
+    private DateTime _lastOpenAt = DateTime.MinValue;
 
-    public TrayIconService(IConfiguration config, IServer server, ILogger<TrayIconService> logger)
+    public TrayIconService(
+        IConfiguration config,
+        IServer server,
+        ILogger<TrayIconService> logger,
+        IHostApplicationLifetime lifetime)
     {
         _config = config;
         _server = server;
         _logger = logger;
+        _lifetime = lifetime;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -66,6 +69,15 @@ public class TrayIconService : IHostedService, IDisposable
                 }
             };
 
+            string dashboardUrl = ResolveDashboardUrl();
+            _logger.LogInformation("Polaris Sentinel is running. Dashboard: {Url}", dashboardUrl);
+
+            _icon.ShowBalloonTip(
+                15000,
+                "Polaris Sentinel",
+                "Running in the background." + Environment.NewLine + "Open the dashboard: " + dashboardUrl,
+                ToolTipIcon.Info);
+
             _context = new System.Windows.Forms.ApplicationContext();
             System.Windows.Forms.Application.Run(_context);
         }
@@ -77,6 +89,13 @@ public class TrayIconService : IHostedService, IDisposable
 
     private void OpenDashboard()
     {
+        if (DateTime.UtcNow - _lastOpenAt < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastOpenAt = DateTime.UtcNow;
+
         var url = ResolveDashboardUrl();
         _logger.LogInformation("Opening dashboard at {Url}", url);
         try
@@ -105,7 +124,8 @@ public class TrayIconService : IHostedService, IDisposable
     {
         _icon?.Dispose();
         _context?.ExitThread();
-        Environment.Exit(0);
+        _logger.LogInformation("Exit requested from the tray icon; stopping the host gracefully");
+        _lifetime.StopApplication();
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

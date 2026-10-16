@@ -5,7 +5,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference;
 
-// Adapts the model combination service to the alert shape used by the detection pipeline.
 public class OnnxInferenceEngine : IInferenceEngine
 {
     private readonly IModelCombinationService _combinations;

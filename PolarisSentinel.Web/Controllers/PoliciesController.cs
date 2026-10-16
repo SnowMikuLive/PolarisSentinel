@@ -10,7 +10,7 @@ using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Policy CRUD. UserId follows the signed-in user; every other property is editable.
+
     [Authorize]
     public class PoliciesController : Controller
     {
@@ -187,6 +187,12 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
+            if (SeededPolicies.IsSeeded(policy.Id))
+            {
+                TempData["error"] = "Seeded policies are part of the default policy set and cannot be deleted. Disable them instead.";
+                return RedirectToAction(nameof(Index));
+            }
+
             _uow.Policies.Remove(policy);
             await _uow.SaveChangesAsync(cancellationToken);
 
@@ -198,8 +204,21 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAll(CancellationToken cancellationToken)
         {
-            int removed = await _uow.Policies.RemoveAllAsync(cancellationToken);
-            TempData["success"] = $"{removed} policy(ies) removed.";
+            var policies = await _uow.Policies.GetAllAsync(cancellationToken);
+            int removed = 0;
+
+            foreach (var policy in policies.Where(p => !SeededPolicies.IsSeeded(p.Id)))
+            {
+                _uow.Policies.Remove(policy);
+                removed++;
+            }
+
+            if (removed > 0)
+            {
+                await _uow.SaveChangesAsync(cancellationToken);
+            }
+
+            TempData["success"] = $"{removed} policy(ies) removed. Seeded policies are kept.";
             return RedirectToAction(nameof(Index));
         }
 

@@ -15,19 +15,16 @@
     </form>
 </div>
 
-@* Uses GET so filter conditions appear in the URL and can be bookmarked/shared *@
 <form asp-action="Index" method="get" class="card shadow-sm border-primary mb-3">
     <div class="card-body">
         <div class="row g-3 align-items-end">
 
-            @* Free-text search across id, name, addresses, ports, policy and alert *@
             <div class="col-md-3">
                 <label class="form-label small text-muted mb-1">Search</label>
                 <input type="search" name="search" value="@ViewBag.Search" class="form-control form-control-sm"
                        placeholder="IP, port, rule id, policy..." />
             </div>
 
-            @* Filter by status *@
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Status</label>
                 <select name="status" class="form-select form-select-sm" asp-items="ViewBag.StatusList">
@@ -35,7 +32,6 @@
                 </select>
             </div>
 
-            @* Filter by protocol *@
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Protocol</label>
                 <select name="protocol" class="form-select form-select-sm" asp-items="ViewBag.ProtocolList">
@@ -43,7 +39,6 @@
                 </select>
             </div>
 
-            @* Filter by action *@
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Action</label>
                 <select name="action" class="form-select form-select-sm" asp-items="ViewBag.ActionList">
@@ -51,7 +46,6 @@
                 </select>
             </div>
 
-            @* Sort order *@
             <div class="col-md-1">
                 <label class="form-label small text-muted mb-1">Sort</label>
                 <select name="sort" class="form-select form-select-sm">
@@ -72,7 +66,7 @@
 
     <div class="card shadow-sm border-primary">
         <div class="card-body p-0">
-            @* Add the horizontal scroll container for narrow screens *@
+
             <div class="table-responsive">
                 <table class="table table-striped table-hover mb-0 align-middle">
                 <thead>
@@ -160,7 +154,7 @@
                                     @if (item.ExpiresAt is { } expires)
                                     {
                                         <div>@TimeFormat.Format(expires)</div>
-                                        @* Warn when an active rule is about to lapse, so it is not silently lost. *@
+
                                         @if (item.Status == PolarisSentinel.Core.Enums.RuleStatus.Active && TimeFormat.IsWithin(expires, TimeSpan.FromMinutes(15)))
                                         {
                                             <span class="badge bg-warning text-dark">expires @TimeFormat.Relative(expires)</span>
@@ -198,7 +192,7 @@
 </div>
 
 @functions {
-    // Render "ip:port", falling back to the bare IP when the port is unknown.
+
     static string FormatEndpoint(string? ip, int? port)
     {
         string host = string.IsNullOrEmpty(ip) ? "Any" : ip;

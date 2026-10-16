@@ -1,6 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// Result of the rule-based pre-filter, the upstream stage of the AI engine.
 public class PreFilterResult
 {
     public bool IsKnownAttack { get; init; }

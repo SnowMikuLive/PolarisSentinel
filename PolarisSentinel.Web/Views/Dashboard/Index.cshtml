@@ -6,7 +6,6 @@
 <div class="container-fluid">
     <h2 class="text-primary">Dashboard</h2>
 
-    @* Four cards: captured flows, alerts, active rules and the AI model selector. *@
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="card text-center border-primary shadow-sm">
@@ -79,9 +78,21 @@
                 </div>
             </div>
         </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-success shadow-sm h-100">
+                <div class="card-body">
+                    <label for="deviceSelect" class="form-label text-muted small">Capture Device</label>
+                    <div class="input-group input-group-sm">
+                        <select id="deviceSelect" class="form-select form-select-sm"></select>
+                        <button type="button" class="btn btn-outline-secondary" id="btnRefreshDevices" title="Reload the device list">&#8635;</button>
+                        <button type="button" class="btn btn-success" id="btnSetDevice">Set</button>
+                    </div>
+                    <div id="deviceStatus" class="small mt-1 text-muted"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Shown only when firewall enforcement is not actually applying rules. -->
     <div id="dryRunBanner" class="alert alert-danger d-none mt-3 mb-0" role="alert">
         <strong>&#9888; Enforcement disabled (dry-run).</strong>
         Detections are recorded but <u>no traffic is actually blocked</u>.
@@ -95,7 +106,7 @@
                     Traffic Classification
                 </div>
                 <div class="card-body">
-                    @* 固定图表高度 / Keep the chart height fixed. *@
+
                     <div style="position: relative; height: 240px;">
                         <canvas id="verdictChart"></canvas>
                     </div>
@@ -123,7 +134,6 @@
         </div>
     </div>
 
-    @* Rolling 24-hour window of classified flows, restored on page load. *@
     <div class="card shadow-sm border-primary mt-3">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
             <span>Live Traffic (last 24 hours)</span>
@@ -161,11 +171,16 @@
 </div>
 
 @section Scripts {
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="~/lib/chart.js/chart.umd.min.js" asp-append-version="true"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/polaris-hub.js"></script>
     <script>
-        // Mutually exclusive verdict bar chart.
+        if (typeof Chart === 'undefined') {
+            window.Chart = function () { return { data: { datasets: [{ data: [] }, { data: [] }] }, options: {}, update: function () { } }; };
+            window.Chart.register = function () { };
+            window.ChartDataLabels = {};
+        }
+
         const verdictChart = new Chart(document.getElementById('verdictChart').getContext('2d'), {
             type: 'bar',
             data: {
@@ -197,7 +212,7 @@
                     fill: true,
                     tension: 0.3
                 }, {
-                    // Traffic the firewall dropped because its source is blocked.
+
                     label: 'Blocked traffic (flows per minute)',
                     data: [],
                     borderColor: '#dc3545',
@@ -240,8 +255,6 @@
 
         trafficSource.addEventListener('change', showTrafficChart);
 
-        // 实时和历史曲线统一使用每分钟流数。
-        // Normal and blocked traffic are both plotted per minute.
         function loadTrafficSeries() {
             return fetch('/api/detections/traffic-series')
                 .then(r => r.json())
@@ -258,14 +271,13 @@
         function applyState(state) {
             document.getElementById('c-captured').textContent = state.capturedFlows;
             document.getElementById('c-alerts').textContent = state.alerts;
-            // Rules are added by the pipeline as flows are blocked, so keep this card live too.
+
             document.getElementById('c-rules').textContent = state.activeRules;
             verdictChart.data.datasets[0].data = [state.normal, state.suspicious, state.malicious, state.blocked];
             verdictChart.update();
             renderLive(state.recent);
         }
 
-        // Renders the rolling 24-hour window, newest first.
         function renderLive(records) {
             const body = document.getElementById('liveBody');
             const list = records || [];
@@ -283,7 +295,7 @@
                 const confidence = d.confidenceScore == null ? 'N/A' : Number(d.confidenceScore).toFixed(3);
                 const source = d.sourceIp ? (d.sourceIp + (d.sourcePort ? ':' + d.sourcePort : '')) : '-';
                 const destination = d.destinationIp ? (d.destinationIp + (d.destinationPort ? ':' + d.destinationPort : '')) : '-';
-                // Fall back to the alert description when no decision text is available.
+
                 const reason = d.decisionText || d.reason || '-';
                 return '<tr>' +
                     '<td class="text-nowrap">' + d.createdAt + '</td>' +
@@ -298,17 +310,14 @@
             }).join('');
         }
 
-        // Captured flows, alerts and verdict counts on load.
         fetch('/api/detections/state')
             .then(r => r.json())
             .then(applyState)
             .catch(err => console.error('Failed to fetch state', err));
 
-        // Restore the whole day's traffic line chart from the persisted series.
         loadTrafficSeries();
         showTrafficChart();
 
-        // Active rule count and the current AI model combination.
         const modelSelect = document.getElementById('modelCombination');
         const modelStatus = document.getElementById('modelStatus');
         const dryRunSelect = document.getElementById('dryRunSelect');
@@ -316,7 +325,6 @@
         const heuristicSelect = document.getElementById('heuristicSelect');
         const heuristicStatus = document.getElementById('heuristicStatus');
 
-        // Reflects the enforcement state in the dropdown, status text and banner.
         function applyDryRun(dryRun, reason) {
             dryRunSelect.value = dryRun ? 'true' : 'false';
             dryRunStatus.textContent = dryRun ? 'Dry-run (not blocking)' : 'Enforcing';
@@ -331,7 +339,6 @@
             }
         }
 
-        // Reflects the heuristic-triage switch in the dropdown and status text.
         function applyHeuristic(enabled) {
             heuristicSelect.value = enabled ? 'true' : 'false';
             heuristicStatus.textContent = enabled ? 'Filtering before AI' : 'AI only (no pre-filter)';
@@ -342,23 +349,19 @@
             .then(r => r.json())
             .then(info => {
                 document.getElementById('c-rules').textContent = info.activeRules;
-                // The option values are enum names, so use activeModel (not the display name).
+
                 modelSelect.value = info.activeModel;
                 modelStatus.textContent = 'Active: ' + info.activeModelDisplay;
 
-                // Sync the enforcement dropdown and warn when not actually blocking.
                 applyDryRun(info.dryRun, info.dryRunReason);
 
-                // Sync the heuristic detection switch.
                 applyHeuristic(info.heuristicEnabled);
             })
             .catch(err => console.error('Failed to fetch dashboard info', err));
 
-        // Toggle firewall dry-run from the dashboard.
         document.getElementById('btnSetDryRun').addEventListener('click', function () {
             const dryRun = dryRunSelect.value === 'true';
 
-            // Optimistic: reflect the choice immediately, then confirm with the server.
             applyDryRun(dryRun, null);
 
             fetch('/api/dashboard/dryrun', {
@@ -375,7 +378,7 @@
                     return data;
                 })
                 .then(data => {
-                    // The server may stay in dry-run if it lacks admin rights; trust its answer.
+
                     applyDryRun(data.dryRun, data.dryRunReason);
                 })
                 .catch(err => {
@@ -384,11 +387,9 @@
                 });
         });
 
-        // Toggle heuristic detection from the dashboard.
         document.getElementById('btnSetHeuristic').addEventListener('click', function () {
             const enabled = heuristicSelect.value === 'true';
 
-            // Optimistic: reflect the choice immediately, then confirm with the server.
             applyHeuristic(enabled);
 
             fetch('/api/dashboard/heuristic', {
@@ -413,12 +414,10 @@
                 });
         });
 
-        // Change the live model combination from the dashboard.
         document.getElementById('btnSetModel').addEventListener('click', function () {
             const selectedText = modelSelect.options[modelSelect.selectedIndex].text;
             const selectedValue = modelSelect.value;
 
-            // Optimistic: reflect the choice immediately, then confirm with the server.
             modelStatus.textContent = 'Active: ' + selectedText;
             modelStatus.className = 'small mt-1 text-success';
 
@@ -445,13 +444,109 @@
                 });
         });
 
-        // Refresh the counters and the day's traffic series whenever a flow is classified.
+        const deviceSelect = document.getElementById('deviceSelect');
+        const deviceStatus = document.getElementById('deviceStatus');
+
+        function setDeviceStatus(text, isError) {
+            deviceStatus.textContent = text || '';
+            deviceStatus.className = 'small mt-1 ' + (isError ? 'text-danger' : 'text-success');
+        }
+
+        function loadDevices() {
+            return fetch('/api/capture/devices')
+                .then(async r => {
+                    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                    return r.json();
+                })
+                .then(data => {
+                    const devices = data.devices || [];
+                    const previous = deviceSelect.value;
+                    deviceSelect.innerHTML = '';
+
+                    let currentValue = null;
+                    let defaultValue = null;
+
+                    devices.forEach(d => {
+                        const option = document.createElement('option');
+                        option.value = d.deviceName;
+                        option.textContent = d.displayName
+                            + (d.ipAddress ? ' (' + d.ipAddress + ')' : '')
+                            + (d.isDefaultRoute ? ' [active]' : '')
+                            + (d.isLoopback ? ' [loopback]' : '');
+
+                        const details = [d.displayName];
+                        if (d.ipAddress) details.push(d.ipAddress);
+                        if (d.macAddress) details.push(d.macAddress);
+                        if (d.isDefaultRoute) details.push('active adapter');
+                        if (d.isLoopback) details.push('loopback');
+                        option.title = details.join(' \u00b7 ');
+
+                        deviceSelect.appendChild(option);
+                        if (d.isCurrent) currentValue = d.deviceName;
+                        if (d.isDefault) defaultValue = d.deviceName;
+                    });
+
+                    if (previous && [...deviceSelect.options].some(o => o.value === previous)) {
+                        deviceSelect.value = previous;
+                    } else if (currentValue) {
+                        deviceSelect.value = currentValue;
+                    } else if (defaultValue) {
+                        deviceSelect.value = defaultValue;
+                    }
+
+                    if (devices.length === 0) {
+                        setDeviceStatus(data.npcapDetected === false
+                            ? 'No devices: the Npcap driver is not installed.'
+                            : 'No capture devices found.', true);
+                    } else {
+                        setDeviceStatus(devices.length + ' device(s); capturing on '
+                            + (currentValue || defaultValue || devices[0].deviceName), false);
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to load capture devices', err);
+                    setDeviceStatus('Failed to load devices (reload the page).', true);
+                });
+        }
+
+        document.getElementById('btnRefreshDevices').addEventListener('click', loadDevices);
+
+        document.getElementById('btnSetDevice').addEventListener('click', function () {
+            const name = deviceSelect.value;
+            if (!name) { setDeviceStatus('No device selected.', true); return; }
+
+            setDeviceStatus('Switching...', false);
+
+            fetch('/api/capture/select', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.getElementById('requestVerificationToken').value
+                },
+                body: JSON.stringify({ deviceName: name })
+            })
+                .then(async r => {
+                    const data = await r.json();
+                    if (!r.ok) { throw new Error(data.error || 'Failed to switch device.'); }
+                    return data;
+                })
+                .then(data => {
+                    setDeviceStatus('Capturing on ' + (data.current || name), false);
+                    loadDevices();
+                })
+                .catch(err => {
+                    setDeviceStatus(err.message, true);
+                    loadDevices();
+                });
+        });
+
+        loadDevices();
+
         let seriesTimer = null;
         polarisHub.on('ReceivePolicyDecision', () => {
             fetch('/api/detections/state').then(r => r.json()).then(applyState)
                 .catch(err => console.error(err));
 
-            // Throttle the series reload so a burst of flows does not spam the server.
             if (seriesTimer === null) {
                 seriesTimer = setTimeout(() => {
                     seriesTimer = null;

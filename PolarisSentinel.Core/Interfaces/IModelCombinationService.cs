@@ -3,7 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Interfaces;
 
-// Executes one of the five AI engine configurations over a flow.
 public interface IModelCombinationService
 {
     ModelCombination ActiveCombination { get; }

@@ -3,9 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// The addresses an active rule currently blocks. Windows Firewall drops their traffic, but
-// the capture driver sits below the firewall, so the packets still arrive: this registry is
-// what lets the pipeline report them as dropped instead of analysing them again.
 public sealed class BlockedTrafficState
 {
     private readonly object _lock = new();

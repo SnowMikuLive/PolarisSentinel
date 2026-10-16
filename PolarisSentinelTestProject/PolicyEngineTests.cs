@@ -8,7 +8,6 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Core decision behaviour: a matching policy blocks, anything else monitors.
 [TestClass]
 public class PolicyEngineUnitTest
 {

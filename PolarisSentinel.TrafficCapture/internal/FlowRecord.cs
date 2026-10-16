@@ -1,6 +1,5 @@
 namespace PolarisSentinel.TrafficCapture.Internal;
 
-// Mutable per-flow counters accumulated during capture.
 internal sealed class FlowRecord
 {
     public required DateTime StartTime { get; init; }

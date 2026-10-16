@@ -3,8 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Service;
 
-// Persists classified flows and restores the current day's history on startup,
-// so the dashboard charts and the traffic monitor survive an application restart.
 public class TrafficHistoryService
 {
     private readonly IServiceScopeFactory _scopeFactory;

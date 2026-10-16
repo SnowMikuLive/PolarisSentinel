@@ -4,8 +4,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Holds the labeled test rows loaded from the default dataset or an uploaded CSV,
-    // so the Alerts page can run a model on a real flow without manual input.
+
     public class TestDatasetService
     {
         private readonly object _lock = new();
@@ -24,9 +23,9 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        public bool Load(string fileName, string content, out string? error)
+        public bool Load(string fileName, string content, out string? error, out int skippedRows)
         {
-            if (!CsvFlowParser.TryParse(content, out var rows, out error))
+            if (!CsvFlowParser.TryParse(content, out var rows, out error, out skippedRows))
             {
                 return false;
             }

@@ -106,7 +106,6 @@ namespace PolarisSentienlUnitTestProject
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    // In-memory firewall gateway for tests.
     internal sealed class FakeFirewallGateway : IFirewallGateway
     {
         public bool IsEnabled { get; set; } = true;

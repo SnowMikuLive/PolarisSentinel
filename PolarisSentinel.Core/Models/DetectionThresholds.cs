@@ -2,9 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// Single source of truth for every heuristic detection threshold. A preset is selected
-// by DetectionSensitivity; individual values can still be overridden from configuration
-// (see Resolve) without touching code. Lower numbers mean more sensitive.
 public sealed record DetectionThresholds
 {
     public int MinPacketsForAnalysis { get; init; }

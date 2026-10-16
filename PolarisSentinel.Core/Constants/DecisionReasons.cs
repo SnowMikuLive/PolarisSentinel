@@ -1,9 +1,5 @@
 namespace PolarisSentinel.Core.Constants;
 
-// Stable reason codes for a policy decision, plus human-readable descriptions.
-// Modelled on Portmaster's connection "reason" concept: every verdict carries a
-// machine code (for logic and filtering) and a plain-language explanation (for the UI),
-// so the dashboard can always answer "why was this blocked or allowed?".
 public static class DecisionReasons
 {
     public const string Benign = "benign";

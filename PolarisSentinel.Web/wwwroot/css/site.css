@@ -37,13 +37,10 @@ body {
     opacity:1;
 }
 
-/*Global styles for the application*/
-/*Add border to navbar*/
 .navbar{
     border-bottom:3px solid #2563EB !important;
 }
 
-/*Change card mode*/
 .card{
     border:1px solid #D1E0F0;
     border-radius:12px;
@@ -54,7 +51,6 @@ body {
     box-shadow:0 6px 12px rgba(30,100,235,0.15);
 }
 
-/*Primary button color*/
 .btn-primary {
     background-color: #2563EB;
     border-color: #2563EB;
@@ -64,13 +60,11 @@ body {
     border-color: #1D4ED8;
 }
 
-/*Table header*/
 .table thead th {
     background-color: #EFF6FF;
     color: #1E3A8A;
 }
 
-/*link color*/
 a {
     color: #2563EB;
 }
@@ -78,15 +72,11 @@ a:hover {
     color: #1D4ED8;
 }
 
-/*Responsive data tables: fit the viewport instead of forcing a wide horizontal scroll.
-  Cells shrink and wrap, and long free-text cells are clamped so one column cannot
-  stretch the table past the window. Applies to the alert, rule and policy lists.*/
 .table-responsive > .table {
     width: 100%;
     table-layout: auto;
 }
 
-/*Let cells wrap within their column so the table can compress on narrow screens.*/
 .table-responsive > .table > thead > tr > th,
 .table-responsive > .table > tbody > tr > td {
     white-space: normal;
@@ -94,13 +84,10 @@ a:hover {
     word-break: break-word;
 }
 
-/*Keep short identifier/status columns on one line where it reads better.*/
 .table-responsive > .table .text-nowrap {
     white-space: nowrap;
 }
 
-/*Clamp long free-text (e.g. an alert description) to a couple of lines so it wraps
-  rather than widening the whole table.*/
 .cell-clamp {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -109,7 +96,6 @@ a:hover {
     max-width: 22rem;
 }
 
-/*Tighten padding and type as the viewport narrows so more columns stay visible.*/
 @media (max-width: 1200px) {
     .table-responsive > .table > thead > tr > th,
     .table-responsive > .table > tbody > tr > td {

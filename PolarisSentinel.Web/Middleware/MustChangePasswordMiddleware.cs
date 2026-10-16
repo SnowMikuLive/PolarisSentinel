@@ -3,9 +3,6 @@ using PolarisSentinel.DataAccess.Data;
 
 namespace PolarisSentinel.Web.Middleware;
 
-// Redirects an authenticated user who must change their password to the change-password
-// page before any other page is reachable. Extracted from Program.cs so the composition
-// root stays wiring-only and this security policy is testable in isolation.
 public sealed class MustChangePasswordMiddleware
 {
     private readonly RequestDelegate _next;
@@ -36,6 +33,7 @@ public sealed class MustChangePasswordMiddleware
         string value = path.Value ?? string.Empty;
         return value.StartsWith("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("/Account/Logout", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("/lib", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("/css", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("/js", StringComparison.OrdinalIgnoreCase);

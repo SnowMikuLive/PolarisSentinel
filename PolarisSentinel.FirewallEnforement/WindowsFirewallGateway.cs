@@ -6,8 +6,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Singleton that owns the Windows Firewall COM handle, so COM and the admin check are
-    // done once per process instead of once per processed flow.
+
     public sealed class WindowsFirewallGateway : IFirewallGateway
     {
         private readonly FirewallRuntimeState _state;
@@ -148,8 +147,15 @@ namespace PolarisSentinel.FirewallEnforement
 
             lock (_lock)
             {
-                var firewall = _firewall ?? new WindowsFirewall();
-                firewall.Remove(ruleName);
+                if (_firewall is null)
+                {
+                    _logger.LogWarning(
+                        "Firewall DRY-RUN: {Reason}. Rule {RuleName} was not removed from Windows Firewall.",
+                        _disabledReason ?? "execution is disabled", ruleName);
+                    return;
+                }
+
+                _firewall.Remove(ruleName);
             }
         }
 

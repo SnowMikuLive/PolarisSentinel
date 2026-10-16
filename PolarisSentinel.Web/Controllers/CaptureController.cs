@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PolarisSentinel.Web.Service;
+using PolarisSentinel.Web.Startup;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // API for listing and switching capture devices.
+
     [Authorize]
     [ApiController]
-    [ValidateAntiForgeryToken]
+    [AutoValidateAntiforgeryToken]
     [Route("api/capture")]
     public class CaptureController : ControllerBase
     {
@@ -33,12 +34,18 @@ namespace PolarisSentinel.Web.Controllers
                     ipAddress = d.IpAddress,
                     macAddress = d.MacAddress,
                     isLoopback = d.IsLoopback,
+                    isDefaultRoute = d.IsDefaultRoute,
                     isCurrent = string.Equals(d.DeviceName, current, StringComparison.OrdinalIgnoreCase),
                     isDefault = string.Equals(d.DeviceName, defaultDevice, StringComparison.OrdinalIgnoreCase)
                 })
                 .ToList();
 
-            return Ok(new { current, devices = projection });
+            return Ok(new
+            {
+                current,
+                npcapDetected = PrerequisiteCheck.IsNpcapDetected(),
+                devices = projection
+            });
         }
 
         [HttpPost("select")]

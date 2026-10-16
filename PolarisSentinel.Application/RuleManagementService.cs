@@ -6,9 +6,6 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.Application;
 
-// Application use case for manual firewall-rule management: validates operator input,
-// builds the alert a manual rule is based on, and drives the firewall enforcer.
-// Controllers stay thin and delegate here instead of embedding domain rules.
 public class RuleManagementService
 {
     private readonly IFirewallEnforcer _firewall;

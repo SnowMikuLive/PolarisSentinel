@@ -7,7 +7,6 @@ using Decision = PolarisSentinel.Core.Models.PolicyDecision;
 
 namespace PolarisSentinel.PolicyDecision;
 
-// Matches an alert against the enabled policies and decides what should happen.
 public class PolicyEngine : IPolicyEngine
 {
     private readonly ILogger<PolicyEngine> _logger;
@@ -70,7 +69,29 @@ public class PolicyEngine : IPolicyEngine
             .Where(p => p.IsEnabled && p.Matches(alert))
             .OrderByDescending(p => p.Priority)
             .ThenBy(p => p.CreatedAt)
+            .ThenBy(p => NumericSuffix(p.Id))
             .ThenBy(p => p.Id, StringComparer.Ordinal)
             .FirstOrDefault();
+    }
+
+    private static int NumericSuffix(string? id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return int.MaxValue;
+        }
+
+        int index = id.Length;
+        while (index > 0 && char.IsDigit(id[index - 1]))
+        {
+            index--;
+        }
+
+        if (index == id.Length)
+        {
+            return int.MaxValue;
+        }
+
+        return int.TryParse(id.AsSpan(index), out int value) ? value : int.MaxValue;
     }
 }

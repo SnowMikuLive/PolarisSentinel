@@ -6,8 +6,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Applies firewall rules to Windows Firewall and mirrors them into the rule repository.
-    // All OS access goes through the shared IFirewallGateway.
+
     public class WindowsFirewallEnforcer : IFirewallEnforcer
     {
         private readonly IRuleRepository _rules;
@@ -43,6 +42,17 @@ namespace PolarisSentinel.FirewallEnforement
             return (IsDryRun, DryRunReason);
         }
 
+        private const int MaxActiveAddressRules = 500;
+
+        private static string BuildRuleName(PolicyAction action, FirewallRuleSpec spec)
+        {
+            string target = spec.RemoteAddress ?? spec.LocalPort?.ToString() ?? spec.RemotePort?.ToString() ?? string.Empty;
+
+            return spec.RemoteAddress is not null
+                ? EntityIds.FirewallRule($"{action}_{target}")
+                : EntityIds.FirewallRule($"{action}_{target}_{spec.Protocol}");
+        }
+
         public Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration)
         {
             var alert = decision.Alert;
@@ -57,10 +67,7 @@ namespace PolarisSentinel.FirewallEnforement
                 var now = _timeProvider.GetLocalNow().DateTime;
                 var expiresAt = now.Add(duration);
 
-                string target = spec.RemoteAddress ?? spec.LocalPort?.ToString() ?? spec.RemotePort?.ToString() ?? string.Empty;
-                string ruleName = spec.RemoteAddress is not null
-                    ? EntityIds.FirewallRule($"{decision.Action}_{target}")
-                    : EntityIds.FirewallRule($"{decision.Action}_{target}_{spec.Protocol}");
+                string ruleName = BuildRuleName(decision.Action, spec);
 
                 var existing = _rules.GetByNameAsync(ruleName).GetAwaiter().GetResult();
                 if (existing != null)
@@ -79,6 +86,18 @@ namespace PolarisSentinel.FirewallEnforement
                         SaveToWindows(existing, SpecFrom(existing));
                     }
                     return existing;
+                }
+
+                int activeAddressRules = _rules.GetAllAsync().GetAwaiter().GetResult()
+                    .Count(r => r.Status == RuleStatus.Active && r.BlocksAddress);
+
+                if (activeAddressRules >= MaxActiveAddressRules)
+                {
+                    _logger.LogWarning(
+                        "Refusing to create a firewall rule for {Action}: the active address-block limit ({Limit}) is reached",
+                        decision.Action, MaxActiveAddressRules);
+                    throw new InvalidOperationException(
+                        $"The active address-block limit ({MaxActiveAddressRules}) is reached, so no new firewall rule was created.");
                 }
 
                 var rule = new Rule
@@ -139,6 +158,12 @@ namespace PolarisSentinel.FirewallEnforement
                 rule.Protocol = protocol;
                 rule.ExpiresAt = now.Add(duration);
                 rule.UpdatedAt = now;
+
+                var updatedSpec = SpecFrom(rule);
+                if (updatedSpec is not null)
+                {
+                    rule.Name = BuildRuleName(rule.Action, updatedSpec);
+                }
 
                 _rules.Update(rule);
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
@@ -233,6 +258,7 @@ namespace PolarisSentinel.FirewallEnforement
                 var managedSet = managed.ToHashSet(StringComparer.Ordinal);
                 var rules = _rules.GetAllAsync().GetAwaiter().GetResult();
                 var tracked = rules
+                    .Where(r => r.Status == RuleStatus.Active)
                     .Select(r => r.Name)
                     .Where(n => !string.IsNullOrEmpty(n))
                     .ToHashSet(StringComparer.Ordinal);
@@ -250,7 +276,7 @@ namespace PolarisSentinel.FirewallEnforement
                     {
                         _gateway.Remove(name);
                         changes++;
-                        _logger.LogInformation("Removed orphaned firewall rule {RuleName}", name);
+                        _logger.LogInformation("Removed untracked or inactive firewall rule {RuleName}", name);
                     }
                     catch (Exception ex)
                     {

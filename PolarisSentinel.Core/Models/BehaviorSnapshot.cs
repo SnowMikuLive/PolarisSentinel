@@ -1,7 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// Aggregate window statistics behind a behavioural (Heuristic) verdict, so the alert
-// detail page can show why a source was flagged.
 public static class BehaviorSnapshot
 {
     public static string Create(BehaviorWindowStats stats)
@@ -25,7 +23,6 @@ public static class BehaviorSnapshot
         SnapshotJson.Read(json).ToList();
 }
 
-// The aggregate counters of one source's sliding window at verdict time.
 public sealed record BehaviorWindowStats(
     int TotalPackets,
     int DistinctPorts,

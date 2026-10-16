@@ -5,8 +5,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
-// Executes the five AI engine configurations over the Random Forest and Isolation Forest models.
-// This orchestration is a use case: it depends only on the Core model ports, not on ONNX.
 public class ModelCombinationService : IModelCombinationService
 {
     private readonly IRandomForestModel _randomForest;

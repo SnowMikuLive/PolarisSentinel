@@ -4,7 +4,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Unified record pushed to SignalR and returned by the state API.
+
     public record DetectionRecord(
         string AlertId,
         string SourceIp,
@@ -22,7 +22,6 @@ namespace PolarisSentinel.Web.Service
         string DecisionReason,
         string DecisionText);
 
-    // Singleton runtime counters and the live traffic window for the current day.
     public class DetectionStateService
     {
         public const int MaxLiveRecords = 20000;
@@ -188,8 +187,6 @@ namespace PolarisSentinel.Web.Service
             }
         }
 
-        // activeRules is supplied by the caller (the firewall owns the rule store) so this
-        // service stays free of any firewall dependency.
         public object GetSnapshot(int activeRules)
         {
             var now = DateTime.Now;

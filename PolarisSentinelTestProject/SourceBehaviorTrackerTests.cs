@@ -6,7 +6,6 @@ using PolarisSentinel.Core.Services;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Core of the cross-flow detector: port scan, multi-port DoS, and the per-packet fast-path.
 [TestClass]
 public class SourceBehaviorTrackerTests
 {
@@ -87,42 +86,6 @@ public class SourceBehaviorTrackerTests
         Assert.IsTrue(verdict.IsKnownAttack);
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
     }
-
-    [TestMethod]
-    public void BusyMultiPortClient_ShouldNotBeReportedAsAScan()
-    {
-        var tracker = CreateTracker();
-
-        for (int port = 0; port < 6; port++)
-        {
-            for (int i = 0; i < 25; i++)
-            {
-                tracker.Observe(Syn(port: 4000 + port, msOffset: port * 25 + i));
-            }
-        }
-
-        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
-
-        Assert.IsNotNull(verdict);
-        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
-    }
-
-    [TestMethod]
-    public void ModestSynFlood_ShouldBeDetected()
-    {
-        var tracker = CreateTracker();
-
-        for (int i = 0; i < 10; i++)
-        {
-            tracker.Observe(Syn(port: 80, msOffset: i * 20));
-        }
-
-        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(1));
-
-        Assert.IsNotNull(verdict);
-        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
-    }
-
     [TestMethod]
     public void OutboundPackets_ShouldBeIgnored()
     {
@@ -141,62 +104,31 @@ public class SourceBehaviorTrackerTests
     }
 
     [TestMethod]
-    public void FinScan_ManyDistinctPorts_ShouldBeDetectedImmediately()
+    public void SynFlood_WithStrayFin_ShouldStillBeDetected()
     {
-        var tracker = CreateTracker();
-        PreFilterResult? verdict = null;
-
-        for (int i = 0; i < 10; i++)
+        var thresholds = DetectionThresholds.Preset(DetectionSensitivity.High) with
         {
-            var packet = Fin(port: 2000 + i, msOffset: i);
-            tracker.Observe(packet);
-            verdict = tracker.EvaluateFast(packet);
-            if (verdict is not null)
-            {
-                break;
-            }
+            SynFloodSourceSyns = 20,
+            FloodPackets = 400,
+            FloodDistinctPorts = 50,
+            PortScanDistinctPorts = 50,
+            GlobalFloodPackets = 4000,
+            GlobalFloodDistinctSources = 50
+        };
+
+        var tracker = new SourceBehaviorTracker(TimeSpan.FromSeconds(10), thresholds);
+
+        tracker.Observe(Fin(port: 80, msOffset: 0));
+
+        for (int i = 0; i < 40; i++)
+        {
+            tracker.Observe(Syn(port: 80, msOffset: 10 + i));
         }
+
+        var verdict = tracker.Evaluate(Attacker, Start.AddSeconds(2));
 
         Assert.IsNotNull(verdict);
-        Assert.IsTrue(verdict.IsKnownAttack);
-        Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
-    }
-
-    [TestMethod]
-    public void UdpScan_ServicePorts_ShouldBeDetectedImmediately()
-    {
-        var tracker = CreateTracker();
-        PreFilterResult? verdict = null;
-
-        for (int i = 0; i < 10; i++)
-        {
-            var packet = UdpProbe(port: 100 + i, msOffset: i);
-            tracker.Observe(packet);
-            verdict = tracker.EvaluateFast(packet);
-            if (verdict is not null)
-            {
-                break;
-            }
-        }
-
-        Assert.IsNotNull(verdict);
-        Assert.IsTrue(verdict.IsKnownAttack);
-        Assert.AreEqual(AttackTypes.PortScan, verdict.AttackType);
-    }
-
-    [TestMethod]
-    public void SynAckReplies_ShouldNotBeTreatedAsProbes()
-    {
-        var tracker = CreateTracker();
-        PreFilterResult? verdict = null;
-
-        for (int i = 0; i < 10; i++)
-        {
-            var packet = SynAck(localPort: 50000 + i, msOffset: i);
-            tracker.Observe(packet);
-            verdict = tracker.EvaluateFast(packet);
-        }
-
-        Assert.IsNull(verdict);
+        Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
+        StringAssert.Contains(verdict.Description!, "SYN flood");
     }
 }

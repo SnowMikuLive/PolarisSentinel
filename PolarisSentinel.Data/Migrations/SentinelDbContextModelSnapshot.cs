@@ -323,7 +323,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             IsEnabled = true,
                             Name = "Random Forest PortScan",
                             Priority = 90,
-                            RfThreshold = 0.7f,
+                            RfThreshold = 0.5f,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
                         },
@@ -339,7 +339,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             IsEnabled = true,
                             Name = "Random Forest BruteForce",
                             Priority = 90,
-                            RfThreshold = 0.7f,
+                            RfThreshold = 0.5f,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
                         },
@@ -382,7 +382,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             CreatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             Description = "Surface an unnamed Isolation Forest anomaly for review. Monitor-only: an unnamed anomaly is suspicious, not a confirmed attack.",
                             DetectionSource = "IsolationForest",
-                            IfThreshold = 0.7f,
+                            IfThreshold = 0.5f,
                             IsEnabled = true,
                             Name = "Isolation Forest anomaly",
                             Priority = 90,
@@ -401,7 +401,7 @@ namespace PolarisSentinel.DataAccess.Migrations
                             IsEnabled = true,
                             Name = "Random Forest DoS",
                             Priority = 90,
-                            RfThreshold = 0.7f,
+                            RfThreshold = 0.5f,
                             UpdatedAt = new DateTime(2026, 9, 26, 0, 0, 0, 0, DateTimeKind.Unspecified),
                             UserId = "admin"
                         });

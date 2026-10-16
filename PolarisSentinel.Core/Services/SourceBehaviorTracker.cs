@@ -3,7 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// One observed packet, reduced to what behavioural detection needs.
 public readonly record struct PacketObservation(
     string SourceIp,
     string DestinationIp,
@@ -17,9 +16,6 @@ public readonly record struct PacketObservation(
     bool IsFin = false,
     bool IsAck = false);
 
-// Detects aggregate behaviour across many short flows from one source (port scans,
-// brute-force runs, floods) that a single flow cannot reveal. Also tracks a global
-// packet rate so a spoofed/random-source flood is still caught.
 public sealed class SourceBehaviorTracker
 {
     private readonly TimeSpan _window;
@@ -351,7 +347,6 @@ public sealed class SourceBehaviorTracker
         return null;
     }
 
-    // One probed port or host: how many probes hit it, and when the last one arrived.
     private readonly record struct ScanEntry(int Packets, DateTime LastSeen);
 
     private sealed class ScanWindow
@@ -364,7 +359,7 @@ public sealed class SourceBehaviorTracker
 
     private sealed class SourceWindow
     {
-        private readonly List<(DateTime Timestamp, string DestinationIp, int Port, bool IsSyn, bool IsRst, byte Protocol)> _observations = new();
+        private readonly List<(DateTime Timestamp, string DestinationIp, int Port, bool IsSyn, bool IsRst, bool IsAck, byte Protocol)> _observations = new();
 
         public HashSet<int> DistinctPorts { get; } = new();
         public HashSet<string> DistinctDestinationIps { get; } = new();
@@ -381,7 +376,7 @@ public sealed class SourceBehaviorTracker
         public void Add(PacketObservation packet, TimeSpan window)
         {
             LastSeen = packet.Timestamp;
-            _observations.Add((packet.Timestamp, packet.DestinationIp, packet.DestinationPort, packet.IsSyn, packet.IsRst, packet.Protocol));
+            _observations.Add((packet.Timestamp, packet.DestinationIp, packet.DestinationPort, packet.IsSyn, packet.IsRst, packet.IsAck, packet.Protocol));
             Prune(window);
         }
 
@@ -427,7 +422,7 @@ public sealed class SourceBehaviorTracker
             IcmpCount = 0;
             TotalPackets = _observations.Count;
 
-            foreach (var (_, destinationIp, port, isSyn, _, protocol) in _observations)
+            foreach (var (_, destinationIp, port, isSyn, _, isAck, protocol) in _observations)
             {
                 DistinctPorts.Add(port);
                 DistinctDestinationIps.Add(destinationIp);
@@ -448,7 +443,7 @@ public sealed class SourceBehaviorTracker
                         LastAuthPort = port;
                     }
                 }
-                else
+                else if (isAck)
                 {
                     AckCount++;
                 }

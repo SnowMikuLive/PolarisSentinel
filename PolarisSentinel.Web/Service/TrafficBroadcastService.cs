@@ -10,7 +10,7 @@ using PolarisSentinel.Web.Hubs;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Capture adapter: runs the detection pipeline, pushes SignalR updates and records dashboard counters.
+
     public class TrafficBroadcastService : IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;

@@ -3,9 +3,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// The concrete Windows Firewall rule a policy action maps to, mirroring an Azure Network
-// Security Group rule: an action selects a direction (inbound/outbound) and a match on
-// either a remote address (IP) or a port.
 public class FirewallRuleSpec
 {
     public required int Direction { get; init; }

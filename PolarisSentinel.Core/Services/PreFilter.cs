@@ -3,10 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Core.Services;
 
-// Rule-based pre-filter: detects attack signatures, drops obvious noise, and forwards
-// the rest to the AI engine. Single-flow signatures are reported as Suspicious (not
-// KnownAttack) because the per-flow thresholds are low enough to trip on legitimate
-// traffic; only the cross-flow SourceBehaviorTracker escalates straight to KnownAttack.
 public sealed class PreFilter
 {
     private readonly DetectionThresholds _t;

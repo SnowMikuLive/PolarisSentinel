@@ -5,7 +5,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application.Evaluation;
 
-// Compares the five AI model combinations on a labeled test set.
 public class EvaluationService
 {
     private readonly IModelCombinationService _combinations;

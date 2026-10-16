@@ -4,15 +4,15 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application.Evaluation;
 
-// Parses a labeled CIC-IDS-2017 style CSV into flows for offline evaluation.
 public static class CsvFlowParser
 {
     public const string LabelColumn = "label";
 
-    public static bool TryParse(string content, out IReadOnlyList<LabeledFlow> flows, out string? error)
+    public static bool TryParse(string content, out IReadOnlyList<LabeledFlow> flows, out string? error, out int skippedRows)
     {
         flows = Array.Empty<LabeledFlow>();
         error = null;
+        skippedRows = 0;
 
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(l => l.TrimEnd('\r'))
@@ -39,33 +39,34 @@ public static class CsvFlowParser
         }
         if (missing.Count > 0)
         {
-            error = "Missing required column(s): " + string.Join(", ", missing);
+            string expected =
+                $"Expected the export schema: {FlowSnapshot.FeatureNames.Length} feature columns named "
+                + string.Join(", ", FlowSnapshot.FeatureNames)
+                + $", plus a '{LabelColumn}' column. See ml/artifacts/cic_demo_dataset.csv for the exact header.";
+
+            error = missing.Count >= FlowSnapshot.FeatureNames.Length
+                ? $"The CSV header does not match the expected column names. {expected} Header found instead: {DescribeHeaders(headers)}"
+                : $"Missing required column(s): {string.Join(", ", missing)}. {expected}";
+
             return false;
         }
 
+        int labelColumn = index[LabelColumn];
         var parsed = new List<LabeledFlow>();
+
         for (int row = 1; row < lines.Count; row++)
         {
             var cells = SplitCsv(lines[row]);
-            if (cells.Count < headers.Count)
+
+            if (!TryReadFeatures(cells, index, out float[] features) ||
+                labelColumn >= cells.Count ||
+                string.IsNullOrWhiteSpace(cells[labelColumn]))
             {
-                error = $"Row {row + 1} has {cells.Count} column(s); expected {headers.Count}.";
-                return false;
+                skippedRows++;
+                continue;
             }
 
-            var features = new float[FlowSnapshot.FeatureNames.Length];
-            for (int i = 0; i < FlowSnapshot.FeatureNames.Length; i++)
-            {
-                string raw = cells[index[FlowSnapshot.FeatureNames[i]]];
-                if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) || !float.IsFinite(value))
-                {
-                    error = $"Row {row + 1}: '{raw}' is not a valid number for {FlowSnapshot.FeatureNames[i]}.";
-                    return false;
-                }
-                features[i] = value;
-            }
-
-            string label = cells[index[LabelColumn]].Trim();
+            string label = cells[labelColumn].Trim();
             parsed.Add(new LabeledFlow
             {
                 Flow = new FlowFeatureVector
@@ -83,8 +84,57 @@ public static class CsvFlowParser
             });
         }
 
+        if (parsed.Count == 0)
+        {
+            error = skippedRows > 0
+                ? $"All {skippedRows} data row(s) were unusable. Every one of the 20 feature columns must hold a finite number and the label column must not be empty."
+                : "The CSV contains a header row but no data rows.";
+            return false;
+        }
+
         flows = parsed;
         return true;
+    }
+
+    private static bool TryReadFeatures(List<string> cells, Dictionary<string, int> index, out float[] features)
+    {
+        features = new float[FlowSnapshot.FeatureNames.Length];
+
+        for (int i = 0; i < features.Length; i++)
+        {
+            int column = index[FlowSnapshot.FeatureNames[i]];
+
+            if (column >= cells.Count || !TryReadFloat(cells[column], out float value))
+            {
+                return false;
+            }
+
+            features[i] = value;
+        }
+
+        return true;
+    }
+
+    private static string DescribeHeaders(IReadOnlyList<string> headers)
+    {
+        const int shown = 8;
+
+        string listed = string.Join(", ", headers.Take(shown).Select(h => h.Trim()));
+        return headers.Count > shown
+            ? $"{listed} and {headers.Count - shown} more ({headers.Count} column(s) in total)"
+            : $"{listed} ({headers.Count} column(s) in total)";
+    }
+
+    private static bool TryReadFloat(string raw, out float value)
+    {
+        value = 0f;
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        return float.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && float.IsFinite(value);
     }
 
     private static List<string> SplitCsv(string line)

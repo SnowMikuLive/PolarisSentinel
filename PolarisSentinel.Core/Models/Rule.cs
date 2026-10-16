@@ -2,8 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// A firewall rule managed by Polaris Sentinel, created automatically from a policy
-// decision or by hand. The firewall module owns persistence.
 public class Rule
 {
     public string Id { get; set; } = string.Empty;

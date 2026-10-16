@@ -5,7 +5,7 @@ using PolarisSentinel.FirewallEnforement;
 
 namespace PolarisSentinel.Web.Service
 {
-    // Remove expired rules at startup and at regular intervals.
+
     public class FirewallRuleSweeper : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;

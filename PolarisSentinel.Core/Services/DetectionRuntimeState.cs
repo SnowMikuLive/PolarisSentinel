@@ -2,10 +2,6 @@ using PolarisSentinel.Core.Interfaces;
 
 namespace PolarisSentinel.Core.Services;
 
-// Live, runtime-toggleable heuristic-detection state, mirroring FirewallRuntimeState: seeded
-// from the user's saved choice at startup and changed from the dashboard. A singleton, so the
-// capture layer and the detection pipeline both see a change immediately. Persisted through
-// IUserSettingsStore like the other user settings.
 public sealed class DetectionRuntimeState
 {
     private readonly object _lock = new();

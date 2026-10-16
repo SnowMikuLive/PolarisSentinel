@@ -1,5 +1,5 @@
 namespace PolarisSentinel.Core.Constants;
-// Sequential P-/R-/A- ids, reserved across concurrent application requests.
+
 public static class EntityIds
 {
     public const string PolicyPrefix = "P-";

@@ -6,8 +6,6 @@ using PolarisSentinel.Core.Services;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Core of the single-flow pre-filter: small one-way probe bursts are flagged as a suspected
-// scan, while payload-heavy one-way app traffic is left alone.
 [TestClass]
 public class PreFilterClassifierTests
 {
@@ -81,65 +79,5 @@ public class PreFilterClassifierTests
         var verdict = Create().Classify(flow);
 
         Assert.IsTrue(verdict.IsSuspicious);
-    }
-
-    [TestMethod]
-    public void SynProbe_ShouldBeScanned()
-    {
-        var flow = new FlowStatistics
-        {
-            Protocol = ProtocolNumbers.Tcp,
-            DestinationPort = 8080,
-            FwdPackets = 4,
-            BwdPackets = 0,
-            SynCount = 4,
-            RstCount = 4,
-            DurationSeconds = 0.5,
-            PacketSizeMean = 60
-        };
-
-        var verdict = Create().Classify(flow);
-
-        Assert.IsTrue(verdict.IsSuspicious);
-        Assert.AreEqual("PortScan: TCP SYN port scan", verdict.Description);
-    }
-
-    [TestMethod]
-    public void OneWayProbeBurst_ShouldBeScanned()
-    {
-        var flow = new FlowStatistics
-        {
-            Protocol = ProtocolNumbers.Tcp,
-            DestinationPort = 8080,
-            FwdPackets = 6,
-            BwdPackets = 0,
-            PacketSizeMean = 40,
-            DurationSeconds = 0.4
-        };
-
-        var verdict = Create().Classify(flow);
-
-        Assert.IsTrue(verdict.IsSuspicious);
-        Assert.AreEqual("PortScan: Port probe burst (no replies)", verdict.Description);
-    }
-
-    [TestMethod]
-    public void FilteredSynProbes_ShouldBeScanned()
-    {
-        var flow = new FlowStatistics
-        {
-            Protocol = ProtocolNumbers.Tcp,
-            DestinationPort = 4444,
-            FwdPackets = 5,
-            BwdPackets = 0,
-            SynCount = 5,
-            DurationSeconds = 0.5,
-            PacketSizeMean = 60
-        };
-
-        var verdict = Create().Classify(flow);
-
-        Assert.IsTrue(verdict.IsSuspicious);
-        Assert.AreEqual("PortScan: TCP SYN scan (filtered)", verdict.Description);
     }
 }

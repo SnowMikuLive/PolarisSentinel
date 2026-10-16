@@ -3,7 +3,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Web.Service;
 
-// Holds the current capture device and lets the UI switch it at runtime.
 public class CaptureControlService
 {
     private readonly ITrafficCaptureService _capture;
@@ -46,9 +45,6 @@ public class CaptureControlService
             return null;
         }
 
-        // A saved choice may be stored by device name or by friendly display name, so match
-        // either. This keeps the operator's selection across libpcap device-name drift
-        // (reboots, driver reinstalls, adapter re-enables).
         string? saved = _settings?.Read().CaptureDevice;
         var savedDevice = devices.FirstOrDefault(d => d.Matches(saved));
         if (savedDevice is not null)
@@ -56,13 +52,23 @@ public class CaptureControlService
             return savedDevice.DeviceName;
         }
 
-        // Otherwise choose a real, routable adapter instead of trusting enumeration order,
-        // which can otherwise put loopback or a disconnected virtual NIC first.
-        var fallback = devices.FirstOrDefault(d => !d.IsLoopback && !string.IsNullOrEmpty(d.IpAddress))
+        var fallback = devices.FirstOrDefault(d => !d.IsLoopback && d.IsDefaultRoute)
+            ?? devices.FirstOrDefault(d => !d.IsLoopback && !string.IsNullOrEmpty(d.IpAddress) && !LooksVirtual(d))
+            ?? devices.FirstOrDefault(d => !d.IsLoopback && !string.IsNullOrEmpty(d.IpAddress))
             ?? devices.FirstOrDefault(d => !d.IsLoopback)
             ?? devices[0];
 
         return fallback.DeviceName;
+    }
+
+    private static bool LooksVirtual(NetworkInterfaceInfo device)
+    {
+        string[] markers =
+        {
+            "virtual", "vpn", "wi-fi direct", "loopback", "bluetooth", "hyper-v", "vmware", "tap-", "tunnel", "wan miniport", "pseudo"
+        };
+
+        return markers.Any(m => device.DisplayName.Contains(m, StringComparison.OrdinalIgnoreCase));
     }
 
     public IEnumerable<NetworkInterfaceInfo> GetDevices()
@@ -87,18 +93,12 @@ public class CaptureControlService
 
         lock (_lock)
         {
-            // Fast path: re-selecting the active device is a no-op. This also avoids a
-            // spurious "not found" when an adapter is still capturing but momentarily
-            // missing from enumeration.
+
             if (string.Equals(_currentDevice, deviceName, StringComparison.OrdinalIgnoreCase))
             {
                 return new CaptureSwitchResult(CaptureSwitchStatus.Success, _currentDevice, null);
             }
 
-            // Resolve the requested name to the canonical device the capture layer knows, so
-            // matching is consistent even when the caller passed the friendly display name or
-            // a differently-cased value. When enumeration returned nothing we cannot
-            // pre-validate, so fall through and let Start report the problem.
             var devices = GetDevices().ToList();
             if (devices.Count > 0)
             {
@@ -146,8 +146,6 @@ public class CaptureControlService
                 }
             }
 
-            // The switch failed after Stop(), so capture is down. Report that honestly and
-            // bring the previous device back if we can, so monitoring survives a bad selection.
             _currentDevice = null;
             if (!string.IsNullOrEmpty(previous) && !string.Equals(previous, deviceName, StringComparison.OrdinalIgnoreCase))
             {

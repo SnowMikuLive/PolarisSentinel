@@ -10,34 +10,34 @@ using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Model testing and comparison: run a model combination on a test row and
-    // compare all five combinations on the loaded dataset.
+
     [Authorize]
     public class ChartsController : Controller
     {
         private const int PageSize = 20;
 
-        // Cap the uploaded evaluation CSV so a large body cannot exhaust the process.
-        private const long MaxUploadBytes = 10 * 1024 * 1024;
+        public const long MaxUploadBytes = 10 * 1024 * 1024;
+
+        // Multipart framing (boundaries, part headers, the antiforgery field) is added on top of the
+        // file itself, so the transport limit has to sit slightly above the file limit. Otherwise a
+        // file of exactly 10 MB is refused before the action can explain why.
+        public const long MaxRequestBytes = MaxUploadBytes + 64 * 1024;
 
         private readonly EvaluationService _evaluation;
         private readonly TestDatasetService _dataset;
         private readonly IInferenceEngine _inference;
         private readonly IModelCombinationService _combinations;
-        private readonly IUnitOfWork _uow;
 
         public ChartsController(
             EvaluationService evaluation,
             TestDatasetService dataset,
             IInferenceEngine inference,
-            IModelCombinationService combinations,
-            IUnitOfWork uow)
+            IModelCombinationService combinations)
         {
             _evaluation = evaluation;
             _dataset = dataset;
             _inference = inference;
             _combinations = combinations;
-            _uow = uow;
         }
 
         public IActionResult Index(int page = 1)
@@ -58,7 +58,7 @@ namespace PolarisSentinel.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequestSizeLimit(MaxUploadBytes)]
+        [RequestSizeLimit(MaxRequestBytes)]
         public async Task<IActionResult> Upload(IFormFile? dataset, CancellationToken cancellationToken)
         {
             if (dataset == null || dataset.Length == 0)
@@ -67,7 +67,14 @@ namespace PolarisSentinel.Web.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // The parser needs flow rows, not arbitrary files; keep the surface small.
+            if (dataset.Length > MaxUploadBytes)
+            {
+                TempData["error"] =
+                    $"The file is {dataset.Length / 1048576.0:0.0} MB, above the {MaxUploadBytes / 1048576} MB limit. "
+                    + "Split the dataset into smaller files, or load a representative sample.";
+                return RedirectToAction(nameof(Index));
+            }
+
             if (!string.Equals(Path.GetExtension(dataset.FileName), ".csv", StringComparison.OrdinalIgnoreCase))
             {
                 TempData["error"] = "Only .csv files can be loaded.";
@@ -80,13 +87,14 @@ namespace PolarisSentinel.Web.Controllers
                 content = await reader.ReadToEndAsync(cancellationToken);
             }
 
-            if (!_dataset.Load(dataset.FileName, content, out string? error))
+            if (!_dataset.Load(dataset.FileName, content, out string? error, out int skippedRows))
             {
                 TempData["error"] = error;
             }
             else
             {
-                TempData["success"] = $"Loaded {_dataset.Count} row(s) from {dataset.FileName}.";
+                TempData["success"] = $"Loaded {_dataset.Count} row(s) from {dataset.FileName}."
+                    + (skippedRows > 0 ? $" Skipped {skippedRows} row(s) with missing or invalid values." : string.Empty);
             }
 
             return RedirectToAction(nameof(Index));
@@ -94,7 +102,7 @@ namespace PolarisSentinel.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Test([FromBody] ModelTestRequest? request, CancellationToken cancellationToken)
+        public IActionResult Test([FromBody] ModelTestRequest? request)
         {
             if (request == null || !ModelState.IsValid ||
                 !Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) ||
@@ -111,10 +119,6 @@ namespace PolarisSentinel.Web.Controllers
 
             var flow = row.Flow;
             var alert = _inference.Detect(flow, combination);
-            var threshold = await ResolveThresholdAsync(alert.DetectionSource, cancellationToken);
-
-            bool malicious = alert.AttackType != AttackTypes.Benign;
-            bool wouldAlert = malicious && (threshold is null || alert.ConfidenceScore is { } score && score >= threshold);
 
             return Ok(new
             {
@@ -122,10 +126,11 @@ namespace PolarisSentinel.Web.Controllers
                 attackType = alert.AttackType,
                 confidenceScore = alert.ConfidenceScore,
                 detectionSource = alert.DetectionSource.ToString(),
-                threshold,
-                wouldGenerateAlert = wouldAlert,
                 description = alert.Description,
-                expectedMalicious = row.IsMalicious
+                expectedMalicious = row.IsMalicious,
+                rowId = (request.RowIndex ?? 0) + 1,
+                featureNames = PolarisSentinel.Core.Models.FlowSnapshot.FeatureNames,
+                features = flow.Features
             });
         }
 
@@ -157,22 +162,6 @@ namespace PolarisSentinel.Web.Controllers
             ViewBag.PageSize = PageSize;
             ViewBag.Rows = _dataset.GetPage((page - 1) * PageSize, PageSize);
             ViewBag.ActiveModel = ModelCombinations.DisplayName(_combinations.ActiveCombination);
-        }
-
-        private async Task<float?> ResolveThresholdAsync(DetectionSource source, CancellationToken cancellationToken)
-        {
-            var policies = await _uow.Policies.GetEnabledAsync(cancellationToken);
-            foreach (var policy in policies)
-            {
-                if (policy.DetectionSource is { } configured && configured != source)
-                {
-                    continue;
-                }
-
-                return policy.ThresholdFor(source);
-            }
-
-            return null;
         }
     }
 

@@ -2,7 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// Result of running one flow through the live detection pipeline.
 public class DetectionOutcome
 {
     public required TrafficVerdict Verdict { get; init; }

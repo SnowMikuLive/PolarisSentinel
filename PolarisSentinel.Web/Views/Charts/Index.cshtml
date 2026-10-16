@@ -10,7 +10,6 @@
     int pageSize = ViewBag.PageSize ?? 20;
     int datasetCount = ViewBag.DatasetCount ?? 0;
     string? datasetName = ViewBag.DatasetName;
-    bool isDemo = string.Equals(datasetName, "cic_demo_dataset.csv", StringComparison.OrdinalIgnoreCase);
     int startIndex = (page - 1) * pageSize;
 }
 
@@ -18,18 +17,7 @@
     <h2 class="text-primary">Charts</h2>
     <p class="text-muted">
         Test a model combination on a real flow and compare all five combinations on the loaded dataset.
-        The models are not retrained here; the live pre-filter is not used.
     </p>
-
-    @if (isDemo)
-    {
-        <div class="alert alert-info">
-            Curated CIC demonstration samples selected using the RF/IF results.
-            This demo focuses on DoS and includes PortScan and BruteForce examples. DDoS is excluded.
-            Isolation Forest misses the BruteForce examples.
-            These Benign-versus-attack metrics are for this demo, not an independent performance test.
-        </div>
-    }
 
     @if (TempData["success"] != null)
     {
@@ -41,16 +29,14 @@
     }
 
     <div class="card shadow-sm border-primary mb-3">
-        <div class="card-header bg-primary text-white">
-            @(isDemo ? "Demonstration Dataset" : "Test Dataset")
-        </div>
         <div class="card-body">
             <form asp-action="Upload" method="post" enctype="multipart/form-data" class="row align-items-end">
                 <div class="col-md-8">
                     <label class="form-label">Labeled CSV</label>
                     <input type="file" name="dataset" accept=".csv" class="form-control" />
+                    <div id="fileHint" class="small mt-1"></div>
                     <div class="text-muted small mt-1">
-                        Upload a CIC-IDS-2017 style CSV with the 20 ML feature columns plus a <code>label</code> column.
+                        Upload a CSV with the 20 ML feature columns plus a <code>label</code> column.
                         @if (datasetCount > 0)
                         {
                             <span>Loaded: <strong>@datasetName</strong> (@datasetCount row(s)).</span>
@@ -118,11 +104,8 @@
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
+                                        <th>ID</th>
                                         <th>Label</th>
-                                        <th class="text-end">Duration (ms)</th>
-                                        <th class="text-end">Fwd Pkts</th>
-                                        <th class="text-end">Bwd Pkts</th>
                                         <th class="text-end">Action</th>
                                     </tr>
                                 </thead>
@@ -143,9 +126,6 @@
                                                     <span class="badge bg-success">Benign</span>
                                                 }
                                             </td>
-                                            <td class="text-end">@row.Flow.Features[0].ToString("0.##")</td>
-                                            <td class="text-end">@row.Flow.Features[1].ToString("0.##")</td>
-                                            <td class="text-end">@row.Flow.Features[2].ToString("0.##")</td>
                                             <td class="text-end">
                                                 <button type="button" class="btn btn-sm btn-primary run-row" data-index="@rowIndex">Run</button>
                                             </td>
@@ -157,8 +137,6 @@
 
                         @if (datasetCount > pageSize)
                         {
-                            // Windowed pager: only a bounded set of page links so the tab row can
-                            // never grow past the card width, no matter how many rows are loaded.
                             int totalPages = (datasetCount + pageSize - 1) / pageSize;
                             int window = 2;
                             int firstShown = Math.Max(1, page - window);
@@ -243,17 +221,25 @@
                         <dt class="col-sm-6">Detection Source</dt>
                         <dd class="col-sm-6" id="r-source">-</dd>
 
-                        <dt class="col-sm-6">Alert Threshold</dt>
-                        <dd class="col-sm-6" id="r-threshold">-</dd>
-
-                        <dt class="col-sm-6">Would Generate Alert</dt>
-                        <dd class="col-sm-6" id="r-wouldAlert">-</dd>
-
                         <dt class="col-sm-6">Dataset Label</dt>
                         <dd class="col-sm-6" id="r-expected">-</dd>
                     </dl>
-                    <div class="alert alert-info mt-3 mb-0 small">
-                        Manual testing never modifies Windows Firewall. Only the live detection pipeline enforces rules.
+
+                    <div id="featureBlock" class="d-none mt-3">
+                        <h6 class="text-secondary mb-2">Selected Row - 20 Input Features</h6>
+                        <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 2.5rem;">#</th>
+                                        <th>Feature</th>
+                                        <th class="text-end">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="featureBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="featureNote" class="text-muted small mt-1"></div>
                     </div>
                 </div>
             </div>
@@ -335,7 +321,7 @@
                 Metrics by Model Combination
             </div>
             <div class="card-body">
-                @* Fixed-height wrapper so the chart fills a larger area (maintainAspectRatio is off). *@
+
                 <div style="position: relative; height: 440px;">
                     <canvas id="metricsChart"></canvas>
                 </div>
@@ -357,13 +343,38 @@
 </div>
 
 @functions {
-    // Percentages with two decimals; "N/A" when the denominator was zero.
+
     static string Pct(double? value) => value is null ? "N/A" : (value.Value * 100).ToString("0.00") + "%";
 }
 
 @section Scripts {
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="~/lib/chart.js/chart.umd.min.js" asp-append-version="true"></script>
     <script>
+        if (typeof Chart === 'undefined') {
+            window.Chart = function () { return { data: { datasets: [{ data: [] }, { data: [] }] }, options: {}, update: function () { } }; };
+            window.Chart.register = function () { };
+            window.ChartDataLabels = {};
+        }
+
+        const datasetInput = document.querySelector('input[name="dataset"]');
+        const fileHint = document.getElementById('fileHint');
+        if (datasetInput && fileHint) {
+            const maxBytes = 10 * 1024 * 1024;
+            datasetInput.addEventListener('change', function () {
+                if (!datasetInput.files || datasetInput.files.length === 0) { fileHint.textContent = ''; return; }
+                const file = datasetInput.files[0];
+                if (file.size > maxBytes) {
+                    fileHint.className = 'small mt-1 text-danger';
+                    fileHint.textContent = 'This file is ' + (file.size / 1048576).toFixed(1)
+                        + ' MB, above the 10 MB limit. Choose a smaller sample or split the CSV.';
+                    datasetInput.value = '';
+                    return;
+                }
+                fileHint.className = 'small mt-1 text-success';
+                fileHint.textContent = file.name + ' (' + (file.size / 1048576).toFixed(2) + ' MB) is ready to load.';
+            });
+        }
+
         document.querySelectorAll('.run-row').forEach(function (button) {
             button.addEventListener('click', function () {
                 const body = {
@@ -380,10 +391,7 @@
                     body: JSON.stringify(body)
                 })
                     .then(async r => {
-                        // Read the raw text first. A failed request (antiforgery rejection, server
-                        // error, session expiry) can return an empty or non-JSON body, and calling
-                        // r.json() on that throws "Unexpected end of JSON input". Parsing the text
-                        // defensively turns that into a clear message instead.
+
                         const text = await r.text();
                         let data = null;
                         if (text) {
@@ -411,19 +419,42 @@
             document.getElementById('r-attackType').textContent = data.attackType;
             document.getElementById('r-confidence').textContent = data.confidenceScore == null ? 'N/A' : data.confidenceScore.toFixed(3);
             document.getElementById('r-source').textContent = data.detectionSource;
-            document.getElementById('r-threshold').textContent = data.threshold == null ? 'Not checked' : data.threshold.toFixed(2);
-            document.getElementById('r-wouldAlert').innerHTML = data.wouldGenerateAlert
-                ? '<span class="badge bg-danger">Yes</span>'
-                : '<span class="badge bg-success">No</span>';
             document.getElementById('r-expected').innerHTML = data.expectedMalicious
                 ? '<span class="badge bg-danger">Malicious</span>'
                 : '<span class="badge bg-success">Benign</span>';
+
+            renderFeatures(data);
+        }
+
+        function renderFeatures(data) {
+            const block = document.getElementById('featureBlock');
+            const body = document.getElementById('featureBody');
+            const values = data.features || [];
+            const names = data.featureNames || [];
+
+            if (values.length === 0) {
+                block.classList.add('d-none');
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < values.length; i++) {
+                html += '<tr><td class="text-muted">' + i + '</td>'
+                    + '<td>' + (names[i] || ('feature_' + i)) + '</td>'
+                    + '<td class="text-end font-monospace">' + String(values[i]) + '</td></tr>';
+            }
+
+            body.innerHTML = html;
+            document.getElementById('featureNote').textContent =
+                'Row ID ' + data.rowId + ' \u00b7 ' + values.length + ' values, in the order the model receives them';
+            block.classList.remove('d-none');
         }
 
         function showError(err) {
             const box = document.getElementById('testError');
             box.textContent = err.message;
             box.classList.remove('d-none');
+            document.getElementById('featureBlock').classList.add('d-none');
         }
 
         @if (results.Count > 0)
@@ -435,7 +466,6 @@
             const recall = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.Recall)));
             const f1 = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(results.Select(r => r.Metrics.F1Score)));
 
-            // Shared bar styling so the four metrics read as one group per combination.
             const metricStyle = { borderWidth: 1, borderRadius: 4, maxBarThickness: 46 };
             const pct = function (value) { return (value * 100).toFixed(1) + '%'; };
 
@@ -482,7 +512,7 @@
                             max: 1,
                             grid: { color: 'rgba(0,0,0,0.06)' },
                             ticks: {
-                                // Percentage gridlines: 0%, 10%, 20%, ... 100% instead of only 0 and 1.
+
                                 stepSize: 0.1,
                                 callback: function (value) { return (value * 100).toFixed(0) + '%'; }
                             },

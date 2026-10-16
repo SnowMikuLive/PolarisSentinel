@@ -7,11 +7,9 @@ using PolarisSentinel.Core.Services;
 
 namespace PolarisSentinel.Web.Controllers;
 
-// Dashboard card data and the live AI model switch. Extracted from Program.cs so the
-// composition root stays wiring-only.
 [Authorize]
 [ApiController]
-[ValidateAntiForgeryToken]
+[AutoValidateAntiforgeryToken]
 [Route("api/dashboard")]
 public class DashboardApiController : ControllerBase
 {

@@ -19,20 +19,119 @@ using PolarisSentinel.Application.Evaluation;
 using PolarisSentinel.PolicyDecision;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using PolarisSentinel.DataAccess.Repository;
+using PolarisSentinel.Web.Logging;
+using PolarisSentinel.Web.Startup;
+using PolarisSentinel.Web.Controllers;
 namespace PolarisSentinel
 {
     public class Program
     {
+
+        private static string? ResolveContentRoot()
+        {
+            string baseDirectory = AppContext.BaseDirectory;
+            bool isDeployedLayout =
+                File.Exists(Path.Combine(baseDirectory, "appsettings.json")) &&
+                Directory.Exists(Path.Combine(baseDirectory, "wwwroot"));
+            return isDeployedLayout ? baseDirectory : null;
+        }
+
         public static async Task Main(string[] args)
         {
-            var builder = WebApplication.CreateBuilder(args);
+            StartupSupport.TryAttachToParentConsole();
+            StartupSupport.CanShowDialog = OperatingSystem.IsWindows()
+                && !WindowsServiceHelpers.IsWindowsService()
+                && Environment.UserInteractive
+                && !StartupSupport.HasConsole;
+
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                string report = (e.ExceptionObject as Exception)?.ToString() ?? "Unknown failure.";
+
+                if (StartupSupport.HasConsole)
+                {
+                    Console.Error.WriteLine(report);
+                }
+
+                StartupSupport.ShowError("Polaris Sentinel - fatal error", report);
+            };
+
+            string probeRoot = ResolveContentRoot() ?? Directory.GetCurrentDirectory();
+
+            if (args.Any(a => string.Equals(a, "--check-prerequisites", StringComparison.OrdinalIgnoreCase)))
+            {
+                var report = PrerequisiteCheck.FindMissing(probeRoot);
+
+                Console.Error.WriteLine(report.Count == 0
+                    ? "All prerequisites were detected."
+                    : PrerequisiteCheck.Describe(report));
+
+                Environment.ExitCode = report.Count == 0 ? 0 : 2;
+                return;
+            }
+
+            if (!PrerequisiteCheck.IsSkipped(args))
+            {
+                var missing = PrerequisiteCheck.FindMissing(probeRoot);
+
+                if (missing.Count > 0)
+                {
+                    string report = PrerequisiteCheck.Describe(missing);
+
+                    if (StartupSupport.HasConsole)
+                    {
+                        Console.Error.WriteLine(report);
+                    }
+
+                    StartupSupport.ShowError("Polaris Sentinel - missing prerequisite", report);
+                    Environment.ExitCode = 2;
+                    return;
+                }
+
+                if (!StartupSupport.IsAdministrator())
+                {
+                    string warning =
+                        "Polaris Sentinel is not running with administrator rights." + Environment.NewLine +
+                        Environment.NewLine +
+                        "Packet capture and Windows Firewall rules both need elevation, so this session will " +
+                        "record dry-run decisions only and cannot block anything." + Environment.NewLine +
+                        Environment.NewLine +
+                        "Right-click the application and choose \"Run as administrator\" for full functionality.";
+
+                    if (StartupSupport.HasConsole)
+                    {
+                        Console.Error.WriteLine("WARNING: " + warning);
+                    }
+                    else if (!StartupSupport.AskToContinue(
+                        "Polaris Sentinel",
+                        warning + Environment.NewLine + Environment.NewLine + "Continue anyway?"))
+                    {
+                        Environment.ExitCode = 3;
+                        return;
+                    }
+                }
+            }
+
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = ResolveContentRoot(),
+            });
+
+            builder.Logging.ClearProviders();
+
+            builder.Logging.AddSimpleConsole(options => options.SingleLine = true);
+
+            string logDirectory = builder.Configuration["Logging:File:Directory"] is { Length: > 0 } configuredLogs
+                ? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, configuredLogs))
+                : Path.Combine(builder.Environment.ContentRootPath, "logs");
+
+            builder.Logging.AddProvider(new FileLoggerProvider(
+                logDirectory,
+                builder.Configuration.GetValue<int?>("Logging:File:RetainedFileCount") ?? 7));
 
             builder.Services.AddControllersWithViews();
 
-            // Accept the antiforgery request token from the "RequestVerificationToken" header as
-            // well as a form field. HeaderName defaults to null (form fields only), which makes
-            // JavaScript AJAX POSTs to MVC actions marked [ValidateAntiForgeryToken] fail with an
-            // empty 400 response because a JSON request body carries no form field for the token.
             builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
 
             builder.Services.AddSignalR()
@@ -74,7 +173,8 @@ namespace PolarisSentinel
                     globalFloodDistinctSources: section.GetValue<int?>("GlobalFloodDistinctSources"));
 
                 return new TrafficCaptureService(flowIdleTimeoutSeconds, thresholds, liveSummaryIntervalSeconds,
-                    sp.GetRequiredService<DetectionRuntimeState>());
+                    sp.GetRequiredService<DetectionRuntimeState>(),
+                    sp.GetRequiredService<ILogger<TrafficCaptureService>>());
             });
 
             builder.Services.AddHostedService<FirewallRuleSweeper>();
@@ -102,8 +202,6 @@ namespace PolarisSentinel
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = true;
 
-                // Lock the account after repeated failed sign-ins instead of allowing
-                // unlimited password guessing.
                 options.Lockout.AllowedForNewUsers = true;
                 options.Lockout.MaxFailedAccessAttempts = 5;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
@@ -122,20 +220,20 @@ namespace PolarisSentinel
                 options.AccessDeniedPath = "/Account/AccessDenied";
             });
 
-
             builder.Services.AddSingleton<DetectionStateService>();
-
 
             builder.Services.AddSingleton<CaptureControlService>();
 
             builder.Services.AddSingleton<TestDatasetService>();
 
-            string modelPath = Path.GetFullPath(Path.Combine(
+            string modelPath = PrerequisiteCheck.ResolveArtifactPath(
                 builder.Environment.ContentRootPath,
-                builder.Configuration["Inference:ModelPath"] ?? "../ml/artifacts/rf_model.onnx"));
-            string? anomalyModelPath = builder.Configuration["Inference:AnomalyModelPath"] is { } configured
-                ? Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, configured))
-                : null;
+                builder.Configuration["Inference:ModelPath"],
+                "rf_model.onnx");
+            string? anomalyModelPath = PrerequisiteCheck.ResolveArtifactPath(
+                builder.Environment.ContentRootPath,
+                builder.Configuration["Inference:AnomalyModelPath"],
+                "if_model.onnx");
 
             builder.Services.AddSingleton<IRandomForestModel>(_ => new RandomForestModel(modelPath));
             builder.Services.AddSingleton<IIsolationForestModel?>(sp =>
@@ -201,12 +299,45 @@ namespace PolarisSentinel
 
             var app = builder.Build();
 
+            app.Logger.LogInformation("Random Forest model: {Path}", modelPath);
+
+            if (anomalyModelPath is not null)
+            {
+                app.Logger.LogInformation("Isolation Forest model: {Path}", anomalyModelPath);
+            }
+
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/error");
                 app.UseHsts();
                 app.UseHttpsRedirection();
             }
+
+            // An upload that exceeds the request size limit is refused by the host before the action
+            // runs, so the form's own message never gets a chance to render. Answer with the same
+            // explanation instead of a bare 400/413.
+            app.UseStatusCodePages(async context =>
+            {
+                var response = context.HttpContext.Response;
+                var request = context.HttpContext.Request;
+
+                if (response.StatusCode is not (StatusCodes.Status400BadRequest or StatusCodes.Status413RequestEntityTooLarge) ||
+                    !HttpMethods.IsPost(request.Method) ||
+                    request.ContentType?.StartsWith("multipart/form-data", StringComparison.OrdinalIgnoreCase) != true)
+                {
+                    return;
+                }
+
+                response.ContentType = "text/html; charset=utf-8";
+                await response.WriteAsync(
+                    "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\" /><title>Upload rejected</title></head>"
+                    + "<body style=\"font-family:system-ui,'Segoe UI',sans-serif;margin:3rem;color:#212529\">"
+                    + "<h2 style=\"color:#B02A37\">The uploaded file is too large</h2>"
+                    + $"<p>The Charts page accepts CSV files up to {ChartsController.MaxUploadBytes / 1048576} MB, "
+                    + "and this request was refused before the file could be read.</p>"
+                    + "<p>Split the dataset into smaller files, or load a representative sample.</p>"
+                    + "<p><a href=\"/Charts\">Back to Charts</a></p></body></html>");
+            });
 
             app.UseRouting();
 
@@ -223,23 +354,27 @@ namespace PolarisSentinel
                 name: "default",
                 pattern: "{controller=Dashboard}/{action=Index}/{id?}")
                 .WithStaticAssets();
-            // The dashboard feed carries the full flow 5-tuple, the attack type and the
-            // firewall action, so it must never be readable without a signed-in session.
+
             app.MapHub<TrafficHub>("/trafficHub").RequireAuthorization();
 
             app.MapGet("/error", () => Results.Problem(statusCode: StatusCodes.Status500InternalServerError));
 
             var datasetService = app.Services.GetRequiredService<TestDatasetService>();
-            string defaultDataset = Path.GetFullPath(Path.Combine(
+            string defaultDataset = PrerequisiteCheck.ResolveArtifactPath(
                 app.Environment.ContentRootPath,
-                builder.Configuration["Evaluation:DefaultDatasetPath"] ?? "../ml/artifacts/test_dataset.csv"));
+                builder.Configuration["Evaluation:DefaultDatasetPath"],
+                "test_dataset.csv");
             if (File.Exists(defaultDataset))
             {
                 try
                 {
-                    if (!datasetService.Load(Path.GetFileName(defaultDataset), File.ReadAllText(defaultDataset), out string? loadError))
+                    if (!datasetService.Load(Path.GetFileName(defaultDataset), File.ReadAllText(defaultDataset), out string? loadError, out int skippedRows))
                     {
                         app.Logger.LogWarning("Default test dataset rejected: {Error}", loadError);
+                    }
+                    else if (skippedRows > 0)
+                    {
+                        app.Logger.LogWarning("Default test dataset: skipped {Skipped} row(s) with invalid values", skippedRows);
                     }
                 }
                 catch (Exception ex)
@@ -264,6 +399,13 @@ namespace PolarisSentinel
                 {
                     app.Logger.LogError(ex,
                         "Database initialisation failed; check the connection and migrations.");
+
+                    StartupSupport.ShowError(
+                        "Polaris Sentinel - database error",
+                        "The database could not be initialised." + Environment.NewLine + Environment.NewLine +
+                        ex.Message + Environment.NewLine + Environment.NewLine +
+                        "Check that SQL Server LocalDB is installed, then see the log file next to the executable.");
+
                     throw;
                 }
             }

@@ -2,12 +2,12 @@
     ViewData["Title"] = "Settings";
 }
 <div class="container-fluid">
-    @* Page header *@
+
     <div class="mb-4">
         <h2 class="text-primary mb-0">Settings</h2>
         <small class="text-muted">System configuration and account management</small>
     </div>
-    @* Background Service *@
+
     <div class="card shadow-sm border-primary mb-3">
         <div class="card-body">
             <h6 class="fw-bold text-primary mb-2">Background Service</h6>
@@ -15,7 +15,6 @@
          </div>
     </div>
 
-    @* Account Management *@
     <div class="card shadow-sm border-primary mb-3">
         <div class="card-body">
             <h6 class="fw-bold text-primary mb-3">Account Management</h6>
@@ -37,7 +36,7 @@
 
 @section Scripts{
     <script>
-        // Reuses the existing /api/capture/devices: current!=null means Running, otherwise Stopped.
+
         function renderServiceStatus(isRunning) {
             const state = document.getElementById('serviceState');
             state.className = isRunning ? 'text-success' : 'text-danger';
@@ -59,7 +58,7 @@
         }
 
         refreshServiceStatus();
-        // Poll every 10 seconds.
+
         setInterval(refreshServiceStatus, 10000);
         </script>
 }

@@ -1,6 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// The 20 ML features plus TCP flag counters stored in the alert's snapshot column.
 public static class FlowSnapshot
 {
     public static readonly string[] FeatureNames =

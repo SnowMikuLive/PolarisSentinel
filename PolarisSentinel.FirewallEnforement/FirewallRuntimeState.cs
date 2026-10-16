@@ -2,9 +2,7 @@ using PolarisSentinel.Core.Interfaces;
 
 namespace PolarisSentinel.FirewallEnforement
 {
-    // Live, runtime-toggleable firewall enforcement state. Seeded from FirewallOptions at
-    // startup, then changed from the dashboard. Singleton, so a toggle is seen by every
-    // enforcer instance created afterwards.
+
     public sealed class FirewallRuntimeState
     {
         private readonly object _lock = new();

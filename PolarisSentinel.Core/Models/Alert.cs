@@ -2,8 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// A detection result: what was seen, where, and how it was classified.
-// Policy decisions are not stored here; they live on the Rule the decision produced.
 public class Alert
 {
     public string Id { get; set; } = string.Empty;

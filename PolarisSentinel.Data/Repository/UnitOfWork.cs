@@ -3,9 +3,6 @@ using PolarisSentinel.DataAccess.Data;
 
 namespace PolarisSentinel.DataAccess.Repository;
 
-// Single transaction boundary over SentinelDbContext. All repositories share
-// the same context instance, so SaveChangesAsync commits every staged change
-// atomically.
 public class UnitOfWork : IUnitOfWork
 {
     private readonly SentinelDbContext _context;

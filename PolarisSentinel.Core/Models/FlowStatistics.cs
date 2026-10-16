@@ -1,8 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// Raw per-flow statistics the rule-based pre-filter classifies. This is the domain
-// view of a flow: it carries no capture-library types, so the detection heuristics
-// can live in the domain layer while the capture adapter only produces these numbers.
 public class FlowStatistics
 {
     public byte Protocol { get; init; }

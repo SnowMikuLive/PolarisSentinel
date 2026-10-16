@@ -8,8 +8,7 @@ using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Alerts page: the detections (heuristic, Random Forest, Isolation Forest) that produced an alert.
-    // Only non-benign detections are stored, so every row here is a real alert.
+
     [Authorize]
     public class AlertsController : Controller
     {

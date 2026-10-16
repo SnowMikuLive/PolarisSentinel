@@ -2,9 +2,6 @@ namespace PolarisSentinel.Core.Constants;
 
 using PolarisSentinel.Core.Enums;
 
-// The four attack categories. Sub-type detail lives in the alert's Reason string.
-// Every value here MUST be a member of the AttackType enum: the enum is the
-// single source of truth for what the system can report.
 public static class AttackTypes
 {
     public const string Benign = nameof(AttackType.Benign);

@@ -6,8 +6,6 @@ using PolarisSentinel.Web.Service;
 
 namespace PolarisSentinel.Web.Controllers;
 
-// Detection state API consumed by the dashboard on page load. Extracted from Program.cs
-// so the composition root stays wiring-only.
 [Authorize]
 [ApiController]
 [Route("api/detections")]

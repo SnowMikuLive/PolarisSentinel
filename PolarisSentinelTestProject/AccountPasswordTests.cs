@@ -10,8 +10,7 @@ public class AccountPasswordTests
     [TestMethod]
     public async Task ChangePassword_ReusingCurrentPassword_ShouldReturnFormBeforeAccessingIdentity()
     {
-        // Identity is deliberately unavailable: a rejected request must not change
-        // the password or clear the account's MustChangePassword flag.
+
         var controller = new AccountController(
             null!,
             null!);

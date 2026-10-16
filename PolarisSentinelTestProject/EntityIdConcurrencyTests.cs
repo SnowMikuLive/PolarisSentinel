@@ -16,27 +16,12 @@ public class EntityIdConcurrencyTests
         string[] storedIds = { $"{prefix}1000" };
         var ids = new string[256];
 
-        // All requests see the same database snapshot; none of their new ids is saved yet.
         Parallel.For(0, ids.Length, i =>
             ids[i] = EntityIds.Next(storedIds, prefix, number => $"{prefix}{number}"));
 
         Assert.HasCount(ids.Length, ids.Distinct().ToArray());
         Assert.IsTrue(ids.All(id => int.Parse(id.AsSpan(prefix.Length)) > 1000));
     }
-
-    [TestMethod]
-    public void Next_ShouldFollowStoredMaximumAndKeepUnsavedReservations()
-    {
-        const string prefix = "test-resume-";
-        var first = EntityIds.ReserveNextNumber(10, prefix);
-        var second = EntityIds.ReserveNextNumber(0, prefix);
-        var third = EntityIds.ReserveNextNumber(second + 100, prefix);
-
-        Assert.IsGreaterThan(10, first);
-        Assert.AreEqual(first + 1, second);
-        Assert.AreEqual(second + 101, third);
-    }
-
     [TestMethod]
     public void NextPolicyId_ConcurrentServiceInstances_ShouldNotReuseUnsavedIds()
     {

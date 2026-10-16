@@ -10,7 +10,7 @@ using static PolarisSentinel.Web.Service.SearchFilter;
 
 namespace PolarisSentinel.Web.Controllers
 {
-    // Firewall rule CRUD. Persistence and domain validation are delegated to RuleManagementService.
+
     [Authorize]
     public class RulesController : Controller
     {

@@ -36,8 +36,7 @@ namespace PolarisSentinel.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                // lockoutOnFailure: true so repeated wrong passwords temporarily lock the
-                // account instead of allowing unlimited guessing.
+
                 var result = await _signInManager.PasswordSignInAsync(model.Username!, model.Password!, isPersistent: false, lockoutOnFailure: true);
 
                 if (result.Succeeded)
@@ -56,8 +55,7 @@ namespace PolarisSentinel.Web.Controllers
                 }
                 else
                 {
-                    // Never reveal whether the account, the password or the lockout was the
-                    // reason, and never mutate the account in response to a failed sign-in.
+
                     TempData["error"] = "Invalid username or password.";
                 }
             }

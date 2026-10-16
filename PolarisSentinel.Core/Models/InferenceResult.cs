@@ -1,6 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// Outcome of one AI engine run: the attack category and the score that produced it.
 public class InferenceResult
 {
     public required string AttackType { get; init; }

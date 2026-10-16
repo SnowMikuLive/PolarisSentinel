@@ -2,7 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// One labeled test row: the flow features plus its ground-truth label.
 public class LabeledFlow
 {
     public required FlowFeatureVector Flow { get; init; }

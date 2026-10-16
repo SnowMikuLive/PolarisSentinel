@@ -2,7 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// The action the policy engine decided should be applied to a matching alert.
 public class PolicyDecision
 {
     public string? PolicyId { get; init; }

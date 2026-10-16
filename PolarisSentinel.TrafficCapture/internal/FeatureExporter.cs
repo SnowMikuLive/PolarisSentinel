@@ -75,10 +75,6 @@ internal static class FeatureExporter
         };
     }
 
-    // The training pipeline clamps every feature with np.maximum(value, 0), so mirroring that
-    // keeps the live vector on the same distribution the models were fitted on. It also stops
-    // NaN/Infinity (which an empty stats bucket or a stalled clock can produce) from poisoning
-    // the ONNX output, where a single bad value would otherwise distort every prediction.
     private static float Clamp(double value) =>
         double.IsFinite(value) && value > 0 ? (float)value : 0f;
 }

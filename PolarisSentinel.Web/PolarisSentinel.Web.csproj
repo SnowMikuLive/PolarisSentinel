@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
     <UserSecretsId>58d953c7-dd74-448f-bb98-6b8e2d600097</UserSecretsId>
+    <OutputType>WinExe</OutputType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

@@ -2,7 +2,6 @@ using PolarisSentinel.Core.Enums;
 
 namespace PolarisSentinel.Core.Models;
 
-// A matching rule: when an alert satisfies its conditions, the policy's action is applied.
 public class Policy
 {
     public string Id { get; set; } = string.Empty;

@@ -5,8 +5,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Application;
 
-// Application use case for policy management: validates policy invariants and assigns
-// the next sequential id. Controllers delegate here instead of embedding domain rules.
 public class PolicyManagementService
 {
     private readonly IUnitOfWork _unitOfWork;

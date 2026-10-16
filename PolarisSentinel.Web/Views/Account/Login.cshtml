@@ -1,22 +1,20 @@
 ﻿@model PolarisSentinel.Web.Models.LoginViewModel
 @{
     ViewData["Title"] = "Login";
-    //Use stand alone layout no navigation
+
     Layout = "_LoginLayout";
 }
 
-@*Login card container*@
 <div class="card shadow rounded p-5 border-primary" style="width:420px;">
     <div class="text-center mb-4">
-        @* Polaris Stential Logo *@
+
         <img src="~/images/logofinal.svg" alt="Polaris Sentinel Logo" style="height:36px; width:auto;"/>
-        @*Project Name*@
+
         <h1 class="h4 fw-bold mt-2" style="color:#1E2B3C;">Polaris Sentinel</h1>
-        @*Project tagline*@
+
         <p class="text-muted small">AI-Driven Next-Generation Firewall<br>for Automated Threat Detection and Response</p>
     </div>
 
-    @*Login form fields would go here*@
     <form asp-action="Login" asp-controller="Account" method="post">
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
         <div class="mb-3">
@@ -24,13 +22,13 @@
             <input asp-for="Username" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="Username"/>
             <span asp-validation-for="Username" class="text-danger"></span>
         </div>
-        @*Password field*@
+
         <div class="mb-3">
             <label asp-for="Password" class="form-label fw-semibold small text-secondary">Password</label>
             <input asp-for="Password" class="form-control" style="height:36px; border-color:#E6EAF0;" autocomplete="off" placeholder="••••••••"/>
             <span asp-validation-for="Password" class="text-danger"></span>
         </div>
-        @*Sign in button*@
+
         <button class="btn btn-primary w-100 fw-bold" type="submit" style="height:40px;">Sign In</button>
     </form>
 </div>

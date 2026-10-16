@@ -13,7 +13,6 @@ using PolarisSentinel.PolicyDecision;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Core of the detection pipeline: pre-filter verdict -> AI (when needed) -> policy -> firewall.
 [TestClass]
 public class DetectionPipelineTests
 {
@@ -75,27 +74,45 @@ public class DetectionPipelineTests
     }
 
     [TestMethod]
-    public void ProcessFlow_BlockedSource_ShouldBeReportedAsBlocked()
+    public void ProcessFlow_ExistingInactiveRule_ShouldNotMarkAddressAsBlocked()
     {
         var inference = new CountingInferenceEngine(CreateDetection());
+        var rules = new FakeRuleRepository();
         var blocked = new BlockedTrafficState();
-        blocked.Add("203.0.113.66");
-        var pipeline = CreatePipeline(inference, out _, blocked);
 
-        var outcome = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Normal()), new[] { CreatePolicy() });
+        rules.Add(new Rule
+        {
+            Id = "R-1",
+            Name = EntityIds.FirewallRule($"{PolicyAction.BlockInboundIp}_203.0.113.66"),
+            Action = PolicyAction.BlockInboundIp,
+            Status = RuleStatus.Inactive,
+            SourceIp = "203.0.113.66",
+            DestinationIp = "192.168.1.10",
+            Protocol = ProtocolNumbers.Tcp,
+            CreatedAt = DateTime.UnixEpoch,
+            UpdatedAt = DateTime.UnixEpoch,
+            ExpiresAt = DateTime.Now.AddYears(1)
+        });
 
-        Assert.AreEqual(TrafficVerdict.Blocked, outcome.Verdict);
-        Assert.AreEqual(0, inference.CallCount);
-        Assert.IsNull(outcome.Alert);
+        var pipeline = CreatePipeline(inference, out _, blocked, rules);
+
+        var outcome = pipeline.ProcessFlow(
+            CreateFlow(PreFilterResult.KnownAttack(AttackTypes.DoS, "SYN flood")),
+            new[] { CreatePolicy(DetectionSource.HeuristicBased) });
+
+        Assert.AreEqual(PolicyAction.BlockInboundIp, outcome.Decision!.Action);
+        Assert.IsNotNull(outcome.Rule);
+        Assert.AreEqual(RuleStatus.Inactive, outcome.Rule!.Status);
+        Assert.IsFalse(blocked.IsBlocked("203.0.113.66"));
     }
 
     #region Helper Methods
 
     private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall,
-        BlockedTrafficState? blocked = null)
+        BlockedTrafficState? blocked = null, FakeRuleRepository? rules = null)
     {
         var clock = new FakeTimeProvider();
-        firewall = new WindowsFirewallEnforcer(new FakeRuleRepository(), new FakeFirewallGateway(),
+        firewall = new WindowsFirewallEnforcer(rules ?? new FakeRuleRepository(), new FakeFirewallGateway(),
             new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
 
         var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);

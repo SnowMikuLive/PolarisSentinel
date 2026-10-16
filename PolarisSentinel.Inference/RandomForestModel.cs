@@ -8,7 +8,6 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference;
 
-// Random Forest classifier backed by an ONNX model.
 public class RandomForestModel : IRandomForestModel, IDisposable
 {
     private readonly InferenceSession _session;
@@ -19,8 +18,6 @@ public class RandomForestModel : IRandomForestModel, IDisposable
 
     public IReadOnlyList<string> FeatureNames { get; }
 
-    // Lowered from the exported 0.60 so the classifier accepts its predicted attack more
-    // readily. The exported value is only ever capped downwards, never raised.
     private const double MaxConfidenceThreshold = 0.50;
 
     private double ConfidenceThreshold { get; }
@@ -49,13 +46,13 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         int best = 0;
         for (int i = 1; i < ClassNames.Count; i++)
         {
-            if (probabilities[0, i] > probabilities[0, best])
+            if (probabilities[i] > probabilities[best])
             {
                 best = i;
             }
         }
 
-        float probability = probabilities[0, best];
+        float probability = probabilities[best];
         string label = ClassNames[best];
 
         if (label == AttackTypes.Benign)
@@ -80,9 +77,14 @@ public class RandomForestModel : IRandomForestModel, IDisposable
     public bool ExceedsThreshold(InferenceResult result) =>
         result.AttackType != AttackTypes.Benign && result.ConfidenceScore >= ConfidenceThreshold;
 
-    public float BenignProbability(FlowFeatureVector flow) => Run(flow)[0, _benignIndex];
+    public float BenignProbability(FlowFeatureVector flow) => Run(flow)[_benignIndex];
 
-    private Tensor<float> Run(FlowFeatureVector flow)
+    /// <summary>
+    /// Runs the classifier and returns a managed copy of the probabilities. The ONNX output
+    /// tensor is a view over native memory that is released when the results are disposed, so it
+    /// must be copied before this method returns.
+    /// </summary>
+    private float[] Run(FlowFeatureVector flow)
     {
         if (flow.Features.Length != FeatureNames.Count)
         {
@@ -92,7 +94,7 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         var input = new DenseTensor<float>(flow.Features, new int[] { 1, FeatureNames.Count });
         using var results = _session.Run(
             new NamedOnnxValue[] { NamedOnnxValue.CreateFromTensor(_inputName, input) });
-        return results.First(r => r.Name == "probabilities").AsTensor<float>();
+        return results.First(r => r.Name == "probabilities").AsTensor<float>().ToArray();
     }
 
     private static double ParseDouble(string value) => double.Parse(value, CultureInfo.InvariantCulture);

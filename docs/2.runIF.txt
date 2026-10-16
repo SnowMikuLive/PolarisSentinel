@@ -1,4 +1,4 @@
-cd "c:\Users\chaiz\OneDrive\桌面\PolarisSentinel"
+# 在仓库根目录（含 PolarisSentinel.slnx 的那一层）执行
 ml\.venv\Scripts\Activate.ps1
 
 #做出「未知攻击」表
@@ -14,9 +14,6 @@ python ml\scripts\tune_if.py
 python ml\scripts\export_if_onnx.py
 
 可选：
-
-#开工前可行性试探。用假的重尾随机数，尝试裸 IF、Quantile+IF、Power+IF 能不能转 ONNX、分数是不是 decision_function。
-python ml\scripts\spike_if_onnx.py
 
 #检查前面产物有没有配错，
 #novelty 标签与 RF 四类不重叠		无文件

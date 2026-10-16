@@ -15,7 +15,6 @@
         </form>
     </div>
 
-    @* Uses GET so filter conditions appear in the URL and can be bookmarked/shared *@
     <form asp-action="Index" method="get" class="card shadow-sm border-primary mb-3">
         <div class="card-body">
             <div class="row g-3 align-items-end">
@@ -83,7 +82,7 @@
                                 <td><span class="badge bg-danger">@item.Action</span></td>
                                 <td>@item.BlockDurationMinutes min</td>
                                 <td>
-                                    @* Inline toggle: flip a policy on/off without opening the edit form. *@
+
                                     <form asp-action="Toggle" asp-route-id="@item.Id" method="post" class="d-inline">
                                         <button type="submit"
                                                 class="badge @(item.IsEnabled ? "bg-success" : "bg-secondary") border-0"

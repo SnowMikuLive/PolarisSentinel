@@ -1,7 +1,5 @@
 namespace PolarisSentinel.Core.Models;
 
-// A single classified flow persisted so the dashboard and monitor can show
-// the full day's history after a restart.
 public class TrafficRecord
 {
     public long Id { get; set; }

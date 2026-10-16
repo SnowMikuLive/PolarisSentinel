@@ -7,7 +7,6 @@ using PolarisSentinel.Core.Services;
 
 namespace PolarisSentinel.Application;
 
-// Orchestrates one flow: pre-filter -> AI (when needed) -> policy -> firewall.
 public class DetectionPipeline : IDetectionPipeline
 {
     private readonly IInferenceEngine _inference;
@@ -17,8 +16,6 @@ public class DetectionPipeline : IDetectionPipeline
     private readonly ILogger<DetectionPipeline> _logger;
     private readonly DetectionRuntimeState? _detection;
     private readonly BlockedTrafficState? _blocked;
-
-    private static readonly object _persistLock = new();
 
     public DetectionPipeline(
         IInferenceEngine inference,
@@ -116,9 +113,6 @@ public class DetectionPipeline : IDetectionPipeline
             };
         }
 
-        // Isolation Forest anomalies are surfaced as alerts for review even below the policy
-        // threshold: an unnamed anomaly is suspicious rather than a confirmed attack, but it
-        // must still reach the Alerts list.
         bool isIsolationForestAnomaly = detection.AttackType == AttackTypes.UnknownAnomaly;
 
         if (!isIsolationForestAnomaly && !MeetsAlertThreshold(detection, policies))
@@ -154,61 +148,58 @@ public class DetectionPipeline : IDetectionPipeline
 
         Rule? rule = null;
 
-        lock (_persistLock)
+        if (string.IsNullOrEmpty(alert.Id))
         {
-            if (string.IsNullOrEmpty(alert.Id))
-            {
-                alert.Id = _unitOfWork.Alerts.NextIdAsync().GetAwaiter().GetResult();
-            }
-
-            var decision = _policy.Evaluate(alert, policies);
-
-            _unitOfWork.Alerts.Add(alert);
-            _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
-
-            if (PolicyActions.IsBlocking(decision.Action))
-            {
-                try
-                {
-                    rule = _firewall.Apply(
-                        decision,
-                        decision.PolicyId,
-                        alert.Id,
-                        alert.AttackType,
-                        TimeSpan.FromMinutes(decision.BlockDurationMinutes));
-
-                    _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
-
-                    _logger.LogInformation(
-                        "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
-                        alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
-
-                    if (rule.BlocksAddress)
-                    {
-                        _blocked?.Add(rule.BlockedIp);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex, "Failed to enforce the block for alert {AlertId} ({AttackType} from {SourceIp})",
-                        alert.Id, alert.AttackType, alert.SourceIp);
-                }
-            }
-
-            return new DetectionOutcome
-            {
-                Verdict = malicious ? TrafficVerdict.Malicious : TrafficVerdict.Suspicious,
-                Description = alert.Description ?? decision.Reason,
-                Alert = alert,
-                Decision = decision,
-                Rule = rule,
-                SourceIp = alert.SourceIp,
-                SourcePort = alert.SourcePort,
-                DestinationIp = alert.DestinationIp,
-                DestinationPort = alert.DestinationPort
-            };
+            alert.Id = _unitOfWork.Alerts.NextIdAsync().GetAwaiter().GetResult();
         }
+
+        var decision = _policy.Evaluate(alert, policies);
+
+        _unitOfWork.Alerts.Add(alert);
+        _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
+        if (PolicyActions.IsBlocking(decision.Action))
+        {
+            try
+            {
+                rule = _firewall.Apply(
+                    decision,
+                    decision.PolicyId,
+                    alert.Id,
+                    alert.AttackType,
+                    TimeSpan.FromMinutes(decision.BlockDurationMinutes));
+
+                _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
+
+                _logger.LogInformation(
+                    "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
+                    alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
+
+                if (rule.Status == RuleStatus.Active && rule.BlocksAddress)
+                {
+                    _blocked?.Add(rule.BlockedIp);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex, "Failed to enforce the block for alert {AlertId} ({AttackType} from {SourceIp})",
+                    alert.Id, alert.AttackType, alert.SourceIp);
+            }
+        }
+
+        return new DetectionOutcome
+        {
+            Verdict = malicious ? TrafficVerdict.Malicious : TrafficVerdict.Suspicious,
+            Description = alert.Description ?? decision.Reason,
+            Alert = alert,
+            Decision = decision,
+            Rule = rule,
+            SourceIp = alert.SourceIp,
+            SourcePort = alert.SourcePort,
+            DestinationIp = alert.DestinationIp,
+            DestinationPort = alert.DestinationPort
+        };
     }
 
     private static bool MeetsAlertThreshold(Alert alert, IReadOnlyList<Policy> policies)

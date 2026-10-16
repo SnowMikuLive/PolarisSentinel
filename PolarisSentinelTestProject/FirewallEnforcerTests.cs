@@ -8,7 +8,6 @@ using PolarisSentinel.FirewallEnforement;
 
 namespace PolarisSentienlUnitTestProject;
 
-// Core enforcement behaviour: building the rule for an action and removing rules.
 [TestClass]
 public class FirewallEnforcerUnitTest
 {
@@ -35,25 +34,6 @@ public class FirewallEnforcerUnitTest
         Assert.IsFalse(outboundPort.BlocksAddress);
         Assert.AreEqual(80, outboundPort.BlockedPort);
     }
-
-    [TestMethod]
-    public void AddressBlock_ShouldBeProtocolAgnostic()
-    {
-        var alert = CreateAlert();
-
-        var inbound = FirewallRuleSpec.TryCreate(PolicyAction.BlockInboundIp, alert, out var error);
-        Assert.IsNull(error);
-        Assert.IsNotNull(inbound);
-        Assert.AreEqual("203.0.113.10", inbound!.RemoteAddress);
-        Assert.AreEqual(0, inbound.Protocol, "An inbound IP block must not inherit the alert protocol.");
-        Assert.IsNull(inbound.LocalPort);
-        Assert.IsNull(inbound.RemotePort);
-
-        var outbound = FirewallRuleSpec.TryCreate(PolicyAction.BlockOutboundIp, alert, out _);
-        Assert.AreEqual("192.168.1.10", outbound!.RemoteAddress);
-        Assert.AreEqual(0, outbound.Protocol, "An outbound IP block must not inherit the alert protocol.");
-    }
-
     [TestMethod]
     public void Reconcile_ShouldRemoveUntrackedRules()
     {

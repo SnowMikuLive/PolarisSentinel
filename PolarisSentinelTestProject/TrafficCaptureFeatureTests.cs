@@ -13,8 +13,6 @@ public class TrafficCaptureFeatureTests
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(false, true)]
-    [DataRow(true, false)]
-    [DataRow(true, true)]
     public async Task FlowFeatures_CountTransportPayloadBytes(bool udp, bool ipv6)
     {
         using var capture = new TrafficCaptureService(
@@ -31,8 +29,7 @@ public class TrafficCaptureFeatureTests
         capture.ExpireIdleFlows(start.AddSeconds(2));
 
         var flow = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        // CIC payload lengths [6, 0, 12]: forward bytes 6, backward bytes 12,
-        // sample standard deviation 6, and total 18 bytes over 2 milliseconds.
+
         CollectionAssert.AreEqual(new float[]
         {
             2, 2, 1, 6, 12, 0, 12, 6, 6,

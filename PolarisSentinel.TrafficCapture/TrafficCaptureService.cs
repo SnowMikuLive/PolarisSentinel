@@ -1,13 +1,14 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using PacketDotNet;
 using SharpPcap;
 using SharpPcap.LibPcap;
+using Microsoft.Extensions.Logging;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 using PolarisSentinel.Core.Services;
-
 
 namespace PolarisSentinel.TrafficCapture;
 
@@ -17,10 +18,12 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private readonly PreFilter _preFilter;
     private readonly SourceBehaviorTracker _behavior;
     private readonly DetectionRuntimeState? _detection;
+    private readonly ILogger<TrafficCaptureService>? _logger;
 
     private bool HeuristicEnabled => _detection?.HeuristicEnabled ?? true;
 
     private readonly int _flowIdleTimeoutSeconds;
+    private readonly int _liveSummaryIntervalSeconds;
     private readonly System.Threading.Timer _expiryTimer;
     private readonly System.Threading.Timer _liveSummaryTimer;
     private ICaptureDevice? _device;
@@ -53,12 +56,15 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int flowIdleTimeoutSeconds,
         DetectionThresholds thresholds,
         int liveSummaryIntervalSeconds = 5,
-        DetectionRuntimeState? detection = null)
+        DetectionRuntimeState? detection = null,
+        ILogger<TrafficCaptureService>? logger = null)
     {
         _flowIdleTimeoutSeconds = flowIdleTimeoutSeconds;
+        _liveSummaryIntervalSeconds = liveSummaryIntervalSeconds > 0 ? liveSummaryIntervalSeconds : 5;
         _preFilter = new PreFilter(thresholds);
         _behavior = new SourceBehaviorTracker(BehaviorWindow, thresholds, BehaviorCooldown);
         _detection = detection;
+        _logger = logger;
 
         _expiryTimer = new System.Threading.Timer(_ => SafeExpireIdleFlows(), null, Timeout.Infinite, Timeout.Infinite);
         _liveSummaryTimer = new System.Threading.Timer(_ => SafeEmitLiveSummary(), null, Timeout.Infinite, Timeout.Infinite);
@@ -73,38 +79,54 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     {
         lock (_deviceLock)
         {
-            var fresh = EnumerateDevices();
+            var fresh = EnumerateDevices(_logger);
 
-            // Replace the cache whenever enumeration yields anything, so an unplugged or
-            // disabled adapter stops being offered as a selectable-but-dead entry. Only
-            // fall back to the last known list when a transient failure returns nothing,
-            // which keeps the selector from blanking out mid-capture.
             if (fresh.Count > 0)
             {
                 _cachedDevices = fresh;
             }
 
-            return _cachedDevices.Count > 0 ? new List<NetworkInterfaceInfo>(_cachedDevices) : fresh;
+            var result = _cachedDevices.Count > 0 ? new List<NetworkInterfaceInfo>(_cachedDevices) : fresh;
+            LogDevices(result);
+            return result;
         }
     }
 
-    private static List<NetworkInterfaceInfo> EnumerateDevices()
+    private void LogDevices(List<NetworkInterfaceInfo> devices)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        if (devices.Count == 0)
+        {
+            _logger.LogWarning("No capture devices were reported by the packet capture driver.");
+            return;
+        }
+
+        _logger.LogInformation(
+            "Capture devices: {Devices}",
+            string.Join("; ", devices.Select(d =>
+                $"{d.DisplayName} ip={d.IpAddress ?? "-"} mac={d.MacAddress ?? "-"} loopback={d.IsLoopback} active={d.IsDefaultRoute} [{d.DeviceName}]")));
+    }
+
+    private static List<NetworkInterfaceInfo> EnumerateDevices(ILogger? logger)
     {
         var devices = new List<NetworkInterfaceInfo>();
 
         try
         {
-            foreach (var device in RefreshCaptureDevices())
+            foreach (var device in RefreshCaptureDevices(logger))
             {
-                devices.Add(DescribeDevice(device));
+                devices.Add(DescribeDevice(device, logger));
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Capture device enumeration failed");
         }
 
-        // A deterministic order keeps the selector stable between refreshes and makes the
-        // fallback choice predictable: real, addressed adapters first, loopback last.
         return devices
             .OrderBy(d => d.IsLoopback)
             .ThenBy(d => string.IsNullOrEmpty(d.IpAddress))
@@ -112,7 +134,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             .ToList();
     }
 
-    private static NetworkInterfaceInfo DescribeDevice(ICaptureDevice device)
+    private static NetworkInterfaceInfo DescribeDevice(ICaptureDevice device, ILogger? logger)
     {
         var name = device.Name ?? string.Empty;
         var description = string.IsNullOrWhiteSpace(device.Description) ? name : device.Description;
@@ -126,16 +148,18 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             {
                 ip = SelectPreferredAddress(liveDevice.Addresses.Select(a => a.Addr?.ipAddress));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger?.LogDebug(ex, "Could not read the addresses of {Device}", name);
             }
 
             try
             {
                 mac = liveDevice.MacAddress?.ToString();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger?.LogDebug(ex, "Could not read the MAC address of {Device}", name);
             }
         }
 
@@ -148,13 +172,53 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             DisplayName = description,
             IpAddress = ip,
             IsLoopback = isLoopback,
+            IsDefaultRoute = IsDefaultRouteDevice(ip),
             MacAddress = mac
         };
     }
 
-    // Prefer a routable IPv4 address so the selector shows the address operators recognise.
-    // IPv6 link-local (fe80::), loopback and APIPA (169.254.x.x) addresses are noise and are
-    // only used when nothing better exists.
+    private static bool IsDefaultRouteDevice(string? address)
+    {
+        if (string.IsNullOrEmpty(address))
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (adapter.OperationalStatus != OperationalStatus.Up)
+                {
+                    continue;
+                }
+
+                var properties = adapter.GetIPProperties();
+
+                bool hasGateway = properties.GatewayAddresses.Any(g =>
+                    g.Address is not null &&
+                    g.Address.AddressFamily == AddressFamily.InterNetwork &&
+                    !g.Address.Equals(IPAddress.Any));
+
+                if (!hasGateway)
+                {
+                    continue;
+                }
+
+                if (properties.UnicastAddresses.Any(u =>
+                        string.Equals(u.Address?.ToString(), address, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return false;
+    }
+
     private static string? SelectPreferredAddress(IEnumerable<IPAddress?> addresses)
     {
         var usable = addresses.Where(a => a is not null).Select(a => a!).ToList();
@@ -189,14 +253,15 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    private static IReadOnlyList<ICaptureDevice> RefreshCaptureDevices()
+    private static IReadOnlyList<ICaptureDevice> RefreshCaptureDevices(ILogger? logger = null)
     {
         try
         {
             CaptureDeviceList.Instance.Refresh();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            logger?.LogWarning(ex, "Refreshing the capture device list failed");
         }
 
         return CaptureDeviceList.Instance.ToList();
@@ -208,9 +273,6 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             var devices = RefreshCaptureDevices();
 
-            // Match the device name first, then the friendly description, both ignoring case.
-            // Falling back to the description lets a saved selection survive a device-name
-            // change (e.g. a driver reinstall that reassigns the libpcap GUID).
             var match = devices.FirstOrDefault(d => string.Equals(d.Name, deviceName, StringComparison.OrdinalIgnoreCase))
                 ?? devices.FirstOrDefault(d => string.Equals(d.Description, deviceName, StringComparison.OrdinalIgnoreCase));
 
@@ -249,9 +311,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (_localAddresses.Count == 0)
         {
-            // The live device exposed no addresses, so fall back to the enumerated list.
-            // Prefer the selected device's own address; only widen to every adapter if the
-            // selected device cannot be identified, so inbound detection stays accurate.
+
             var snapshot = SnapshotDevices();
             var selectedIp = snapshot
                 .FirstOrDefault(d => string.Equals(d.DeviceName, device.Name, StringComparison.OrdinalIgnoreCase))
@@ -300,7 +360,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
 
         _expiryTimer.Change(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        _liveSummaryTimer.Change(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        _liveSummaryTimer.Change(
+            TimeSpan.FromSeconds(_liveSummaryIntervalSeconds),
+            TimeSpan.FromSeconds(_liveSummaryIntervalSeconds));
     }
 
     public void Stop()
@@ -355,7 +417,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     internal void ProcessPacket(Packet parsed, DateTime now)
     {
         IPPacket? ipPacket = parsed.Extract<IPPacket>();
-        if (ipPacket is null) return; 
+        if (ipPacket is null) return;
 
         TcpPacket? tcpPacket = parsed.Extract<TcpPacket>();
         UdpPacket? udpPacket = parsed.Extract<UdpPacket>();
@@ -368,16 +430,11 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         int packetSize = ipPacket.TotalLength;
         UpdateFastPathCounters(packetSize, protocol);
 
-        // CIC-IDS-2017 length features use TCP/UDP payload bytes, including zero for
-        // payload-free control packets. Live counters above still use the full IP length.
         Packet? transportPacket = (Packet?)tcpPacket ?? udpPacket;
         int flowPacketSize = transportPacket is null
             ? packetSize
             : transportPacket.PayloadDataSegment?.Length ?? transportPacket.PayloadPacket?.TotalPacketLength ?? 0;
 
-        // Decide the per-packet heuristic verdict first, but hold the emission until the flow
-        // below has been updated: that way the alert carries real features from the flow so far
-        // instead of a meaningless all-zero vector that the AI engine would otherwise classify.
         PreFilterResult? immediateVerdict = null;
         if (HeuristicEnabled)
         {
@@ -518,7 +575,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             lock (flow) { isIdle = now - flow.LastSeenTime > timeout; }
             if (!isIdle) continue;
 
-            if (!_flows.TryRemove(key, out _)) continue; 
+            if (!_flows.TryRemove(key, out _)) continue;
 
             PreFilterResult verdict;
             if (HeuristicEnabled)
@@ -605,8 +662,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (flow is not null)
         {
-            // Export the flow's accumulated statistics so the AI engine and the stored alert
-            // snapshot see the same real 20-feature vector the idle-expiry path produces.
+
             lock (flow)
             {
                 completed = Internal.FeatureExporter.Export(
@@ -620,8 +676,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         else
         {
-            // The flow table is full and this flow is untracked, so fall back to a lightweight
-            // vector from the single triggering packet rather than dropping the alert.
+
             completed = new FlowFeatureVector
             {
                 Features = new float[Internal.FeatureExporter.FeatureNames.Length],
