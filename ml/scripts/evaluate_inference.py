@@ -9,11 +9,9 @@ import onnxruntime as ort
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = ROOT / "artifacts"
 
-
 def rf_alert_mask(probabilities, benign, threshold):
     return ((probabilities.argmax(axis=1) != benign)
             & (probabilities.max(axis=1) >= np.float32(threshold)))
-
 
 def main():
     rf = ort.InferenceSession(str(ARTIFACTS / "rf_model.onnx"))
@@ -106,7 +104,6 @@ def main():
     (ARTIFACTS / "metrics_inference.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     (ARTIFACTS / "inference_cases.json").write_text(json.dumps(cases, indent=2), encoding="utf-8")
     print(json.dumps(metrics["populations"], indent=2))
-
 
 if __name__ == "__main__":
     main()

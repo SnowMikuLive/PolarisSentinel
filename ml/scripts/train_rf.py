@@ -10,7 +10,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "prepared.npz"
 MODEL_PATH = ROOT / "data" / "rf_baseline.joblib"

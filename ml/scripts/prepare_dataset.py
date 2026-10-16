@@ -7,7 +7,6 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = ROOT.parent / "CIC-IDS2017"
 OUT_PATH = ROOT / "data" / "prepared.npz"

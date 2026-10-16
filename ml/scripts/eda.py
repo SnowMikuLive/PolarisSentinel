@@ -1,5 +1,5 @@
-#CIC-IDS2017探索性分析。仅打印，不写文件
-#EDA on raw CIC-IDS2017 CSVs. Prints only,no files written.
+#CIC-IDS2017探索性分析
+#EDA on raw CIC-IDS2017 CSVs.
 import sys
 from pathlib import Path
 import numpy as np

@@ -8,7 +8,6 @@ import pandas as pd
 from prepare_dataset import BASE_FEATURES, FEATURE_NAMES, FILES, LABEL_MAPPING, build_features
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = ROOT.parent / "CIC-IDS2017"
 OUT_PATH = ROOT / "data" / "novelty.npz"

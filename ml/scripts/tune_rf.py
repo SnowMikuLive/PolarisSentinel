@@ -8,7 +8,6 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "prepared.npz"
 METRICS_PATH = ROOT / "artifacts" / "metrics_tuning.json"

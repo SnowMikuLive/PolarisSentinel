@@ -12,7 +12,6 @@ from skl2onnx.common.data_types import FloatTensorType
 from evaluate_inference import rf_alert_mask
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "prepared.npz"
 NOVELTY_PATH = ROOT / "data" / "novelty.npz"
@@ -21,7 +20,6 @@ RF_PATH = ROOT / "artifacts" / "rf_model.onnx"
 SYSTEM_METRICS_PATH = ROOT / "artifacts" / "metrics_if_system.json"
 ONNX_PATH = ROOT / "artifacts" / "if_model.onnx"
 METRICS_PATH = ROOT / "artifacts" / "metrics_if_final.json"
-
 BENIGN = 0
 
 #float32分数可能有偏差，检查异常判定是否一致
@@ -122,8 +120,8 @@ def main():
     novelty_rf = rf_alerts(rf, X_novelty)
 
     rf_fpr = float(benign_rf.mean())
-    # 与 C# 一致：IF 检查 RF 未告警的流，包含低置信度攻击类。
-    # Match C#: IF checks flows RF did not alert on, including low-confidence attacks.
+    #与C#一致：IF检查 RF 未告警的流，包含低置信度攻击类。
+    #Match C#:IF checks flows RF did not alert on, including low-confidence attacks.
     benign_if_alerts = ~benign_rf & (benign_scores < threshold)
     if_extra = float(benign_if_alerts.mean())
     if_catch = ~novelty_rf & (novelty_scores < threshold)

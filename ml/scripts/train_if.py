@@ -12,7 +12,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = ROOT / "data" / "prepared.npz"
 NOVELTY_PATH = ROOT / "data" / "novelty.npz"
