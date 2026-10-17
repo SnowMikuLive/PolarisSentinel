@@ -10,6 +10,8 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class TrafficCaptureFeatureTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(false, true)]
@@ -28,7 +30,7 @@ public class TrafficCaptureFeatureTests
         capture.ProcessPacket(CreatePacket(udp, ipv6, payloadLength: 12, reverse: true), start.AddMilliseconds(2));
         capture.ExpireIdleFlows(start.AddSeconds(2));
 
-        var flow = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var flow = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.CancellationToken);
 
         CollectionAssert.AreEqual(new float[]
         {

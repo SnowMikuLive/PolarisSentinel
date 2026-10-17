@@ -11,6 +11,14 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class FirewallEnforcerUnitTest
 {
+    private static readonly string[] UntrackedRules =
+    [
+        "PolarisSentinel_Block_A-34",
+        "PolarisSentinel_Block_A-35"
+    ];
+
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public void Apply_ShouldBuildRuleForEachAction()
     {
@@ -40,19 +48,18 @@ public class FirewallEnforcerUnitTest
         var (enforcer, repository, gateway) = CreateEnforcer();
         enforcer.Apply(Decision(CreateAlert(), PolicyAction.BlockInboundIp), "P-1", "A-RF-1", AttackTypes.DoS, TimeSpan.FromMinutes(60));
 
-        var tracked = repository.GetAllAsync().GetAwaiter().GetResult().Single().Name;
+        var tracked = repository.GetAllAsync(TestContext.CancellationToken).GetAwaiter().GetResult().Single().Name;
         gateway.ManagedNames =
         [
             tracked,
-            "PolarisSentinel_Block_A-34",
-            "PolarisSentinel_Block_A-35"
+            .. UntrackedRules
         ];
 
         int changes = enforcer.Reconcile();
 
         Assert.AreEqual(2, changes);
         CollectionAssert.AreEquivalent(
-            new[] { "PolarisSentinel_Block_A-34", "PolarisSentinel_Block_A-35" },
+            UntrackedRules,
             gateway.Removed);
     }
 

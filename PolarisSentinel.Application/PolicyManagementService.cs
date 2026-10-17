@@ -14,7 +14,7 @@ public class PolicyManagementService
         _unitOfWork = unitOfWork;
     }
 
-    public IReadOnlyDictionary<string, string> Validate(Policy policy)
+    public static IReadOnlyDictionary<string, string> Validate(Policy policy)
     {
         var errors = new Dictionary<string, string>();
 

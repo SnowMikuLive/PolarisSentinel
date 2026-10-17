@@ -8,13 +8,13 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference;
 
-public class RandomForestModel : IRandomForestModel, IDisposable
+public sealed class RandomForestModel : IRandomForestModel, IDisposable
 {
     private readonly InferenceSession _session;
     private readonly string _inputName;
     private readonly int _benignIndex;
 
-    private IReadOnlyList<string> ClassNames { get; }
+    private string[] ClassNames { get; }
 
     public IReadOnlyList<string> FeatureNames { get; }
 
@@ -36,7 +36,7 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         ClassNames = JsonSerializer.Deserialize<string[]>(metadata["class_names"])!;
         FeatureNames = JsonSerializer.Deserialize<string[]>(metadata["feature_names"])!;
         ConfidenceThreshold = Math.Min(ParseDouble(metadata["rf_confidence_threshold"]), MaxConfidenceThreshold);
-        _benignIndex = Array.IndexOf(ClassNames.ToArray(), AttackTypes.Benign);
+        _benignIndex = Array.IndexOf(ClassNames, AttackTypes.Benign);
     }
 
     public InferenceResult Classify(FlowFeatureVector flow)
@@ -44,7 +44,7 @@ public class RandomForestModel : IRandomForestModel, IDisposable
         var probabilities = Run(flow);
 
         int best = 0;
-        for (int i = 1; i < ClassNames.Count; i++)
+        for (int i = 1; i < ClassNames.Length; i++)
         {
             if (probabilities[i] > probabilities[best])
             {
@@ -99,5 +99,9 @@ public class RandomForestModel : IRandomForestModel, IDisposable
 
     private static double ParseDouble(string value) => double.Parse(value, CultureInfo.InvariantCulture);
 
-    public void Dispose() => _session.Dispose();
+    public void Dispose()
+    {
+        _session.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

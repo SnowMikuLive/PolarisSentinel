@@ -99,21 +99,17 @@ public class CaptureControlService
                 return new CaptureSwitchResult(CaptureSwitchStatus.Success, _currentDevice, null);
             }
 
-            var devices = GetDevices().ToList();
-            if (devices.Count > 0)
+            var devices = ResolveRequestedDevice(deviceName);
+            if (devices is null)
             {
-                var known = devices.FirstOrDefault(d => d.Matches(deviceName));
-                if (known is null)
-                {
-                    return new CaptureSwitchResult(CaptureSwitchStatus.DeviceNotFound, null, $"No capture device named '{deviceName}'.");
-                }
+                return new CaptureSwitchResult(CaptureSwitchStatus.DeviceNotFound, null, $"No capture device named '{deviceName}'.");
+            }
 
-                deviceName = known.DeviceName;
+            deviceName = devices;
 
-                if (string.Equals(_currentDevice, deviceName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return new CaptureSwitchResult(CaptureSwitchStatus.Success, deviceName, null);
-                }
+            if (string.Equals(_currentDevice, deviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return new CaptureSwitchResult(CaptureSwitchStatus.Success, deviceName, null);
             }
 
             string? previous = _currentDevice;
@@ -132,7 +128,10 @@ public class CaptureControlService
                         _settings?.Update(s => s.CaptureDevice = deviceName);
                     }
 
-                    _logger.LogInformation("Capture switched to {Device} (attempt {Attempt})", deviceName, attempt);
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        _logger.LogInformation("Capture switched to {Device} (attempt {Attempt})", deviceName, attempt);
+                    }
                     return new CaptureSwitchResult(CaptureSwitchStatus.Success, deviceName, null);
                 }
                 catch (InvalidOperationException ex)
@@ -153,7 +152,10 @@ public class CaptureControlService
                 {
                     _capture.Start(previous);
                     _currentDevice = previous;
-                    _logger.LogInformation("Restored capture on {Device} after a failed switch", previous);
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        _logger.LogInformation("Restored capture on {Device} after a failed switch", previous);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -167,6 +169,17 @@ public class CaptureControlService
 
             return new CaptureSwitchResult(status, _currentDevice, error);
         }
+    }
+
+    private string? ResolveRequestedDevice(string deviceName)
+    {
+        var devices = GetDevices().ToList();
+        if (devices.Count == 0)
+        {
+            return deviceName;
+        }
+
+        return devices.FirstOrDefault(d => d.Matches(deviceName))?.DeviceName;
     }
 }
 

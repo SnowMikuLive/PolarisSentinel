@@ -115,7 +115,7 @@ public static class CsvFlowParser
         return true;
     }
 
-    private static string DescribeHeaders(IReadOnlyList<string> headers)
+    private static string DescribeHeaders(List<string> headers)
     {
         const int shown = 8;
 

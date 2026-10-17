@@ -23,24 +23,7 @@ public class EvaluationService
 
         foreach (var combination in selected)
         {
-            int tp = 0, tn = 0, fp = 0, fn = 0;
-
-            foreach (var row in rows)
-            {
-                var prediction = _combinations.Run(row.Flow, combination);
-                bool predictedMalicious = prediction.AttackType != AttackTypes.Benign;
-
-                if (row.IsMalicious)
-                {
-                    if (predictedMalicious) tp++;
-                    else fn++;
-                }
-                else
-                {
-                    if (predictedMalicious) fp++;
-                    else tn++;
-                }
-            }
+            var (tp, tn, fp, fn) = CountOutcomes(rows, combination);
 
             results.Add(new ModelEvaluationResult
             {
@@ -56,5 +39,31 @@ public class EvaluationService
         }
 
         return results;
+    }
+
+    private (int TruePositives, int TrueNegatives, int FalsePositives, int FalseNegatives) CountOutcomes(
+        IReadOnlyList<LabeledFlow> rows,
+        ModelCombination combination)
+    {
+        int tp = 0, tn = 0, fp = 0, fn = 0;
+
+        foreach (var row in rows)
+        {
+            var prediction = _combinations.Run(row.Flow, combination);
+            bool predictedMalicious = prediction.AttackType != AttackTypes.Benign;
+
+            if (row.IsMalicious)
+            {
+                if (predictedMalicious) tp++;
+                else fn++;
+            }
+            else
+            {
+                if (predictedMalicious) fp++;
+                else tn++;
+            }
+        }
+
+        return (tp, tn, fp, fn);
     }
 }

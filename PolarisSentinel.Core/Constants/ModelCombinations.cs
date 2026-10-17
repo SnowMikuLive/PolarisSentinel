@@ -4,7 +4,8 @@ using PolarisSentinel.Core.Enums;
 
 public static class ModelCombinations
 {
-    public static readonly ModelCombination[] All = Enum.GetValues<ModelCombination>();
+    public static IReadOnlyList<ModelCombination> All { get; } =
+        Array.AsReadOnly(Enum.GetValues<ModelCombination>());
 
     public static string DisplayName(ModelCombination combination) => combination switch
     {

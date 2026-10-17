@@ -105,10 +105,13 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             return;
         }
 
-        _logger.LogInformation(
-            "Capture devices: {Devices}",
-            string.Join("; ", devices.Select(d =>
-                $"{d.DisplayName} ip={d.IpAddress ?? "-"} mac={d.MacAddress ?? "-"} loopback={d.IsLoopback} active={d.IsDefaultRoute} [{d.DeviceName}]")));
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "Capture devices: {Devices}",
+                string.Join("; ", devices.Select(d =>
+                    $"{d.DisplayName} ip={d.IpAddress ?? "-"} mac={d.MacAddress ?? "-"} loopback={d.IsLoopback} active={d.IsDefaultRoute} [{d.DeviceName}]")));
+        }
     }
 
     private static List<NetworkInterfaceInfo> EnumerateDevices(ILogger? logger)
@@ -150,7 +153,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             }
             catch (Exception ex)
             {
-                logger?.LogDebug(ex, "Could not read the addresses of {Device}", name);
+                if (logger?.IsEnabled(LogLevel.Debug) == true)
+                {
+                    logger.LogDebug(ex, "Could not read the addresses of {Device}", name);
+                }
             }
 
             try
@@ -159,7 +165,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             }
             catch (Exception ex)
             {
-                logger?.LogDebug(ex, "Could not read the MAC address of {Device}", name);
+                if (logger?.IsEnabled(LogLevel.Debug) == true)
+                {
+                    logger.LogDebug(ex, "Could not read the MAC address of {Device}", name);
+                }
             }
         }
 
@@ -212,8 +221,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
 
         return false;
@@ -253,7 +263,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    private static IReadOnlyList<ICaptureDevice> RefreshCaptureDevices(ILogger? logger = null)
+    private static List<ILiveDevice> RefreshCaptureDevices(ILogger? logger = null)
     {
         try
         {
@@ -290,7 +300,16 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
     private void RefreshLocalAddresses(ICaptureDevice device)
     {
         _localAddresses.Clear();
+        TryAddDeviceAddresses(device);
 
+        if (_localAddresses.Count == 0)
+        {
+            AddSnapshotAddresses(device);
+        }
+    }
+
+    private void TryAddDeviceAddresses(ICaptureDevice device)
+    {
         try
         {
             if (device is LibPcapLiveDevice liveDevice)
@@ -305,31 +324,30 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+    }
+
+    private void AddSnapshotAddresses(ICaptureDevice device)
+    {
+        var snapshot = SnapshotDevices();
+        var selectedIp = snapshot
+            .FirstOrDefault(d => string.Equals(d.DeviceName, device.Name, StringComparison.OrdinalIgnoreCase))
+            ?.IpAddress;
+
+        if (!string.IsNullOrEmpty(selectedIp))
+        {
+            _localAddresses.Add(selectedIp);
+            return;
         }
 
-        if (_localAddresses.Count == 0)
+        foreach (var info in snapshot)
         {
-
-            var snapshot = SnapshotDevices();
-            var selectedIp = snapshot
-                .FirstOrDefault(d => string.Equals(d.DeviceName, device.Name, StringComparison.OrdinalIgnoreCase))
-                ?.IpAddress;
-
-            if (!string.IsNullOrEmpty(selectedIp))
+            if (!string.IsNullOrEmpty(info.IpAddress))
             {
-                _localAddresses.Add(selectedIp);
-            }
-            else
-            {
-                foreach (var info in snapshot)
-                {
-                    if (!string.IsNullOrEmpty(info.IpAddress))
-                    {
-                        _localAddresses.Add(info.IpAddress);
-                    }
-                }
+                _localAddresses.Add(info.IpAddress);
             }
         }
     }
@@ -353,8 +371,10 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch
         {
-            try { device.OnPacketArrival -= OnPacketArrival; } catch (Exception) { }
-            try { device.Close(); } catch (Exception) { }
+            try { device.OnPacketArrival -= OnPacketArrival; }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine(ex); }
+            try { device.Close(); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine(ex); }
             _device = null;
             throw;
         }
@@ -376,8 +396,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             {
                 _device.StopCapture();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine(ex);
             }
 
             _device.OnPacketArrival -= OnPacketArrival;
@@ -386,8 +407,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
             {
                 _device.Close();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine(ex);
             }
 
             _device = null;
@@ -402,8 +424,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             ProcessPacket(e);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 
@@ -544,8 +567,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             ExpireIdleFlows(DateTime.Now);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 
@@ -555,8 +579,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             EmitLiveSummary();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 
@@ -641,8 +666,9 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             OnFlowCompleted?.Invoke(this, flow);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

@@ -26,8 +26,9 @@ public class UnitOfWork : IUnitOfWork
         return _context.SaveChangesAsync(cancellationToken);
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return _context.DisposeAsync();
+        await _context.DisposeAsync();
+        GC.SuppressFinalize(this);
     }
 }

@@ -8,7 +8,7 @@ using PolarisSentinel.Core.Models;
 
 namespace PolarisSentinel.Inference;
 
-public class IsolationForestModel : IIsolationForestModel, IDisposable
+public sealed class IsolationForestModel : IIsolationForestModel, IDisposable
 {
     private const float MinConfidence = 0.60f;
     private const float MaxConfidence = 0.99f;
@@ -86,5 +86,9 @@ public class IsolationForestModel : IIsolationForestModel, IDisposable
 
     private static double ParseDouble(string value) => double.Parse(value, CultureInfo.InvariantCulture);
 
-    public void Dispose() => _session.Dispose();
+    public void Dispose()
+    {
+        _session.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

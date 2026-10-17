@@ -121,8 +121,11 @@ namespace PolarisSentinel.FirewallEnforement
                 _rules.Add(rule);
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
                 SaveToWindows(rule, spec);
-                _logger.LogInformation("Firewall applied {RuleName} for {Action}, expires {ExpiresAt}, dry-run {DryRun}",
-                    ruleName, decision.Action, expiresAt, IsDryRun);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation("Firewall applied {RuleName} for {Action}, expires {ExpiresAt}, dry-run {DryRun}",
+                        ruleName, decision.Action, expiresAt, IsDryRun);
+                }
                 return rule;
             }
         }
@@ -171,7 +174,10 @@ namespace PolarisSentinel.FirewallEnforement
                 {
                     SaveToWindows(rule, SpecFrom(rule));
                 }
-                _logger.LogInformation("Firewall updated {RuleName}", rule.Name);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation("Firewall updated {RuleName}", rule.Name);
+                }
                 return rule;
             }
         }
@@ -189,7 +195,10 @@ namespace PolarisSentinel.FirewallEnforement
                 RemoveFromWindows(rule.Name);
                 _rules.Remove(rule);
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                _logger.LogInformation("Firewall removed {RuleName}", rule.Name);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation("Firewall removed {RuleName}", rule.Name);
+                }
                 return true;
             }
         }
@@ -205,7 +214,10 @@ namespace PolarisSentinel.FirewallEnforement
                     _rules.Remove(rule);
                 }
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                _logger.LogInformation("Removed {Count} managed firewall rule(s)", all.Count);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation("Removed {Count} managed firewall rule(s)", all.Count);
+                }
                 return all.Count;
             }
         }
@@ -222,27 +234,39 @@ namespace PolarisSentinel.FirewallEnforement
                 int removed = 0;
                 foreach (var rule in expired)
                 {
-                    try
+                    if (TryExpireRule(rule, now))
                     {
-                        RemoveFromWindows(rule.Name);
+                        removed++;
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to remove expired firewall rule {RuleName}; will retry", rule.Name);
-                        continue;
-                    }
-                    rule.Status = RuleStatus.Expired;
-                    rule.UpdatedAt = now;
-                    _rules.Update(rule);
-                    removed++;
                 }
                 if (removed > 0)
                 {
                     _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                    _logger.LogInformation("Expired {Count} firewall rule(s)", removed);
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        _logger.LogInformation("Expired {Count} firewall rule(s)", removed);
+                    }
                 }
                 return removed;
             }
+        }
+
+        private bool TryExpireRule(Rule rule, DateTime now)
+        {
+            try
+            {
+                RemoveFromWindows(rule.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to remove expired firewall rule {RuleName}; will retry", rule.Name);
+                return false;
+            }
+
+            rule.Status = RuleStatus.Expired;
+            rule.UpdatedAt = now;
+            _rules.Update(rule);
+            return true;
         }
 
         public int Reconcile()
@@ -276,7 +300,10 @@ namespace PolarisSentinel.FirewallEnforement
                     {
                         _gateway.Remove(name);
                         changes++;
-                        _logger.LogInformation("Removed untracked or inactive firewall rule {RuleName}", name);
+                        if (_logger.IsEnabled(LogLevel.Information))
+                        {
+                            _logger.LogInformation("Removed untracked or inactive firewall rule {RuleName}", name);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -305,7 +332,10 @@ namespace PolarisSentinel.FirewallEnforement
                         if (_gateway.Apply(rule.Name, spec, ruleActive: true))
                         {
                             changes++;
-                            _logger.LogInformation("Re-pushed missing firewall rule {RuleName}", rule.Name);
+                            if (_logger.IsEnabled(LogLevel.Information))
+                            {
+                                _logger.LogInformation("Re-pushed missing firewall rule {RuleName}", rule.Name);
+                            }
                         }
                     }
                     catch (Exception ex)

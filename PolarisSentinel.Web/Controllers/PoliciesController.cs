@@ -14,6 +14,8 @@ namespace PolarisSentinel.Web.Controllers
     [Authorize]
     public class PoliciesController : Controller
     {
+        private const string TempDataSuccessKey = "success";
+
         private readonly IUnitOfWork _uow;
         private readonly PolicyManagementService _policies;
 
@@ -68,7 +70,7 @@ namespace PolarisSentinel.Web.Controllers
             _uow.Policies.Update(policy);
             await _uow.SaveChangesAsync(cancellationToken);
 
-            TempData["success"] = $"Policy {policy.Id} {(policy.IsEnabled ? "enabled" : "disabled")}.";
+            TempData[TempDataSuccessKey] = $"Policy {policy.Id} {(policy.IsEnabled ? "enabled" : "disabled")}.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -110,7 +112,7 @@ namespace PolarisSentinel.Web.Controllers
             _uow.Policies.Add(policy);
             await _uow.SaveChangesAsync(cancellationToken);
 
-            TempData["success"] = "Policy created.";
+            TempData[TempDataSuccessKey] = "Policy created.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -162,7 +164,7 @@ namespace PolarisSentinel.Web.Controllers
             _uow.Policies.Update(existing);
             await _uow.SaveChangesAsync(cancellationToken);
 
-            TempData["success"] = "Policy updated.";
+            TempData[TempDataSuccessKey] = "Policy updated.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -174,7 +176,7 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
-            return View(policy);
+            return View(nameof(Delete), policy);
         }
 
         [HttpPost, ActionName("Delete")]
@@ -196,7 +198,7 @@ namespace PolarisSentinel.Web.Controllers
             _uow.Policies.Remove(policy);
             await _uow.SaveChangesAsync(cancellationToken);
 
-            TempData["success"] = "Policy deleted.";
+            TempData[TempDataSuccessKey] = "Policy deleted.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -218,7 +220,7 @@ namespace PolarisSentinel.Web.Controllers
                 await _uow.SaveChangesAsync(cancellationToken);
             }
 
-            TempData["success"] = $"{removed} policy(ies) removed. Seeded policies are kept.";
+            TempData[TempDataSuccessKey] = $"{removed} policy(ies) removed. Seeded policies are kept.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -237,7 +239,7 @@ namespace PolarisSentinel.Web.Controllers
 
         private bool Validate(Policy policy)
         {
-            foreach (var (field, message) in _policies.Validate(policy))
+            foreach (var (field, message) in PolicyManagementService.Validate(policy))
             {
                 ModelState.AddModelError(field, message);
             }

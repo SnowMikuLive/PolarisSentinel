@@ -129,6 +129,6 @@ public class SourceBehaviorTrackerTests
 
         Assert.IsNotNull(verdict);
         Assert.AreEqual(AttackTypes.DoS, verdict.AttackType);
-        StringAssert.Contains(verdict.Description!, "SYN flood");
+        Assert.Contains("SYN flood", verdict.Description!);
     }
 }

@@ -18,10 +18,7 @@ public class PolicyEngine : IPolicyEngine
 
     public Decision Evaluate(Alert alert, IReadOnlyList<Policy> policies)
     {
-        if (alert == null)
-        {
-            throw new ArgumentNullException(nameof(alert));
-        }
+        ArgumentNullException.ThrowIfNull(alert);
 
         if (alert.DetectionSource == DetectionSource.IsolationForest)
         {
@@ -56,9 +53,12 @@ public class PolicyEngine : IPolicyEngine
                 : DecisionReasons.PolicyMonitor);
         }
 
-        _logger.LogDebug(
-            "Policy {PolicyId} blocked {AttackType} from {SourceIp}",
-            match.Id, alert.AttackType, alert.SourceIp);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug(
+                "Policy {PolicyId} blocked {AttackType} from {SourceIp}",
+                match.Id, alert.AttackType, alert.SourceIp);
+        }
 
         return Decision.Block(alert, match, DecisionReasons.PolicyBlock);
     }

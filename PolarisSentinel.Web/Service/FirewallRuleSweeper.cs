@@ -52,6 +52,7 @@ namespace PolarisSentinel.Web.Service
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                return;
             }
         }
     }

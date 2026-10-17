@@ -17,7 +17,7 @@ public class RuleManagementService
         _unitOfWork = unitOfWork;
     }
 
-    public IReadOnlyDictionary<string, string> Validate(Rule rule)
+    public static IReadOnlyDictionary<string, string> Validate(Rule rule)
     {
         var errors = new Dictionary<string, string>();
 
@@ -34,6 +34,14 @@ public class RuleManagementService
             errors[nameof(Rule.DestinationIp)] = "Enter a valid IPv4 address.";
         }
 
+        ValidatePortAction(rule, portAction, errors);
+        ValidatePortRanges(rule, errors);
+
+        return errors;
+    }
+
+    private static void ValidatePortAction(Rule rule, bool portAction, Dictionary<string, string> errors)
+    {
         if (portAction && rule.Protocol == ProtocolNumbers.Icmp)
         {
             errors[nameof(Rule.Action)] = "Port actions are not valid for ICMP; use an IP action instead.";
@@ -43,7 +51,10 @@ public class RuleManagementService
         {
             errors[nameof(Rule.Protocol)] = "Port actions require a specific protocol (TCP or UDP), not Any.";
         }
+    }
 
+    private static void ValidatePortRanges(Rule rule, Dictionary<string, string> errors)
+    {
         if (rule.SourcePort is { } sourcePort && (sourcePort < 0 || sourcePort > 65535))
         {
             errors[nameof(Rule.SourcePort)] = "Port must be between 0 and 65535.";
@@ -53,8 +64,6 @@ public class RuleManagementService
         {
             errors[nameof(Rule.DestinationPort)] = "Port must be between 0 and 65535.";
         }
-
-        return errors;
     }
 
     public Rule Create(Rule rule, string? alertId, string? policyId, int? durationValue, string? durationUnit)

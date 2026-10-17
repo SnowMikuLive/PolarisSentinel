@@ -1,3 +1,4 @@
+using System.Globalization;
 using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Models;
@@ -229,7 +230,7 @@ namespace PolarisSentinel.Web.Service
                 var buckets = _live
                     .GroupBy(e => new DateTime(
                         e.Timestamp.Year, e.Timestamp.Month, e.Timestamp.Day,
-                        e.Timestamp.Hour, e.Timestamp.Minute, 0))
+                        e.Timestamp.Hour, e.Timestamp.Minute, 0, DateTimeKind.Unspecified))
                     .OrderBy(g => g.Key)
                     .Select(g => new
                     {
@@ -259,7 +260,11 @@ namespace PolarisSentinel.Web.Service
                 Source = record.Source,
                 RuleName = record.RuleName,
                 Verdict = record.Verdict,
-                CreatedAt = DateTime.TryParse(record.CreatedAt, out var parsed) ? parsed : DateTime.Now
+                CreatedAt = DateTime.TryParse(
+                    record.CreatedAt,
+                    CultureInfo.CurrentCulture,
+                    DateTimeStyles.None,
+                    out var parsed) ? parsed : DateTime.Now
             };
         }
     }

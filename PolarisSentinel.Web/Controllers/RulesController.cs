@@ -14,6 +14,8 @@ namespace PolarisSentinel.Web.Controllers
     [Authorize]
     public class RulesController : Controller
     {
+        private const string TempDataSuccessKey = "success";
+
         private readonly IFirewallEnforcer _firewall;
         private readonly RuleManagementService _rules;
 
@@ -151,7 +153,7 @@ namespace PolarisSentinel.Web.Controllers
 
             _rules.Create(rule, alertId, policyId, durationValue, durationUnit);
 
-            TempData["success"] = "Rule created.";
+            TempData[TempDataSuccessKey] = "Rule created.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -192,7 +194,7 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
-            TempData["success"] = "Rule updated.";
+            TempData[TempDataSuccessKey] = "Rule updated.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -204,7 +206,7 @@ namespace PolarisSentinel.Web.Controllers
                 return NotFound();
             }
 
-            return View(rule);
+            return View(nameof(Delete), rule);
         }
 
         [HttpPost, ActionName("Delete")]
@@ -212,7 +214,7 @@ namespace PolarisSentinel.Web.Controllers
         public IActionResult DeleteConfirmed(string id)
         {
             _rules.Remove(id);
-            TempData["success"] = "Rule removed.";
+            TempData[TempDataSuccessKey] = "Rule removed.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -221,7 +223,7 @@ namespace PolarisSentinel.Web.Controllers
         public IActionResult RemoveAll()
         {
             int removed = _rules.RemoveAll();
-            TempData["success"] = $"{removed} rule(s) removed.";
+            TempData[TempDataSuccessKey] = $"{removed} rule(s) removed.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -233,7 +235,7 @@ namespace PolarisSentinel.Web.Controllers
 
         private void AddValidationErrors(Rule rule)
         {
-            foreach (var (field, message) in _rules.Validate(rule))
+            foreach (var (field, message) in RuleManagementService.Validate(rule))
             {
                 ModelState.AddModelError(field, message);
             }

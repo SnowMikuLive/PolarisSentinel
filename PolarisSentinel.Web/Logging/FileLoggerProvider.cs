@@ -72,8 +72,9 @@ public sealed class FileLoggerProvider : ILoggerProvider
                     writer.WriteLine(exception);
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine(ex);
             }
         }
     }
@@ -117,8 +118,9 @@ public sealed class FileLoggerProvider : ILoggerProvider
                 file.Delete();
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

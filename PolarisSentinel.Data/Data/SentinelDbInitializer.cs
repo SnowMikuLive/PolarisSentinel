@@ -71,15 +71,21 @@ public sealed class SentinelDbInitializer
             var created = await _userManager.CreateAsync(admin, _options.Password);
             if (!created.Succeeded)
             {
-                _logger.LogCritical(
-                    "Failed to create the initial admin user: {Errors}. Fix the configured " +
-                    "AdminSeed:Password (it must satisfy the Identity password policy) and restart, " +
-                    "otherwise no account can sign in.",
-                    string.Join("; ", created.Errors.Select(e => e.Description)));
+                if (_logger.IsEnabled(LogLevel.Critical))
+                {
+                    _logger.LogCritical(
+                        "Failed to create the initial admin user: {Errors}. Fix the configured " +
+                        "AdminSeed:Password (it must satisfy the Identity password policy) and restart, " +
+                        "otherwise no account can sign in.",
+                        string.Join("; ", created.Errors.Select(e => e.Description)));
+                }
                 return;
             }
 
-            _logger.LogInformation("Initial admin user '{UserName}' created.", _options.UserName);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Initial admin user '{UserName}' created.", _options.UserName);
+            }
         }
 
         if (!string.IsNullOrEmpty(role) && !await _userManager.IsInRoleAsync(admin, role))
@@ -113,7 +119,10 @@ public sealed class SentinelDbInitializer
         });
 
         await _db.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Added default policy {Id}.", id);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Added default policy {Id}.", id);
+        }
     }
 
 }

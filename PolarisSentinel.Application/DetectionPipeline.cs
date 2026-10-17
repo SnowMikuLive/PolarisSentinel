@@ -171,9 +171,12 @@ public class DetectionPipeline : IDetectionPipeline
 
                 _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
 
-                _logger.LogInformation(
-                    "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
-                    alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Block requested for {SourceIp}, {Minutes} minutes (attack {AttackType})",
+                        alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
+                }
 
                 if (rule.Status == RuleStatus.Active && rule.BlocksAddress)
                 {

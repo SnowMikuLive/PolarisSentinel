@@ -11,23 +11,20 @@ public static class AttackTypes
 
     public const string UnknownAnomaly = nameof(AttackType.Unknown_Anomaly);
 
-    public static readonly string[] All = Enum.GetNames<AttackType>();
+    public static IReadOnlyList<string> All { get; } =
+        Array.AsReadOnly(Enum.GetNames<AttackType>());
 
-    public static readonly string[] Selectable =
-        Enum.GetNames<AttackType>().Where(n => n != Benign).ToArray();
+    public static IReadOnlyList<string> Selectable { get; } =
+        Array.AsReadOnly(Enum.GetNames<AttackType>().Where(n => n != Benign).ToArray());
 
     public static bool IsDefined(string? attackType) =>
         !string.IsNullOrEmpty(attackType) && Enum.IsDefined(typeof(AttackType), attackType);
 
-    public static readonly string[] Malicious =
-    {
-        DoS,
-        PortScan,
-        BruteForce
-    };
+    public static IReadOnlyList<string> Malicious { get; } =
+        Array.AsReadOnly(new[] { DoS, PortScan, BruteForce });
 
     public static bool IsMalicious(string? attackType) =>
-        !string.IsNullOrEmpty(attackType) && Array.IndexOf(Malicious, attackType) >= 0;
+        !string.IsNullOrEmpty(attackType) && Malicious.Contains(attackType, StringComparer.Ordinal);
 
     public static bool TryParse(string? attackType, out string result)
     {
@@ -37,13 +34,13 @@ public static class AttackTypes
             return false;
         }
 
-        foreach (string name in All)
+        string? match = All.FirstOrDefault(name =>
+            string.Equals(name, attackType, StringComparison.OrdinalIgnoreCase));
+
+        if (match is not null)
         {
-            if (string.Equals(name, attackType, StringComparison.OrdinalIgnoreCase))
-            {
-                result = name;
-                return true;
-            }
+            result = match;
+            return true;
         }
 
         return false;

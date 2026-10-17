@@ -1,7 +1,8 @@
 @model PolarisSentinel.Core.Models.Policy
 @{
     ViewData["Title"] = "Create Policy";
-    var detectionSources = ViewBag.DetectionSources as Microsoft.AspNetCore.Mvc.Rendering.SelectList;
+    var detectionSources = ViewBag.DetectionSources as Microsoft.AspNetCore.Mvc.Rendering.SelectList
+        ?? new Microsoft.AspNetCore.Mvc.Rendering.SelectList(Enumerable.Empty<string>());
     var attackTypes = ViewBag.AttackTypes as Microsoft.AspNetCore.Mvc.Rendering.SelectList
         ?? new Microsoft.AspNetCore.Mvc.Rendering.SelectList(Enumerable.Empty<string>());
     var actions = ViewBag.Actions as Microsoft.AspNetCore.Mvc.Rendering.SelectList;

@@ -33,11 +33,11 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             ? parsed
             : DetectionSource.None;
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder builder)
     {
-        base.OnModelCreating(modelBuilder);
+        base.OnModelCreating(builder);
 
-        modelBuilder.Entity<Policy>(e =>
+        builder.Entity<Policy>(e =>
         {
             e.ToTable("Policies");
             e.HasKey(x => x.Id);
@@ -50,7 +50,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Action).HasConversion<string>().HasMaxLength(32);
         });
 
-        modelBuilder.Entity<Alert>(e =>
+        builder.Entity<Alert>(e =>
         {
             e.ToTable("Alerts");
             e.HasKey(x => x.Id);
@@ -64,7 +64,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(x => x.SourceIp);
         });
 
-        modelBuilder.Entity<Rule>(e =>
+        builder.Entity<Rule>(e =>
         {
             e.ToTable("Rules");
             e.HasKey(x => x.Id);
@@ -84,7 +84,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<TrafficRecord>(e =>
+        builder.Entity<TrafficRecord>(e =>
         {
             e.ToTable("TrafficRecords");
             e.HasKey(x => x.Id);
@@ -100,7 +100,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(x => x.CreatedAt);
         });
 
-        modelBuilder.Entity<UserSettings>(e =>
+        builder.Entity<UserSettings>(e =>
         {
             e.ToTable("UserSettings");
             e.HasKey(x => x.Id);
@@ -108,17 +108,19 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.CaptureDevice).HasMaxLength(256);
         });
 
-        modelBuilder.Entity<Policy>().HasData(DefaultPolicies);
+        builder.Entity<Policy>().HasData(DefaultPolicies);
     }
 
     private static readonly DateTime SeedTimestamp = new DateTime(2026, 9, 26, 0, 0, 0, DateTimeKind.Unspecified);
+
+    private const string SeedUserId = "admin";
 
     private static readonly Policy[] DefaultPolicies =
     {
         new()
         {
             Id = "P-1",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Heuristic DoS",
             Description = "Block the source of any rule-based DoS detection.",
             DetectionSource = DetectionSource.HeuristicBased,
@@ -135,7 +137,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-2",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Random Forest PortScan",
             Description = "Block the scanning source of a Random Forest port scan detection (reconnaissance: short block).",
             DetectionSource = DetectionSource.RandomForest,
@@ -152,7 +154,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-3",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Random Forest BruteForce",
             Description = "Block the source of a Random Forest brute force detection (credential attack: long block).",
             DetectionSource = DetectionSource.RandomForest,
@@ -169,7 +171,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-4",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Heuristic PortScan",
             Description = "Block the scanning source of any rule-based port scan detection (reconnaissance: short block).",
             DetectionSource = DetectionSource.HeuristicBased,
@@ -186,7 +188,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-5",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Heuristic BruteForce",
             Description = "Block the source of any rule-based brute force detection (credential attack: long block).",
             DetectionSource = DetectionSource.HeuristicBased,
@@ -204,7 +206,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-6",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Isolation Forest anomaly",
             Description = "Surface an unnamed Isolation Forest anomaly for review. Monitor-only: an unnamed anomaly is suspicious, not a confirmed attack.",
             DetectionSource = DetectionSource.IsolationForest,
@@ -221,7 +223,7 @@ public class SentinelDbContext : IdentityDbContext<ApplicationUser>
         new()
         {
             Id = "P-7",
-            UserId = "admin",
+            UserId = SeedUserId,
             Name = "Random Forest DoS",
             Description = "Block the source of a Random Forest DoS detection (availability attack).",
             DetectionSource = DetectionSource.RandomForest,

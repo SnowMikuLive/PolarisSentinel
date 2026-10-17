@@ -11,7 +11,7 @@ using PolarisSentinel.Web.Hubs;
 namespace PolarisSentinel.Web.Service
 {
 
-    public class TrafficBroadcastService : IHostedService, IDisposable
+    public sealed class TrafficBroadcastService : IHostedService, IDisposable
     {
         private readonly IHubContext<TrafficHub> _hubContext;
         private readonly ITrafficCaptureService _trafficCaptureService;
@@ -52,7 +52,7 @@ namespace PolarisSentinel.Web.Service
             _trafficCaptureService.OnLiveTrafficSummary += OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
 
-            _ = Task.Run(PumpBroadcastsAsync);
+            _ = Task.Run(PumpBroadcastsAsync, CancellationToken.None);
 
             try
             {
@@ -134,6 +134,7 @@ namespace PolarisSentinel.Web.Service
 
         public void Dispose()
         {
+            GC.SuppressFinalize(this);
         }
     }
 }

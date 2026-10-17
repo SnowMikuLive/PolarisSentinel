@@ -7,6 +7,8 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class EntityIdConcurrencyTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     [DataRow(EntityIds.AlertPrefix)]
     [DataRow(EntityIds.RulePrefix)]
@@ -32,7 +34,7 @@ public class EntityIdConcurrencyTests
         Parallel.For(0, ids.Length, i =>
         {
             var service = new PolicyManagementService(unitOfWork);
-            ids[i] = service.NextPolicyIdAsync().GetAwaiter().GetResult();
+            ids[i] = service.NextPolicyIdAsync(TestContext.CancellationToken).GetAwaiter().GetResult();
         });
 
         Assert.HasCount(ids.Length, ids.Distinct().ToArray());

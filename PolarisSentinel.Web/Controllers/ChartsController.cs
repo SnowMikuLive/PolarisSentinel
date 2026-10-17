@@ -15,6 +15,7 @@ namespace PolarisSentinel.Web.Controllers
     public class ChartsController : Controller
     {
         private const int PageSize = 20;
+        private const string TempDataErrorKey = "error";
 
         public const long MaxUploadBytes = 10 * 1024 * 1024;
 
@@ -63,13 +64,13 @@ namespace PolarisSentinel.Web.Controllers
         {
             if (dataset == null || dataset.Length == 0)
             {
-                TempData["error"] = "Select a CSV file to load.";
+                TempData[TempDataErrorKey] = "Select a CSV file to load.";
                 return RedirectToAction(nameof(Index));
             }
 
             if (dataset.Length > MaxUploadBytes)
             {
-                TempData["error"] =
+                TempData[TempDataErrorKey] =
                     $"The file is {dataset.Length / 1048576.0:0.0} MB, above the {MaxUploadBytes / 1048576} MB limit. "
                     + "Split the dataset into smaller files, or load a representative sample.";
                 return RedirectToAction(nameof(Index));
@@ -77,7 +78,7 @@ namespace PolarisSentinel.Web.Controllers
 
             if (!string.Equals(Path.GetExtension(dataset.FileName), ".csv", StringComparison.OrdinalIgnoreCase))
             {
-                TempData["error"] = "Only .csv files can be loaded.";
+                TempData[TempDataErrorKey] = "Only .csv files can be loaded.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -89,7 +90,7 @@ namespace PolarisSentinel.Web.Controllers
 
             if (!_dataset.Load(dataset.FileName, content, out string? error, out int skippedRows))
             {
-                TempData["error"] = error;
+                TempData[TempDataErrorKey] = error;
             }
             else
             {
@@ -140,7 +141,7 @@ namespace PolarisSentinel.Web.Controllers
         {
             if (_dataset.Count == 0)
             {
-                TempData["error"] = "No dataset loaded. Upload a CSV file to evaluate.";
+                TempData[TempDataErrorKey] = "No dataset loaded. Upload a CSV file to evaluate.";
                 return RedirectToAction(nameof(Index));
             }
 

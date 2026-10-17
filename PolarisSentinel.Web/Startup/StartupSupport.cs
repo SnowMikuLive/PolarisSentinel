@@ -3,7 +3,7 @@ using System.Security.Principal;
 
 namespace PolarisSentinel.Web.Startup;
 
-internal static class StartupSupport
+internal static partial class StartupSupport
 {
     private const int AttachParentProcess = -1;
 
@@ -69,8 +69,9 @@ internal static class StartupSupport
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Error);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 
@@ -89,8 +90,9 @@ internal static class StartupSupport
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Information);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 
@@ -115,10 +117,10 @@ internal static class StartupSupport
         }
     }
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AttachConsole(int processId);
+    private static partial bool AttachConsole(int processId);
 
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetConsoleWindow();
+    [LibraryImport("kernel32.dll")]
+    private static partial IntPtr GetConsoleWindow();
 }

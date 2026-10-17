@@ -109,7 +109,7 @@ namespace PolarisSentinel.FirewallEnforement
 
                 string? ip = string.IsNullOrWhiteSpace(spec.RemoteAddress)
                     ? "*"
-                    : NormalizeIp(spec.RemoteAddress!);
+                    : NormalizeIp(spec.RemoteAddress);
                 if (ip == null)
                 {
                     _logger.LogWarning("Cannot apply rule {RuleName}: invalid address {Address}", ruleName, spec.RemoteAddress);
@@ -127,13 +127,16 @@ namespace PolarisSentinel.FirewallEnforement
                     Direction = spec.Direction
                 });
 
-                _logger.LogInformation(
-                    "Windows Firewall rule written: {RuleName} direction={Direction} protocol={Protocol} localPorts={LocalPorts} remotePorts={RemotePorts} remoteAddresses={RemoteAddresses}",
-                    ruleName, spec.Direction,
-                    spec.Protocol == 0 ? "Any" : spec.Protocol.ToString(),
-                    spec.LocalPort?.ToString() ?? "Any",
-                    spec.RemotePort?.ToString() ?? "Any",
-                    ip);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Windows Firewall rule written: {RuleName} direction={Direction} protocol={Protocol} localPorts={LocalPorts} remotePorts={RemotePorts} remoteAddresses={RemoteAddresses}",
+                        ruleName, spec.Direction,
+                        spec.Protocol == 0 ? "Any" : spec.Protocol.ToString(),
+                        spec.LocalPort?.ToString() ?? "Any",
+                        spec.RemotePort?.ToString() ?? "Any",
+                        ip);
+                }
                 return true;
             }
         }

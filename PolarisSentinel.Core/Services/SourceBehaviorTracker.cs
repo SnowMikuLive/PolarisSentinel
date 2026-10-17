@@ -315,23 +315,19 @@ public sealed class SourceBehaviorTracker
                 $"Packet flood: {window.TotalPackets} packets from one source", Build());
         }
 
-        if (window.DistinctDestinationIps.Count >= _hostSweepDistinctIps &&
-            window.DistinctPorts.Count <= 2 &&
-            window.TotalPackets <= window.DistinctDestinationIps.Count * 2)
+        if (IsHostSweep(window))
         {
             return PreFilterResult.KnownAttack(AttackTypes.PortScan,
                 $"Host sweep: {window.DistinctDestinationIps.Count} hosts probed from one source", Build());
         }
 
-        if (window.DistinctPorts.Count >= _portScanDistinctPorts &&
-            window.TotalPackets <= window.DistinctPorts.Count * _portScanMaxPacketsPerPort)
+        if (IsPortScan(window))
         {
             return PreFilterResult.KnownAttack(AttackTypes.PortScan,
                 $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", Build());
         }
 
-        if (window.AuthConnections >= _bruteForceConnections &&
-            window.TotalPackets <= window.AuthConnections * _bruteForceMaxPacketsPerAttempt)
+        if (IsBruteForce(window))
         {
             string service = window.LastAuthPort == 22 ? "SSH" : "FTP";
             return PreFilterResult.KnownAttack(AttackTypes.BruteForce,
@@ -346,6 +342,19 @@ public sealed class SourceBehaviorTracker
 
         return null;
     }
+
+    private bool IsHostSweep(SourceWindow window) =>
+        window.DistinctDestinationIps.Count >= _hostSweepDistinctIps &&
+        window.DistinctPorts.Count <= 2 &&
+        window.TotalPackets <= window.DistinctDestinationIps.Count * 2;
+
+    private bool IsPortScan(SourceWindow window) =>
+        window.DistinctPorts.Count >= _portScanDistinctPorts &&
+        window.TotalPackets <= window.DistinctPorts.Count * _portScanMaxPacketsPerPort;
+
+    private bool IsBruteForce(SourceWindow window) =>
+        window.AuthConnections >= _bruteForceConnections &&
+        window.TotalPackets <= window.AuthConnections * _bruteForceMaxPacketsPerAttempt;
 
     private readonly record struct ScanEntry(int Packets, DateTime LastSeen);
 

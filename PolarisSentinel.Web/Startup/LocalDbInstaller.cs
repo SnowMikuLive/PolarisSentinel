@@ -88,7 +88,7 @@ internal static class LocalDbInstaller
                 return false;
             }
 
-            EnsureDefaultInstance(log);
+            EnsureDefaultInstance();
 
             bool installed = PrerequisiteCheck.IsLocalDbInstalled();
             log(installed
@@ -119,7 +119,7 @@ internal static class LocalDbInstaller
     /// LocalDB normally creates MSSQLLocalDB on first use; creating and starting it explicitly removes
     /// any doubt and costs nothing when it already exists.
     /// </summary>
-    private static void EnsureDefaultInstance(Action<string> log)
+    private static void EnsureDefaultInstance()
     {
         string? sqlLocalDb = PrerequisiteCheck.FindSqlLocalDbExecutable();
         if (sqlLocalDb is null)

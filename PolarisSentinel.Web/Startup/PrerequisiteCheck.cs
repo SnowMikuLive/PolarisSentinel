@@ -220,8 +220,9 @@ internal static class PrerequisiteCheck
                         return candidate;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine(ex);
                 }
             }
         }
@@ -234,8 +235,9 @@ internal static class PrerequisiteCheck
                 return Directory.EnumerateFiles(root, "SqlLocalDB.exe", SearchOption.AllDirectories).FirstOrDefault();
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
 
         return null;

@@ -35,11 +35,6 @@ namespace PolarisSentinel
                 Directory.Exists(Path.Combine(baseDirectory, "wwwroot"));
             return isDeployedLayout ? baseDirectory : null;
         }
-
-        /// <summary>
-        /// Start-up messages are produced before the host (and its file logger) exists, so they go to
-        /// the parent console when there is one; otherwise the message boxes carry the information.
-        /// </summary>
         private static void WriteStartupLog(string message)
         {
             if (StartupSupport.HasConsole)

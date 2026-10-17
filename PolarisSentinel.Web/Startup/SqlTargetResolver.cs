@@ -39,7 +39,8 @@ internal static class SqlTargetResolver
         }
 
         // 3. LocalDB is unavailable: fall back to a full instance if one is installed.
-        string? instance = PrerequisiteCheck.DetectSqlServerInstances().FirstOrDefault();
+        IReadOnlyList<string> instances = PrerequisiteCheck.DetectSqlServerInstances();
+        string? instance = instances.Count > 0 ? instances[0] : null;
         if (instance is not null)
         {
             return $"Server={instance};Database={DatabaseName(configured)};" +

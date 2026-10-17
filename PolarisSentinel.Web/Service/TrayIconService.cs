@@ -7,13 +7,12 @@ using Microsoft.Extensions.Hosting;
 
 namespace PolarisSentinel.Web.Service;
 
-public class TrayIconService : IHostedService, IDisposable
+public sealed class TrayIconService : IHostedService, IDisposable
 {
     private readonly IConfiguration _config;
     private readonly IServer _server;
     private readonly ILogger<TrayIconService> _logger;
     private readonly IHostApplicationLifetime _lifetime;
-    private Thread? _uiThread;
     private System.Windows.Forms.ApplicationContext? _context;
     private NotifyIcon? _icon;
     private DateTime _lastOpenAt = DateTime.MinValue;
@@ -32,13 +31,13 @@ public class TrayIconService : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _uiThread = new Thread(RunMessageLoop)
+        var thread = new Thread(RunMessageLoop)
         {
             IsBackground = true,
             Name = "TrayIcon"
         };
-        _uiThread.SetApartmentState(ApartmentState.STA);
-        _uiThread.Start();
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
 
         return Task.CompletedTask;
     }
@@ -70,7 +69,10 @@ public class TrayIconService : IHostedService, IDisposable
             };
 
             string dashboardUrl = ResolveDashboardUrl();
-            _logger.LogInformation("Polaris Sentinel is running. Dashboard: {Url}", dashboardUrl);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Polaris Sentinel is running. Dashboard: {Url}", dashboardUrl);
+            }
 
             _icon.ShowBalloonTip(
                 15000,
@@ -97,7 +99,10 @@ public class TrayIconService : IHostedService, IDisposable
         _lastOpenAt = DateTime.UtcNow;
 
         var url = ResolveDashboardUrl();
-        _logger.LogInformation("Opening dashboard at {Url}", url);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Opening dashboard at {Url}", url);
+        }
         try
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
@@ -138,5 +143,6 @@ public class TrayIconService : IHostedService, IDisposable
     public void Dispose()
     {
         _icon?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

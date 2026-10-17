@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
 
@@ -15,7 +16,7 @@ public class TrafficHistoryService
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
     private const int MaxPending = 5000;
 
-    private DateTime _lastFlush = DateTime.Now;
+    private long _lastFlushTimestamp = Stopwatch.GetTimestamp();
 
     public TrafficHistoryService(
         IServiceScopeFactory scopeFactory,
@@ -37,7 +38,10 @@ public class TrafficHistoryService
             var records = await repository.GetSinceAsync(DateTime.Today);
             _state.Restore(records);
 
-            _logger.LogInformation("Restored {Count} traffic record(s) from today", records.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Restored {Count} traffic record(s) from today", records.Count);
+            }
         }
         catch (Exception ex)
         {
@@ -59,7 +63,7 @@ public class TrafficHistoryService
         lock (_lock)
         {
             _pending.Add(record);
-            shouldFlush = _pending.Count >= MaxPending || DateTime.Now - _lastFlush >= FlushInterval;
+            shouldFlush = _pending.Count >= MaxPending || Stopwatch.GetElapsedTime(_lastFlushTimestamp) >= FlushInterval;
         }
 
         if (shouldFlush)
@@ -80,7 +84,7 @@ public class TrafficHistoryService
 
             batch = new List<TrafficRecord>(_pending);
             _pending.Clear();
-            _lastFlush = DateTime.Now;
+            _lastFlushTimestamp = Stopwatch.GetTimestamp();
         }
 
         try

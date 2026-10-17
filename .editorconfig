@@ -1,0 +1,4 @@
+root = true
+
+[**/*.g.cs]
+dotnet_diagnostic.CS0169.severity = none
