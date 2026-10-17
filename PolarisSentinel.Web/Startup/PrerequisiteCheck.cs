@@ -4,7 +4,7 @@ internal static class PrerequisiteCheck
 {
     private const string NpcapDownload = "https://npcap.com/#download";
 
-    private const string LocalDbDownload =
+    internal const string LocalDbDownload =
         "https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SqlLocalDB.msi";
 
     private static readonly string[] LocalDbToolsFolders =
@@ -27,7 +27,7 @@ internal static class PrerequisiteCheck
         return Environment.CommandLine.Contains("dotnet-ef", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static IReadOnlyList<string> FindMissing(string contentRoot)
+    public static IReadOnlyList<string> FindMissing(string contentRoot, string? connectionString = null)
     {
         var missing = new List<string>();
 
@@ -38,12 +38,31 @@ internal static class PrerequisiteCheck
                 $"     Download and install it as administrator: {NpcapDownload}");
         }
 
-        if (!IsLocalDbInstalled())
+        if (RequiresLocalDb(connectionString) && !IsLocalDbInstalled())
         {
-            missing.Add(
-                "SQL Server LocalDB was not found.\r\n" +
-                $"     Download: {LocalDbDownload}\r\n" +
-                "     Install:  msiexec /i SqlLocalDB.msi /qn IACCEPTSQLLOCALDBLICENSETERMS=YES");
+            var message = new System.Text.StringBuilder();
+            message.AppendLine("SQL Server LocalDB (SqlLocalDB.exe) was not found.");
+            message.AppendLine("     LocalDB is a separate product from SQL Server itself:");
+            message.AppendLine("     installing SQL Server Express/Developer/Standard does NOT install LocalDB.");
+            message.AppendLine($"     Download: {LocalDbDownload}");
+            message.AppendLine("     Install:  msiexec /i SqlLocalDB.msi /qn IACCEPTSQLLOCALDBLICENSETERMS=YES");
+            message.AppendLine("     Or let this application do it: PolarisSentinel.Web.exe --install-localdb");
+
+            IReadOnlyList<string> instances = DetectSqlServerInstances();
+            if (instances.Count > 0)
+            {
+                message.AppendLine($"     Detected full SQL Server instance(s): {string.Join(", ", instances)}");
+                message.AppendLine("     Either install LocalDB, or point ConnectionStrings:DefaultConnection at an instance, e.g.");
+                message.Append(
+                    $"     Server={instances[0]};Database=PolarisSentinel;Trusted_Connection=True;" +
+                    "TrustServerCertificate=True;MultipleActiveResultSets=True");
+            }
+            else
+            {
+                message.Append("     No local SQL Server instance (Express/Developer/Standard) was detected either.");
+            }
+
+            missing.Add(message.ToString());
         }
 
         if (!File.Exists(ResolveArtifactPath(contentRoot, null, "rf_model.onnx")))
@@ -102,6 +121,64 @@ internal static class PrerequisiteCheck
         return text.ToString();
     }
 
+    /// <summary>
+    /// LocalDB is only a prerequisite when the application is actually configured to use it.
+    /// A deployment pointed at a full SQL Server instance (for example "Server=.\SQLEXPRESS")
+    /// does not need SqlLocalDB.exe.
+    /// </summary>
+    internal static bool RequiresLocalDb(string? connectionString)
+    {
+        // With no explicit connection string the shipped default (appsettings.json) targets LocalDB.
+        return string.IsNullOrWhiteSpace(connectionString)
+            || connectionString.Contains("(localdb)", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Finds the full SQL Server instances (Express/Developer/Standard/Enterprise) installed on this
+    /// machine, reported as the names a connection string would use (".\SQLEXPRESS" or "." for a
+    /// default instance). LocalDB is a different product and never registers here, so an empty result
+    /// means "no full instance", not "no SQL Server at all".
+    /// </summary>
+    internal static IReadOnlyList<string> DetectSqlServerInstances()
+    {
+        var instances = new List<string>();
+
+        foreach (Environment.SpecialFolder folder in new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 })
+        {
+            try
+            {
+                string root = Path.Combine(Environment.GetFolderPath(folder), "Microsoft SQL Server");
+                if (!Directory.Exists(root))
+                {
+                    continue;
+                }
+
+                // A full instance is laid out as "<root>\<id>.<instance>" (for example MSSQL17.SQLEXPRESS).
+                foreach (string directory in Directory.EnumerateDirectories(root, "MSSQL*"))
+                {
+                    string folderName = Path.GetFileName(directory);
+                    int separator = folderName.IndexOf('.');
+
+                    if (separator < 0 || separator == folderName.Length - 1)
+                    {
+                        continue;
+                    }
+
+                    string instance = folderName[(separator + 1)..];
+                    instances.Add(string.Equals(instance, "MSSQLSERVER", StringComparison.OrdinalIgnoreCase)
+                        ? "."
+                        : $@".\{instance}");
+                }
+            }
+            catch (Exception)
+            {
+                // Best effort only: this feeds a diagnostic message, never a decision.
+            }
+        }
+
+        return instances.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     internal static bool IsNpcapDetected()
     {
         string system32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
@@ -114,15 +191,19 @@ internal static class PrerequisiteCheck
             || File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Npcap", "NPFInstall.exe"));
     }
 
-    private static bool IsLocalDbInstalled()
+    internal static bool IsLocalDbInstalled() => FindSqlLocalDbExecutable() is not null;
+
+    /// <summary>Full path of SqlLocalDB.exe when LocalDB is installed, otherwise null.</summary>
+    internal static string? FindSqlLocalDbExecutable()
     {
         string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 
         foreach (string version in LocalDbToolsFolders)
         {
-            if (File.Exists(Path.Combine(programFiles, "Microsoft SQL Server", version, "Tools", "Binn", "SqlLocalDB.exe")))
+            string candidate = Path.Combine(programFiles, "Microsoft SQL Server", version, "Tools", "Binn", "SqlLocalDB.exe");
+            if (File.Exists(candidate))
             {
-                return true;
+                return candidate;
             }
         }
 
@@ -133,9 +214,10 @@ internal static class PrerequisiteCheck
             {
                 try
                 {
-                    if (File.Exists(Path.Combine(entry.Trim('"'), "SqlLocalDB.exe")))
+                    string candidate = Path.Combine(entry.Trim('"'), "SqlLocalDB.exe");
+                    if (File.Exists(candidate))
                     {
-                        return true;
+                        return candidate;
                     }
                 }
                 catch (Exception)
@@ -147,12 +229,15 @@ internal static class PrerequisiteCheck
         try
         {
             string root = Path.Combine(programFiles, "Microsoft SQL Server");
-            return Directory.Exists(root) &&
-                Directory.EnumerateFiles(root, "SqlLocalDB.exe", SearchOption.AllDirectories).Any();
+            if (Directory.Exists(root))
+            {
+                return Directory.EnumerateFiles(root, "SqlLocalDB.exe", SearchOption.AllDirectories).FirstOrDefault();
+            }
         }
         catch (Exception)
         {
-            return false;
         }
+
+        return null;
     }
 }

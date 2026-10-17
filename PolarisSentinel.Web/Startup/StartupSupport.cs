@@ -74,6 +74,26 @@ internal static class StartupSupport
         }
     }
 
+    public static void ShowInfo(string caption, string message)
+    {
+        if (!CanShowDialog)
+        {
+            return;
+        }
+
+        try
+        {
+            System.Windows.Forms.MessageBox.Show(
+                message,
+                caption,
+                System.Windows.Forms.MessageBoxButtons.OK,
+                System.Windows.Forms.MessageBoxIcon.Information);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     public static bool AskToContinue(string caption, string message)
     {
         if (!CanShowDialog)

@@ -31,4 +31,12 @@
     <ProjectReference Include="..\PolarisSentinel.TrafficCapture\PolarisSentinel.TrafficCapture.csproj" />
   </ItemGroup>
 
+  <!-- Ship the ONNX models (and the demo dataset) inside the app folder as ml\artifacts\<file>,
+       so the running app resolves them with a plain relative path instead of relying on a
+       sibling folder that only exists on the build machine. -->
+  <ItemGroup>
+    <Content Include="..\ml\artifacts\*.onnx" Link="ml\artifacts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\ml\artifacts\cic_demo_dataset.csv" Link="ml\artifacts\cic_demo_dataset.csv" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

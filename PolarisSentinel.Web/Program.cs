@@ -36,6 +36,18 @@ namespace PolarisSentinel
             return isDeployedLayout ? baseDirectory : null;
         }
 
+        /// <summary>
+        /// Start-up messages are produced before the host (and its file logger) exists, so they go to
+        /// the parent console when there is one; otherwise the message boxes carry the information.
+        /// </summary>
+        private static void WriteStartupLog(string message)
+        {
+            if (StartupSupport.HasConsole)
+            {
+                Console.Error.WriteLine(message);
+            }
+        }
+
         public static async Task Main(string[] args)
         {
             StartupSupport.TryAttachToParentConsole();
@@ -58,9 +70,23 @@ namespace PolarisSentinel
 
             string probeRoot = ResolveContentRoot() ?? Directory.GetCurrentDirectory();
 
+            // The builder is created before the prerequisite check so the check can follow the
+            // configured connection string: a deployment pointed at a full SQL Server instance
+            // does not need LocalDB to be installed.
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = ResolveContentRoot(),
+            });
+
+            // The effective database target: the configured value, or the detected local SQL Server
+            // instance when the configuration asks for LocalDB and LocalDB is not installed.
+            string configuredConnection = builder.Configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
+            string connectionString = SqlTargetResolver.Resolve(configuredConnection);
+
             if (args.Any(a => string.Equals(a, "--check-prerequisites", StringComparison.OrdinalIgnoreCase)))
             {
-                var report = PrerequisiteCheck.FindMissing(probeRoot);
+                var report = PrerequisiteCheck.FindMissing(probeRoot, connectionString);
 
                 Console.Error.WriteLine(report.Count == 0
                     ? "All prerequisites were detected."
@@ -70,9 +96,31 @@ namespace PolarisSentinel
                 return;
             }
 
+            // A machine that has never run this application usually has no local database at all.
+            // Offer to download and install SQL Server LocalDB instead of failing with a
+            // "missing prerequisite" dialog that the user cannot act on.
+            if (!PrerequisiteCheck.IsSkipped(args)
+                && PrerequisiteCheck.RequiresLocalDb(connectionString)
+                && !PrerequisiteCheck.IsLocalDbInstalled()
+                && LocalDbInstaller.IsEnabled(args))
+            {
+                bool consented = LocalDbInstaller.IsUnattended(args)
+                    || (StartupSupport.CanShowDialog
+                        && StartupSupport.AskToContinue("Polaris Sentinel", LocalDbInstaller.Explain()));
+
+                if (consented && await LocalDbInstaller.InstallAsync(WriteStartupLog))
+                {
+                    connectionString = SqlTargetResolver.Resolve(configuredConnection);
+
+                    StartupSupport.ShowInfo(
+                        "Polaris Sentinel",
+                        "SQL Server LocalDB is installed. The database is created automatically on first start.");
+                }
+            }
+
             if (!PrerequisiteCheck.IsSkipped(args))
             {
-                var missing = PrerequisiteCheck.FindMissing(probeRoot);
+                var missing = PrerequisiteCheck.FindMissing(probeRoot, connectionString);
 
                 if (missing.Count > 0)
                 {
@@ -111,12 +159,6 @@ namespace PolarisSentinel
                     }
                 }
             }
-
-            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-            {
-                Args = args,
-                ContentRootPath = ResolveContentRoot(),
-            });
 
             builder.Logging.ClearProviders();
 
@@ -191,7 +233,7 @@ namespace PolarisSentinel
             }
 
             builder.Services.AddDbContext<SentinelDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+            options.UseSqlServer(connectionString));
 
             builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
             {
@@ -299,6 +341,19 @@ namespace PolarisSentinel
 
             var app = builder.Build();
 
+            if (!string.Equals(connectionString, configuredConnection, StringComparison.Ordinal))
+            {
+                app.Logger.LogWarning(
+                    "ConnectionStrings:DefaultConnection ({Configured}) cannot be used on this machine; " +
+                    "falling back to the detected local SQL Server instance: {Target}",
+                    SqlTargetResolver.Describe(configuredConnection),
+                    SqlTargetResolver.Describe(connectionString));
+            }
+            else
+            {
+                app.Logger.LogInformation("Database target: {Target}", SqlTargetResolver.Describe(connectionString));
+            }
+
             app.Logger.LogInformation("Random Forest model: {Path}", modelPath);
 
             if (anomalyModelPath is not null)
@@ -404,7 +459,8 @@ namespace PolarisSentinel
                         "Polaris Sentinel - database error",
                         "The database could not be initialised." + Environment.NewLine + Environment.NewLine +
                         ex.Message + Environment.NewLine + Environment.NewLine +
-                        "Check that SQL Server LocalDB is installed, then see the log file next to the executable.");
+                        "Check that the SQL Server instance named in ConnectionStrings:DefaultConnection " +
+                        "is running and reachable, then see the log file next to the executable.");
 
                     throw;
                 }
