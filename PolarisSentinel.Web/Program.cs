@@ -26,6 +26,9 @@ namespace PolarisSentinel
 {
     public class Program
     {
+        private Program()
+        {
+        }
 
         private static string? ResolveContentRoot()
         {
@@ -123,7 +126,7 @@ namespace PolarisSentinel
 
                     if (StartupSupport.HasConsole)
                     {
-                        Console.Error.WriteLine(report);
+                        await Console.Error.WriteLineAsync(report);
                     }
 
                     StartupSupport.ShowError("Polaris Sentinel - missing prerequisite", report);
@@ -143,7 +146,7 @@ namespace PolarisSentinel
 
                     if (StartupSupport.HasConsole)
                     {
-                        Console.Error.WriteLine("WARNING: " + warning);
+                        await Console.Error.WriteLineAsync("WARNING: " + warning);
                     }
                     else if (!StartupSupport.AskToContinue(
                         "Polaris Sentinel",
@@ -273,18 +276,18 @@ namespace PolarisSentinel
                 "if_model.onnx");
 
             builder.Services.AddSingleton<IRandomForestModel>(_ => new RandomForestModel(modelPath));
-            builder.Services.AddSingleton<IIsolationForestModel?>(sp =>
+            if (anomalyModelPath is not null)
             {
-                if (anomalyModelPath == null)
+                string resolvedAnomalyModelPath = anomalyModelPath;
+                builder.Services.AddSingleton<IIsolationForestModel>(sp =>
                 {
-                    return null;
-                }
-                var rf = (RandomForestModel)sp.GetRequiredService<IRandomForestModel>();
-                return new IsolationForestModel(anomalyModelPath, rf.FeatureNames);
-            });
+                    var rf = (RandomForestModel)sp.GetRequiredService<IRandomForestModel>();
+                    return new IsolationForestModel(resolvedAnomalyModelPath, rf.FeatureNames);
+                });
+            }
             builder.Services.AddSingleton<IModelCombinationService>(sp => new ModelCombinationService(
                 sp.GetRequiredService<IRandomForestModel>(),
-                sp.GetRequiredService<IIsolationForestModel?>(),
+                sp.GetService<IIsolationForestModel>(),
                 ModelCombination.RandomForestOnly,
                 sp.GetRequiredService<IUserSettingsStore>()));
 
@@ -336,6 +339,30 @@ namespace PolarisSentinel
 
             var app = builder.Build();
 
+            app.Use(async (context, next) =>
+            {
+                context.Response.OnStarting(() =>
+                {
+                    context.Response.Headers["X-Frame-Options"] = "DENY";
+                    context.Response.Headers["Content-Security-Policy"] =
+                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+                        "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; " +
+                        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+                    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+                    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+
+                    if (context.Request.IsHttps)
+                    {
+                        context.Response.Headers["Strict-Transport-Security"] =
+                            "max-age=31536000; includeSubDomains";
+                    }
+
+                    return Task.CompletedTask;
+                });
+
+                await next();
+            });
+
             if (!string.Equals(connectionString, configuredConnection, StringComparison.Ordinal))
             {
                 app.Logger.LogWarning(
@@ -344,14 +371,17 @@ namespace PolarisSentinel
                     SqlTargetResolver.Describe(configuredConnection),
                     SqlTargetResolver.Describe(connectionString));
             }
-            else
+            else if (app.Logger.IsEnabled(LogLevel.Information))
             {
                 app.Logger.LogInformation("Database target: {Target}", SqlTargetResolver.Describe(connectionString));
             }
 
-            app.Logger.LogInformation("Random Forest model: {Path}", modelPath);
+            if (app.Logger.IsEnabled(LogLevel.Information))
+            {
+                app.Logger.LogInformation("Random Forest model: {Path}", modelPath);
+            }
 
-            if (anomalyModelPath is not null)
+            if (anomalyModelPath is not null && app.Logger.IsEnabled(LogLevel.Information))
             {
                 app.Logger.LogInformation("Isolation Forest model: {Path}", anomalyModelPath);
             }
@@ -359,7 +389,6 @@ namespace PolarisSentinel
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/error");
-                app.UseHsts();
                 app.UseHttpsRedirection();
             }
 
@@ -418,7 +447,8 @@ namespace PolarisSentinel
             {
                 try
                 {
-                    if (!datasetService.Load(Path.GetFileName(defaultDataset), File.ReadAllText(defaultDataset), out string? loadError, out int skippedRows))
+                    string datasetContent = await File.ReadAllTextAsync(defaultDataset);
+                    if (!datasetService.Load(Path.GetFileName(defaultDataset), datasetContent, out string? loadError, out int skippedRows))
                     {
                         app.Logger.LogWarning("Default test dataset rejected: {Error}", loadError);
                     }
@@ -432,7 +462,7 @@ namespace PolarisSentinel
                     app.Logger.LogError(ex, "Failed to load the default test dataset");
                 }
             }
-            else
+            else if (app.Logger.IsEnabled(LogLevel.Information))
             {
                 app.Logger.LogInformation("No default test dataset at {Path}", defaultDataset);
             }
@@ -457,11 +487,11 @@ namespace PolarisSentinel
                         "Check that the SQL Server instance named in ConnectionStrings:DefaultConnection " +
                         "is running and reachable, then see the log file next to the executable.");
 
-                    throw;
+                    throw new InvalidOperationException("Database initialisation failed.", ex);
                 }
             }
 
-            app.Run();
+            await app.RunAsync();
         }
     }
 }
