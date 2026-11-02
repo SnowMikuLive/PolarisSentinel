@@ -17,20 +17,9 @@ and brute-force login attempts as the target attack types.
 项目范围限定为单台 Windows 主机上的入站流量，目标攻击类型包括拒绝服务攻击（DoS）、端口扫描
 和暴力登录尝试。
 
-## Requirements / 环境要求
+## Requirements
 
 - Windows 10 1607 or later (x64), administrator rights
-
-  Windows 10 1607 或更高版本（x64），需要管理员权限。
-
 - .NET 10 SDK to build, or the .NET 10 runtime to run a published folder
-
-  构建需要 .NET 10 SDK；运行已发布的程序目录需要 .NET 10 运行时。
-
 - Npcap driver, for packet capture
-
-  Npcap 驱动，用于捕获网络数据包。
-
 - SQL Server LocalDB or SQL Server
-
-  SQL Server LocalDB 或 SQL Server。
