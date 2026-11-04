@@ -15,4 +15,6 @@ public interface IFirewallGateway
     void Remove(string ruleName);
 
     IReadOnlyList<string> ListManagedNames();
+
+    IReadOnlyList<string> GetBlockedInboundAddresses();
 }

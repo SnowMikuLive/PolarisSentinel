@@ -5,6 +5,7 @@ namespace PolarisSentinel.Core.Interfaces;
 
 public interface IModelCombinationService
 {
+    IReadOnlyList<ModelCombination> AvailableCombinations { get; }
     ModelCombination ActiveCombination { get; }
 
     void SetActiveCombination(ModelCombination combination);

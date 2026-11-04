@@ -10,6 +10,7 @@ public class TrafficHistoryService
     private readonly DetectionStateService _state;
     private readonly ILogger<TrafficHistoryService> _logger;
     private readonly object _lock = new();
+    private readonly SemaphoreSlim _persistenceGate = new(1, 1);
 
     private readonly List<TrafficRecord> _pending = new();
 
@@ -49,54 +50,76 @@ public class TrafficHistoryService
         }
     }
 
-    public void DiscardPending()
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        lock (_lock)
-        {
-            _pending.Clear();
-        }
-    }
-
-    public void Enqueue(TrafficRecord record)
-    {
-        bool shouldFlush;
-        lock (_lock)
-        {
-            _pending.Add(record);
-            shouldFlush = _pending.Count >= MaxPending || Stopwatch.GetElapsedTime(_lastFlushTimestamp) >= FlushInterval;
-        }
-
-        if (shouldFlush)
-        {
-            _ = FlushAsync();
-        }
-    }
-
-    public async Task FlushAsync()
-    {
-        List<TrafficRecord> batch;
-        lock (_lock)
-        {
-            if (_pending.Count == 0)
-            {
-                return;
-            }
-
-            batch = new List<TrafficRecord>(_pending);
-            _pending.Clear();
-            _lastFlushTimestamp = Stopwatch.GetTimestamp();
-        }
-
+        await _persistenceGate.WaitAsync(cancellationToken);
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var repository = scope.ServiceProvider.GetRequiredService<ITrafficRecordRepository>();
-            repository.AddRange(batch);
-            await repository.SaveChangesAsync();
+            await repository.DeleteAllAsync(cancellationToken);
+            lock (_lock)
+            {
+                _pending.Clear();
+                _state.Clear();
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "Failed to persist {Count} traffic record(s)", batch.Count);
+            _persistenceGate.Release();
+        }
+    }
+
+    public DetectionRecord Record(DetectionOutcome outcome)
+    {
+        bool shouldFlush;
+        DetectionRecord record;
+        lock (_lock)
+        {
+            record = _state.Record(outcome);
+            _pending.Add(DetectionStateService.ToTrafficRecord(record));
+            shouldFlush = _pending.Count >= MaxPending || Stopwatch.GetElapsedTime(_lastFlushTimestamp) >= FlushInterval;
+        }
+
+        if (shouldFlush && _persistenceGate.CurrentCount > 0)
+        {
+            _ = FlushAsync();
+        }
+        return record;
+    }
+
+    public async Task FlushAsync()
+    {
+        await _persistenceGate.WaitAsync();
+        try
+        {
+            List<TrafficRecord> batch;
+            lock (_lock)
+            {
+                if (_pending.Count == 0) return;
+                batch = new List<TrafficRecord>(_pending);
+                _pending.Clear();
+                _lastFlushTimestamp = Stopwatch.GetTimestamp();
+            }
+
+            try
+            {
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var repository = scope.ServiceProvider.GetRequiredService<ITrafficRecordRepository>();
+                repository.AddRange(batch);
+                await repository.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                // A failed EF save can leave generated identity values on the entities.
+                foreach (var record in batch) record.Id = 0;
+                lock (_lock) { _pending.InsertRange(0, batch); }
+                _logger.LogError(ex, "Failed to persist {Count} traffic record(s); retained for retry", batch.Count);
+            }
+        }
+        finally
+        {
+            _persistenceGate.Release();
         }
     }
 

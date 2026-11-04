@@ -23,8 +23,6 @@ namespace PolarisSentinel.Web.Service
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            await _history.RestoreTodayAsync();
-
             try
             {
                 while (!stoppingToken.IsCancellationRequested)

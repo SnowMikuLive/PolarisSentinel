@@ -178,11 +178,11 @@ namespace PolarisSentinel.Web.Controllers
             int? durationValue,
             string? durationUnit)
         {
+            rule.Id = id;
             AddValidationErrors(rule);
 
             if (!ModelState.IsValid)
             {
-                rule.Id = id;
                 PopulateLists();
                 return View(rule);
             }

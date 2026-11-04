@@ -9,6 +9,22 @@ namespace PolarisSentienlUnitTestProject;
 [TestClass]
 public class SourceBehaviorTrackerTests
 {
+    [TestMethod]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(false, false)]
+    public void ServerReplies_AreNotScansOrSynFloods(bool syn, bool fin)
+    {
+        var tracker = CreateTracker();
+        for (int i = 0; i < 10; i++)
+        {
+            var reply = new PacketObservation(Victim, Attacker, 50000 + i, ProtocolNumbers.Tcp,
+                IsSyn: syn, IsRst: false, PacketSize: 60, Start.AddMilliseconds(i), IsInbound: true, IsFin: fin, IsAck: true);
+            tracker.Observe(reply);
+            Assert.IsNull(tracker.EvaluateFast(reply), $"False alert on reply {i + 1}");
+        }
+    }
+
     private static readonly DateTime Start = new(2026, 10, 4, 12, 0, 0);
     private const string Attacker = "203.0.113.66";
     private const string Victim = "192.168.1.10";

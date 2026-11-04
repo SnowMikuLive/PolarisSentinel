@@ -1,6 +1,3 @@
-using PolarisSentinel.Core.Enums;
-using PolarisSentinel.Core.Models;
-
 namespace PolarisSentinel.Core.Services;
 
 public sealed class BlockedTrafficState
@@ -32,11 +29,9 @@ public sealed class BlockedTrafficState
         }
     }
 
-    public void Refresh(IEnumerable<Rule> rules)
+    public void Refresh(IEnumerable<string> blockedAddresses)
     {
-        var addresses = rules
-            .Where(r => r.Status == RuleStatus.Active && r.BlocksAddress && !string.IsNullOrEmpty(r.BlockedIp))
-            .Select(r => r.BlockedIp!)
+        var addresses = blockedAddresses
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         lock (_lock)
@@ -45,16 +40,4 @@ public sealed class BlockedTrafficState
         }
     }
 
-    public void Add(string? address)
-    {
-        if (string.IsNullOrEmpty(address))
-        {
-            return;
-        }
-
-        lock (_lock)
-        {
-            _addresses.Add(address);
-        }
-    }
 }

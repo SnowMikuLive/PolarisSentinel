@@ -108,7 +108,15 @@ namespace PolarisSentienlUnitTestProject
 
     internal sealed class FakeFirewallGateway : IFirewallGateway
     {
+        private readonly Dictionary<string, FirewallRuleSpec> _rules = new();
+
         public bool IsEnabled { get; set; } = true;
+
+        public bool ApplySucceeds { get; set; } = true;
+
+        public bool FailRemoval { get; set; }
+
+        public bool FailListing { get; set; }
 
         public string? DisabledReason { get; set; }
 
@@ -124,17 +132,36 @@ namespace PolarisSentienlUnitTestProject
 
         public bool Apply(string ruleName, FirewallRuleSpec spec, bool ruleActive)
         {
-            if (!IsEnabled)
+            if (!IsEnabled || !ApplySucceeds)
             {
                 return false;
             }
 
             Applied.Add(ruleName);
+            if (ruleActive) _rules[ruleName] = spec;
+            else _rules.Remove(ruleName);
+            ManagedNames = ManagedNames.Append(ruleName).Distinct().ToArray();
             return true;
         }
 
-        public void Remove(string ruleName) => Removed.Add(ruleName);
+        public void Remove(string ruleName)
+        {
+            if (FailRemoval) throw new InvalidOperationException("Simulated removal failure");
+            Removed.Add(ruleName);
+            _rules.Remove(ruleName);
+            ManagedNames = ManagedNames.Where(name => name != ruleName).ToArray();
+        }
 
         public IReadOnlyList<string> ListManagedNames() => ManagedNames;
+
+        public IReadOnlyList<string> GetBlockedInboundAddresses()
+        {
+            if (FailListing) throw new InvalidOperationException("Simulated read failure");
+            return _rules.Where(pair => ManagedNames.Contains(pair.Key))
+                .Select(pair => pair.Value)
+                .Where(rule => rule.Direction == 1 && rule.Protocol == 0 && rule.RemoteAddress is not null)
+                .Select(rule => NetworkAddress.TryNormalize(rule.RemoteAddress!, out var ip) ? ip : string.Empty)
+                .Where(ip => ip.Length > 0).Distinct().ToArray();
+        }
     }
 }

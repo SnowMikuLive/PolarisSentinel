@@ -32,7 +32,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private List<NetworkInterfaceInfo> _cachedDevices = new();
 
-    private readonly HashSet<string> _localAddresses = new(StringComparer.OrdinalIgnoreCase);
+    private volatile HashSet<string> _localAddresses = new(StringComparer.OrdinalIgnoreCase);
 
     private long _packetsSinceLastTick;
     private long _bytesSinceLastTick;
@@ -299,16 +299,41 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     private void RefreshLocalAddresses(ICaptureDevice device)
     {
-        _localAddresses.Clear();
-        TryAddDeviceAddresses(device);
-
-        if (_localAddresses.Count == 0)
+        lock (_deviceLock)
         {
-            AddSnapshotAddresses(device);
+            var addresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var network = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
+                !string.IsNullOrEmpty(n.Id) && device.Name.Contains(n.Id, StringComparison.OrdinalIgnoreCase));
+            if (network is not null)
+            {
+                foreach (var address in network.GetIPProperties().UnicastAddresses)
+                    addresses.Add(address.Address.ToString());
+            }
+            else
+            {
+                TryAddDeviceAddresses(device, addresses);
+                if (addresses.Count == 0) AddSnapshotAddresses(device, addresses);
+            }
+
+            if (!_localAddresses.SetEquals(addresses)) _flows.Clear();
+            _localAddresses = addresses;
         }
     }
 
-    private void TryAddDeviceAddresses(ICaptureDevice device)
+    private void OnNetworkAddressChanged(object? sender, EventArgs e)
+    {
+        try
+        {
+            var device = _device;
+            if (device is not null) RefreshLocalAddresses(device);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not refresh local capture addresses");
+        }
+    }
+
+    private void TryAddDeviceAddresses(ICaptureDevice device, HashSet<string> addresses)
     {
         try
         {
@@ -319,7 +344,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
                     var ip = address.Addr?.ipAddress?.ToString();
                     if (!string.IsNullOrEmpty(ip))
                     {
-                        _localAddresses.Add(ip);
+                        addresses.Add(ip);
                     }
                 }
             }
@@ -330,7 +355,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
     }
 
-    private void AddSnapshotAddresses(ICaptureDevice device)
+    private void AddSnapshotAddresses(ICaptureDevice device, HashSet<string> addresses)
     {
         var snapshot = SnapshotDevices();
         var selectedIp = snapshot
@@ -339,7 +364,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         if (!string.IsNullOrEmpty(selectedIp))
         {
-            _localAddresses.Add(selectedIp);
+            addresses.Add(selectedIp);
             return;
         }
 
@@ -347,15 +372,18 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         {
             if (!string.IsNullOrEmpty(info.IpAddress))
             {
-                _localAddresses.Add(info.IpAddress);
+                addresses.Add(info.IpAddress);
             }
         }
     }
 
     private bool IsLocalAddress(string ip) => _localAddresses.Contains(ip);
 
-    private bool IsInboundPacket(string sourceIp, string destinationIp) =>
-        _localAddresses.Count == 0 || (IsLocalAddress(destinationIp) && !IsLocalAddress(sourceIp));
+    private bool IsInboundPacket(string sourceIp, string destinationIp)
+    {
+        var addresses = _localAddresses;
+        return addresses.Count == 0 || (addresses.Contains(destinationIp) && !addresses.Contains(sourceIp));
+    }
 
     public void Start(string deviceName)
     {
@@ -364,6 +392,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
         try
         {
+            NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
             RefreshLocalAddresses(device);
             device.OnPacketArrival += OnPacketArrival;
             device.Open(DeviceModes.Promiscuous, 1000);
@@ -371,6 +400,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
         }
         catch
         {
+            NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
             try { device.OnPacketArrival -= OnPacketArrival; }
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine(ex); }
             try { device.Close(); }
@@ -387,6 +417,7 @@ public sealed class TrafficCaptureService : ITrafficCaptureService, IDisposable
 
     public void Stop()
     {
+        NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         _expiryTimer.Change(Timeout.Infinite, Timeout.Infinite);
         _liveSummaryTimer.Change(Timeout.Infinite, Timeout.Infinite);
 

@@ -66,8 +66,6 @@ namespace PolarisSentinel
                 StartupSupport.ShowError("Polaris Sentinel - fatal error", report);
             };
 
-            string probeRoot = ResolveContentRoot() ?? Directory.GetCurrentDirectory();
-
             // The builder is created before the prerequisite check so the check can follow the
             // configured connection string: a deployment pointed at a full SQL Server instance
             // does not need LocalDB to be installed.
@@ -84,7 +82,8 @@ namespace PolarisSentinel
 
             if (args.Any(a => string.Equals(a, "--check-prerequisites", StringComparison.OrdinalIgnoreCase)))
             {
-                var report = PrerequisiteCheck.FindMissing(probeRoot, connectionString);
+                var report = PrerequisiteCheck.FindMissing(builder.Environment.ContentRootPath, connectionString,
+                    builder.Configuration["Inference:ModelPath"]);
 
                 Console.Error.WriteLine(report.Count == 0
                     ? "All prerequisites were detected."
@@ -118,7 +117,8 @@ namespace PolarisSentinel
 
             if (!PrerequisiteCheck.IsSkipped(args))
             {
-                var missing = PrerequisiteCheck.FindMissing(probeRoot, connectionString);
+                var missing = PrerequisiteCheck.FindMissing(builder.Environment.ContentRootPath, connectionString,
+                    builder.Configuration["Inference:ModelPath"]);
 
                 if (missing.Count > 0)
                 {
@@ -276,6 +276,7 @@ namespace PolarisSentinel
                 "if_model.onnx");
 
             builder.Services.AddSingleton<IRandomForestModel>(_ => new RandomForestModel(modelPath));
+            if (!File.Exists(anomalyModelPath)) anomalyModelPath = null;
             if (anomalyModelPath is not null)
             {
                 string resolvedAnomalyModelPath = anomalyModelPath;
@@ -313,7 +314,8 @@ namespace PolarisSentinel
                     sp.GetRequiredService<IFirewallGateway>(),
                     sp.GetRequiredService<FirewallRuntimeState>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>()));
+                    sp.GetRequiredService<ILogger<WindowsFirewallEnforcer>>(),
+                    sp.GetRequiredService<BlockedTrafficState>()));
 
             builder.Services.AddScoped<IDetectionPipeline>(sp =>
                 new DetectionPipeline(

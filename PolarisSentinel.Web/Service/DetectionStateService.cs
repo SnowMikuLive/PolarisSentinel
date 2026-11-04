@@ -115,7 +115,7 @@ namespace PolarisSentinel.Web.Service
         {
             lock (_lock)
             {
-                _live.Clear();
+                Clear();
                 var restored = new List<(DateTime Timestamp, DetectionRecord Record)>();
 
                 foreach (var record in records)
@@ -134,8 +134,8 @@ namespace PolarisSentinel.Web.Service
                         record.Source,
                         record.RuleName,
                         record.Verdict,
-                        string.Empty,
-                        string.Empty);
+                        record.DecisionReason,
+                        record.DecisionText);
 
                     restored.Add((record.CreatedAt, detection));
 
@@ -257,6 +257,8 @@ namespace PolarisSentinel.Web.Service
                 ConfidenceScore = record.ConfidenceScore,
                 Action = record.Action,
                 Reason = record.Reason,
+                DecisionReason = record.DecisionReason,
+                DecisionText = record.DecisionText,
                 Source = record.Source,
                 RuleName = record.RuleName,
                 Verdict = record.Verdict,

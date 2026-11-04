@@ -107,7 +107,7 @@ namespace PolarisSentinel.Web.Controllers
         {
             if (request == null || !ModelState.IsValid ||
                 !Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) ||
-                !Enum.IsDefined(combination))
+                !_combinations.AvailableCombinations.Contains(combination))
             {
                 return BadRequest(new { error = "Unknown model combination." });
             }
@@ -156,7 +156,7 @@ namespace PolarisSentinel.Web.Controllers
 
         private void PopulateViewBag(int page)
         {
-            ViewBag.Combinations = ModelCombinations.All;
+            ViewBag.Combinations = _combinations.AvailableCombinations;
             ViewBag.DatasetName = _dataset.FileName;
             ViewBag.DatasetCount = _dataset.Count;
             ViewBag.Page = page;

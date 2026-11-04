@@ -1,8 +1,9 @@
 ﻿@{
     ViewData["Title"] = "Dashboard";
-    var combinations = PolarisSentinel.Core.Constants.ModelCombinations.All;
+    var combinations = Models.AvailableCombinations;
 }
 
+@inject PolarisSentinel.Core.Interfaces.IModelCombinationService Models
 <div class="container-fluid">
     <h2 class="text-primary">Dashboard</h2>
 

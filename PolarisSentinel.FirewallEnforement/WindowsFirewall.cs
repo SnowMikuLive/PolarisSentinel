@@ -111,6 +111,26 @@ namespace PolarisSentinel.FirewallEnforement
                 throw new ArgumentException("Only PolarisSentinel rules can be changed.");
             }
         }
+
+        public IReadOnlyList<string> GetBlockedInboundAddresses()
+        {
+            var addresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (dynamic rule in _rules)
+            {
+                string name = (string)rule.Name;
+                if (!name.StartsWith(EntityIds.FirewallRulePrefix, StringComparison.Ordinal) ||
+                    !(bool)rule.Enabled || (int)rule.Direction != 1 ||
+                    (int)rule.Action != 0 || (int)rule.Protocol != 256)
+                    continue;
+
+                foreach (string value in ((string)rule.RemoteAddresses).Split(','))
+                {
+                    if (NetworkAddress.TryNormalize(value.Trim(), out var address))
+                        addresses.Add(address);
+                }
+            }
+            return addresses.ToArray();
+        }
     }
 
     internal class FirewallStoredRule

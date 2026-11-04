@@ -471,6 +471,14 @@ namespace PolarisSentinel.DataAccess.Migrations
 
             modelBuilder.Entity("PolarisSentinel.Core.Models.TrafficRecord", b =>
                 {
+                    b.Property<string>("DecisionReason")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DecisionText")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint");

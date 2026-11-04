@@ -20,7 +20,16 @@ public sealed class MustChangePasswordMiddleware
             var user = await userManager.GetUserAsync(context.User);
             if (user is { MustChangePassword: true })
             {
-                context.Response.Redirect("/Account/ChangePassword");
+                if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) ||
+                    context.Request.Path.StartsWithSegments("/trafficHub", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    await context.Response.WriteAsJsonAsync(new { error = "password_change_required", changePasswordUrl = "/Account/ChangePassword" });
+                }
+                else
+                {
+                    context.Response.Redirect("/Account/ChangePassword");
+                }
                 return;
             }
         }
@@ -30,12 +39,10 @@ public sealed class MustChangePasswordMiddleware
 
     private static bool IsAllowedPath(PathString path)
     {
-        string value = path.Value ?? string.Empty;
-        return value.StartsWith("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/Account/Logout", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/lib", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/css", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("/js", StringComparison.OrdinalIgnoreCase);
+        return path.StartsWithSegments("/Account/ChangePassword", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/Account/Logout", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/lib", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/css", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/js", StringComparison.OrdinalIgnoreCase);
     }
 }

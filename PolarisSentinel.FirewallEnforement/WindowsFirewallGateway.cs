@@ -150,15 +150,8 @@ namespace PolarisSentinel.FirewallEnforement
 
             lock (_lock)
             {
-                if (_firewall is null)
-                {
-                    _logger.LogWarning(
-                        "Firewall DRY-RUN: {Reason}. Rule {RuleName} was not removed from Windows Firewall.",
-                        _disabledReason ?? "execution is disabled", ruleName);
-                    return;
-                }
-
-                _firewall.Remove(ruleName);
+                var firewall = _firewall ?? new WindowsFirewall();
+                firewall.Remove(ruleName);
             }
         }
 
@@ -171,7 +164,16 @@ namespace PolarisSentinel.FirewallEnforement
 
             lock (_lock)
             {
-                return _firewall?.ListManagedNames() ?? Array.Empty<string>();
+                return (_firewall ?? new WindowsFirewall()).ListManagedNames();
+            }
+        }
+
+        public IReadOnlyList<string> GetBlockedInboundAddresses()
+        {
+            if (!OperatingSystem.IsWindows()) return Array.Empty<string>();
+            lock (_lock)
+            {
+                return (_firewall ?? new WindowsFirewall()).GetBlockedInboundAddresses();
             }
         }
 

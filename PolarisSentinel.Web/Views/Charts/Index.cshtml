@@ -4,7 +4,8 @@
 @{
     ViewData["Title"] = "Charts";
     var results = Model as IReadOnlyList<ModelEvaluationResult> ?? Array.Empty<ModelEvaluationResult>();
-    var combinations = ModelCombinations.All;
+    var combinations = ViewBag.Combinations as IReadOnlyList<PolarisSentinel.Core.Enums.ModelCombination>
+        ?? Array.Empty<PolarisSentinel.Core.Enums.ModelCombination>();
     var rows = ViewBag.Rows as IReadOnlyList<LabeledFlow> ?? Array.Empty<LabeledFlow>();
     int page = ViewBag.Page ?? 1;
     int pageSize = ViewBag.PageSize ?? 20;

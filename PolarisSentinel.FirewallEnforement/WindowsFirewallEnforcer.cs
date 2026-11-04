@@ -3,6 +3,7 @@ using PolarisSentinel.Core.Constants;
 using PolarisSentinel.Core.Enums;
 using PolarisSentinel.Core.Interfaces;
 using PolarisSentinel.Core.Models;
+using PolarisSentinel.Core.Services;
 
 namespace PolarisSentinel.FirewallEnforement
 {
@@ -14,6 +15,7 @@ namespace PolarisSentinel.FirewallEnforement
         private readonly FirewallRuntimeState _state;
         private readonly TimeProvider _timeProvider;
         private readonly ILogger<WindowsFirewallEnforcer> _logger;
+        private readonly BlockedTrafficState? _blocked;
 
         private static readonly object _lock = new object();
 
@@ -26,20 +28,26 @@ namespace PolarisSentinel.FirewallEnforement
             IFirewallGateway gateway,
             FirewallRuntimeState state,
             TimeProvider timeProvider,
-            ILogger<WindowsFirewallEnforcer> logger)
+            ILogger<WindowsFirewallEnforcer> logger,
+            BlockedTrafficState? blocked = null)
         {
             _rules = rules;
             _gateway = gateway;
             _state = state;
             _timeProvider = timeProvider;
             _logger = logger;
+            _blocked = blocked;
         }
 
         public (bool DryRun, string? Reason) SetDryRun(bool dryRun)
         {
-            _state.DryRun = dryRun;
-            _gateway.Reevaluate();
-            return (IsDryRun, DryRunReason);
+            lock (_lock)
+            {
+                _state.DryRun = dryRun;
+                _gateway.Reevaluate();
+                RefreshBlockedState();
+                return (IsDryRun, DryRunReason);
+            }
         }
 
         private const int MaxActiveAddressRules = 500;
@@ -53,7 +61,8 @@ namespace PolarisSentinel.FirewallEnforement
                 : EntityIds.FirewallRule($"{action}_{target}_{spec.Protocol}");
         }
 
-        public Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration)
+        public Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration,
+            RuleStatus status = RuleStatus.Active)
         {
             var alert = decision.Alert;
             var spec = FirewallRuleSpec.TryCreate(decision.Action, alert, out string? error);
@@ -72,6 +81,10 @@ namespace PolarisSentinel.FirewallEnforement
                 var existing = _rules.GetByNameAsync(ruleName).GetAwaiter().GetResult();
                 if (existing != null)
                 {
+                    if (status != RuleStatus.Active)
+                        return Update(existing.Id, existing.SourceIp ?? string.Empty, existing.SourcePort ?? 0,
+                            existing.DestinationIp ?? string.Empty, existing.DestinationPort ?? 0,
+                            existing.Protocol ?? 0, existing.Action, status, duration)!;
                     if (expiresAt > existing.ExpiresAt)
                     {
                         existing.ExpiresAt = expiresAt;
@@ -91,7 +104,7 @@ namespace PolarisSentinel.FirewallEnforement
                 int activeAddressRules = _rules.GetAllAsync().GetAwaiter().GetResult()
                     .Count(r => r.Status == RuleStatus.Active && r.BlocksAddress);
 
-                if (activeAddressRules >= MaxActiveAddressRules)
+                if (status == RuleStatus.Active && spec.RemoteAddress is not null && activeAddressRules >= MaxActiveAddressRules)
                 {
                     _logger.LogWarning(
                         "Refusing to create a firewall rule for {Action}: the active address-block limit ({Limit}) is reached",
@@ -107,7 +120,7 @@ namespace PolarisSentinel.FirewallEnforement
                     PolicyId = string.IsNullOrEmpty(policyId) ? null : policyId,
                     AlertId = string.IsNullOrEmpty(alertId) ? null : alertId,
                     Action = decision.Action,
-                    Status = RuleStatus.Active,
+                    Status = status,
                     SourceIp = alert.SourceIp,
                     SourcePort = alert.SourcePort == 0 ? null : alert.SourcePort,
                     DestinationIp = alert.DestinationIp,
@@ -120,7 +133,7 @@ namespace PolarisSentinel.FirewallEnforement
 
                 _rules.Add(rule);
                 _rules.SaveChangesAsync().GetAwaiter().GetResult();
-                SaveToWindows(rule, spec);
+                if (rule.Status == RuleStatus.Active) SaveToWindows(rule, spec);
                 if (_logger.IsEnabled(LogLevel.Information))
                 {
                     _logger.LogInformation("Firewall applied {RuleName} for {Action}, expires {ExpiresAt}, dry-run {DryRun}",
@@ -273,11 +286,9 @@ namespace PolarisSentinel.FirewallEnforement
         {
             lock (_lock)
             {
+                RefreshBlockedState();
+                if (!_gateway.IsEnabled) return 0;
                 var managed = _gateway.ListManagedNames();
-                if (managed.Count == 0 && !_gateway.IsEnabled)
-                {
-                    return 0;
-                }
 
                 var managedSet = managed.ToHashSet(StringComparer.Ordinal);
                 var rules = _rules.GetAllAsync().GetAwaiter().GetResult();
@@ -348,6 +359,7 @@ namespace PolarisSentinel.FirewallEnforement
                 {
                     _logger.LogWarning("Reconciled firewall: {Count} change(s)", changes);
                 }
+                RefreshBlockedState();
                 return changes;
             }
         }
@@ -379,6 +391,7 @@ namespace PolarisSentinel.FirewallEnforement
             }
 
             _gateway.Apply(rule.Name, spec, rule.Status == RuleStatus.Active);
+            RefreshBlockedState();
         }
 
         private void RemoveFromWindows(string ruleName)
@@ -386,6 +399,21 @@ namespace PolarisSentinel.FirewallEnforement
             if (!string.IsNullOrEmpty(ruleName))
             {
                 _gateway.Remove(ruleName);
+                RefreshBlockedState();
+            }
+        }
+
+        private void RefreshBlockedState()
+        {
+            if (_blocked is null) return;
+            try
+            {
+                _blocked.Refresh(_gateway.GetBlockedInboundAddresses());
+            }
+            catch (Exception ex)
+            {
+                _blocked.Refresh(Array.Empty<string>());
+                _logger.LogWarning(ex, "Could not verify firewall blocks; continuing traffic detection");
             }
         }
     }

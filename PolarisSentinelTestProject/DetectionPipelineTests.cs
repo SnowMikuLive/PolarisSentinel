@@ -106,14 +106,54 @@ public class DetectionPipelineTests
         Assert.IsFalse(blocked.IsBlocked("203.0.113.66"));
     }
 
+    [TestMethod]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    public void FailedOrSimulatedBlock_DoesNotSkipNextInference(bool enabled, bool succeeds)
+    {
+        var blocked = new BlockedTrafficState();
+        var inference = new CountingInferenceEngine(CreateDetection());
+        var pipeline = CreatePipeline(inference, out _, blocked, gateway: new FakeFirewallGateway
+            { IsEnabled = enabled, ApplySucceeds = succeeds });
+        var flow = CreateFlow(PreFilterResult.Suspicious("test"));
+        pipeline.ProcessFlow(flow, new[] { CreatePolicy() });
+        var second = pipeline.ProcessFlow(flow, new[] { CreatePolicy() });
+        Assert.AreEqual(2, inference.CallCount);
+        Assert.AreNotEqual(TrafficVerdict.Blocked, second.Verdict);
+    }
+
+    [TestMethod]
+    public void AlertThreshold_DoesNotBorrowAnotherAttackPolicy()
+    {
+        var pipeline = CreatePipeline(new CountingInferenceEngine(CreateDetection(confidence: 0.8f)), out _);
+        var dos = CreatePolicy(); dos.AttackType = AttackTypes.DoS; dos.RfThreshold = 0.9f;
+        var scan = CreatePolicy(); scan.AttackType = AttackTypes.PortScan; scan.RfThreshold = 0.7f;
+        var result = pipeline.ProcessFlow(CreateFlow(PreFilterResult.Suspicious("test")), new[] { dos, scan });
+        Assert.IsNull(result.Alert);
+        Assert.AreEqual(TrafficVerdict.Suspicious, result.Verdict);
+    }
+
+    [TestMethod]
+    public void SpoofedFlood_PreservesOriginalTupleAndOnlyMonitors()
+    {
+        var pipeline = CreatePipeline(new CountingInferenceEngine(CreateDetection()), out _);
+        var flow = CreateFlow(PreFilterResult.SpoofedFlood(AttackTypes.DoS, "distributed flood"));
+        var result = pipeline.ProcessFlow(flow, new[] { CreatePolicy(DetectionSource.HeuristicBased) });
+        Assert.AreEqual(flow.SourceIp, result.Alert!.SourceIp);
+        Assert.AreEqual(flow.SourcePort, result.Alert.SourcePort);
+        Assert.AreEqual(flow.DestinationIp, result.Alert.DestinationIp);
+        Assert.AreEqual(flow.DestinationPort, result.Alert.DestinationPort);
+        Assert.AreEqual(PolicyAction.Monitor, result.Decision!.Action);
+    }
+
     #region Helper Methods
 
     private static DetectionPipeline CreatePipeline(IInferenceEngine inference, out WindowsFirewallEnforcer firewall,
-        BlockedTrafficState? blocked = null, FakeRuleRepository? rules = null)
+        BlockedTrafficState? blocked = null, FakeRuleRepository? rules = null, FakeFirewallGateway? gateway = null)
     {
         var clock = new FakeTimeProvider();
-        firewall = new WindowsFirewallEnforcer(rules ?? new FakeRuleRepository(), new FakeFirewallGateway(),
-            new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance);
+        firewall = new WindowsFirewallEnforcer(rules ?? new FakeRuleRepository(), gateway ?? new FakeFirewallGateway(),
+            new FirewallRuntimeState(dryRun: true), clock, NullLogger<WindowsFirewallEnforcer>.Instance, blocked);
 
         var policy = new PolicyEngine(NullLogger<PolicyEngine>.Instance);
         return new DetectionPipeline(inference, policy, firewall, new FakeUnitOfWork(),

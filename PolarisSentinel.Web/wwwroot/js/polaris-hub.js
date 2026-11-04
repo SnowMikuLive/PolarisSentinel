@@ -1,5 +1,16 @@
 (function () {
     let connection = null;
+    let retryTimer = null;
+    let starting = null;
+    let stopping = false;
+
+    function retry() {
+        if (stopping || retryTimer !== null) return;
+        retryTimer = setTimeout(function () {
+            retryTimer = null;
+            start();
+        }, 3000);
+    }
 
     function build() {
         if (connection) {
@@ -21,6 +32,7 @@
         });
         connection.onclose(function (error) {
             console.warn('SignalR closed', error);
+            retry();
         });
 
         return connection;
@@ -28,19 +40,13 @@
 
     async function start() {
         const hub = build();
-        if (hub.state === signalR.HubConnectionState.Disconnected) {
-            try {
-                await hub.start();
-            } catch (err) {
+        if (!stopping && !starting && hub.state === signalR.HubConnectionState.Disconnected) {
+            starting = hub.start().catch(function (err) {
                 console.error('SignalR start failed', err);
-
-                setTimeout(function () {
-                    if (hub.state === signalR.HubConnectionState.Disconnected) {
-                        hub.start().catch(function (e) { console.error('SignalR retry failed', e); });
-                    }
-                }, 3000);
-            }
+                retry();
+            }).finally(function () { starting = null; });
         }
+        if (starting) await starting;
         return hub;
     }
 
@@ -49,6 +55,8 @@
     }
 
     window.addEventListener('beforeunload', function () {
+        stopping = true;
+        clearTimeout(retryTimer);
         if (connection && connection.state !== signalR.HubConnectionState.Disconnected) {
             connection.stop();
         }

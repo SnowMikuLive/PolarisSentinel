@@ -11,13 +11,11 @@ namespace PolarisSentinel.Web.Controllers
     public class DashboardController : Controller
     {
         private readonly DetectionStateService _state;
-        private readonly ITrafficRecordRepository _trafficRecords;
         private readonly TrafficHistoryService _history;
 
-        public DashboardController(DetectionStateService state, ITrafficRecordRepository trafficRecords, TrafficHistoryService history)
+        public DashboardController(DetectionStateService state, TrafficHistoryService history)
         {
             _state = state;
-            _trafficRecords = trafficRecords;
             _history = history;
         }
 
@@ -30,9 +28,7 @@ namespace PolarisSentinel.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveAllLiveTraffic(CancellationToken cancellationToken)
         {
-            _history.DiscardPending();
-            _state.Clear();
-            await _trafficRecords.DeleteAllAsync(cancellationToken);
+            await _history.ClearAsync(cancellationToken);
             TempData["success"] = "Live traffic history removed.";
             return RedirectToAction(nameof(Index));
         }

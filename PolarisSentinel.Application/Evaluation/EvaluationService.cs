@@ -18,7 +18,7 @@ public class EvaluationService
         IReadOnlyList<LabeledFlow> rows,
         IReadOnlyList<ModelCombination>? combinations = null)
     {
-        var selected = combinations ?? ModelCombinations.All;
+        var selected = combinations ?? _combinations.AvailableCombinations;
         var results = new List<ModelEvaluationResult>();
 
         foreach (var combination in selected)

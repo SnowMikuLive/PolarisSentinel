@@ -41,12 +41,19 @@ public class DashboardApiController : ControllerBase
     [HttpPost("model")]
     public IActionResult SetModel([FromBody] SetActiveModelRequest request)
     {
-        if (!Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination))
+        if (!Enum.TryParse<ModelCombination>(request.ModelCombination, out var combination) || !Enum.IsDefined(combination))
         {
             return BadRequest(new { error = "Unknown model combination." });
         }
 
-        _combinations.SetActiveCombination(combination);
+        try
+        {
+            _combinations.SetActiveCombination(combination);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
         return Ok(new
         {
             activeModel = combination.ToString(),

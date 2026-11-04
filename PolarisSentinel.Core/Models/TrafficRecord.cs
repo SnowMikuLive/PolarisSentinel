@@ -22,6 +22,10 @@ public class TrafficRecord
 
     public string Reason { get; set; } = string.Empty;
 
+    public string DecisionReason { get; set; } = string.Empty;
+
+    public string DecisionText { get; set; } = string.Empty;
+
     public string Source { get; set; } = string.Empty;
 
     public string? RuleName { get; set; }

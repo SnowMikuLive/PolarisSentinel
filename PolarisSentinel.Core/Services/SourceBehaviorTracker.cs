@@ -103,7 +103,7 @@ public sealed class SourceBehaviorTracker
     private void ObserveProbe(PacketObservation packet)
     {
         bool isTcpProbe = packet.Protocol == ProtocolNumbers.Tcp &&
-            ((packet.IsSyn && !packet.IsAck) || packet.IsFin);
+            (packet.IsSyn || packet.IsFin) && !packet.IsAck;
         bool isUdpProbe = packet.Protocol == ProtocolNumbers.Udp &&
             packet.DestinationPort <= MaxServicePort;
         bool isIcmpProbe = packet.Protocol == ProtocolNumbers.Icmp;
@@ -315,18 +315,6 @@ public sealed class SourceBehaviorTracker
                 $"Packet flood: {window.TotalPackets} packets from one source", Build());
         }
 
-        if (IsHostSweep(window))
-        {
-            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
-                $"Host sweep: {window.DistinctDestinationIps.Count} hosts probed from one source", Build());
-        }
-
-        if (IsPortScan(window))
-        {
-            return PreFilterResult.KnownAttack(AttackTypes.PortScan,
-                $"Port scan: {window.DistinctPorts.Count} distinct ports from one source", Build());
-        }
-
         if (IsBruteForce(window))
         {
             string service = window.LastAuthPort == 22 ? "SSH" : "FTP";
@@ -342,15 +330,6 @@ public sealed class SourceBehaviorTracker
 
         return null;
     }
-
-    private bool IsHostSweep(SourceWindow window) =>
-        window.DistinctDestinationIps.Count >= _hostSweepDistinctIps &&
-        window.DistinctPorts.Count <= 2 &&
-        window.TotalPackets <= window.DistinctDestinationIps.Count * 2;
-
-    private bool IsPortScan(SourceWindow window) =>
-        window.DistinctPorts.Count >= _portScanDistinctPorts &&
-        window.TotalPackets <= window.DistinctPorts.Count * _portScanMaxPacketsPerPort;
 
     private bool IsBruteForce(SourceWindow window) =>
         window.AuthConnections >= _bruteForceConnections &&
@@ -442,7 +421,7 @@ public sealed class SourceBehaviorTracker
                     continue;
                 }
 
-                if (isSyn)
+                if (isSyn && !isAck)
                 {
                     SynCount++;
 

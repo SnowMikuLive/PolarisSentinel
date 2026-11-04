@@ -24,14 +24,20 @@ public class ModelCombinationService : IModelCombinationService
         _isolationForest = isolationForest;
         _settings = settings;
 
-        if (settings?.Read().ModelCombination is { } saved &&
-            Enum.TryParse<ModelCombination>(saved, out var restored))
+        if (settings?.Read().ModelCombination is { } saved)
         {
-            active = restored;
+            active = Enum.TryParse<ModelCombination>(saved, out var restored) && IsAvailable(restored)
+                ? restored : ModelCombination.RandomForestOnly;
         }
 
-        _active = active;
+        _active = IsAvailable(active) ? active : ModelCombination.RandomForestOnly;
     }
+
+    public IReadOnlyList<ModelCombination> AvailableCombinations =>
+        ModelCombinations.All.Where(IsAvailable).ToArray();
+
+    private bool IsAvailable(ModelCombination combination) =>
+        Enum.IsDefined(combination) && (combination == ModelCombination.RandomForestOnly || _isolationForest is not null);
 
     public ModelCombination ActiveCombination
     {
@@ -46,12 +52,13 @@ public class ModelCombinationService : IModelCombinationService
 
     public void SetActiveCombination(ModelCombination combination)
     {
+        if (!IsAvailable(combination))
+            throw new ArgumentException("Unknown model combination, or its Isolation Forest model is not available.", nameof(combination));
         lock (_lock)
         {
+            _settings?.Update(s => s.ModelCombination = combination.ToString());
             _active = combination;
         }
-
-        _settings?.Update(s => s.ModelCombination = combination.ToString());
     }
 
     public InferenceResult Run(FlowFeatureVector flow, ModelCombination? combination = null)

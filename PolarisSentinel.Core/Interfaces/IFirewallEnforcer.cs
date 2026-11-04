@@ -5,7 +5,8 @@ namespace PolarisSentinel.Core.Interfaces;
 
 public interface IFirewallEnforcer
 {
-    Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration);
+    Rule Apply(PolicyDecision decision, string? policyId, string? alertId, string? attackType, TimeSpan duration,
+        RuleStatus status = RuleStatus.Active);
 
     Rule? Update(
         string ruleId,

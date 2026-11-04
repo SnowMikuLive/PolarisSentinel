@@ -47,8 +47,9 @@ namespace PolarisSentinel.Web.Service
             _logger = logger;
         }
 
-        public Task StartAsync(CancellationToken cancellationToken)
+        public async Task StartAsync(CancellationToken cancellationToken)
         {
+            await _history.RestoreTodayAsync();
             _trafficCaptureService.OnLiveTrafficSummary += OnLiveTrafficSummaryHandler;
             _trafficCaptureService.OnFlowCompleted += OnFlowCompletedHandler;
 
@@ -62,7 +63,6 @@ namespace PolarisSentinel.Web.Service
             {
                 _logger.LogError(ex, "Failed to start traffic capture");
             }
-            return Task.CompletedTask;
         }
 
         private async void OnLiveTrafficSummaryHandler(object? sender, LiveTrafficSummary summary)
@@ -90,9 +90,7 @@ namespace PolarisSentinel.Web.Service
                     return;
                 }
 
-                var record = _state.Record(outcome);
-
-                _history.Enqueue(DetectionStateService.ToTrafficRecord(record));
+                var record = _history.Record(outcome);
 
                 _broadcasts.Writer.TryWrite(record);
             }

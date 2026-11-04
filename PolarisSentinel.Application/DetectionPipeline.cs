@@ -178,10 +178,6 @@ public class DetectionPipeline : IDetectionPipeline
                         alert.SourceIp, decision.BlockDurationMinutes, alert.AttackType);
                 }
 
-                if (rule.Status == RuleStatus.Active && rule.BlocksAddress)
-                {
-                    _blocked?.Add(rule.BlockedIp);
-                }
             }
             catch (Exception ex)
             {
@@ -209,14 +205,13 @@ public class DetectionPipeline : IDetectionPipeline
     {
         return policies
             .Where(p => p.IsEnabled)
-            .Where(p => p.DetectionSource is not { } source || source == alert.DetectionSource)
-            .Any(p => p.MeetsThreshold(alert));
+            .Any(p => p.Matches(alert));
     }
 
     private static Alert BuildPreFilterAlert(FlowFeatureVector flow, PreFilterResult verdict)
     {
-        string sourceIp = verdict.IsSpoofedSource ? flow.DestinationIp : flow.SourceIp;
-        string destinationIp = verdict.IsSpoofedSource ? flow.SourceIp : flow.DestinationIp;
+        string sourceIp = flow.SourceIp;
+        string destinationIp = flow.DestinationIp;
 
         return new Alert
         {

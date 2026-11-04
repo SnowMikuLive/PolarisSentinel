@@ -1,4 +1,7 @@
 using System.Net;
+using System.Net.NetworkInformation;
+using System.Reflection;
+using SharpPcap;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PacketDotNet;
 using PolarisSentinel.Core.Models;
@@ -15,6 +18,8 @@ public class TrafficCaptureFeatureTests
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
     public async Task FlowFeatures_CountTransportPayloadBytes(bool udp, bool ipv6)
     {
         using var capture = new TrafficCaptureService(
@@ -55,5 +60,33 @@ public class TrafficCaptureFeatureTests
         ip.PayloadPacket = transport;
 
         return Packet.ParsePacket(LinkLayers.Raw, ip.Bytes);
+    }
+
+    [TestMethod]
+    public void AddressChange_RefreshesSelectedInterfaceWithoutRestartingCapture()
+    {
+        var network = NetworkInterface.GetAllNetworkInterfaces().First(n =>
+            n.GetIPProperties().UnicastAddresses.Count > 0);
+        using var capture = new TrafficCaptureService(1, DetectionThresholds.High);
+        var device = DispatchProxy.Create<ICaptureDevice, CaptureDeviceProxy>();
+        ((CaptureDeviceProxy)(object)device).DeviceName = @"\Device\NPF_" + network.Id;
+        var type = typeof(TrafficCaptureService);
+        type.GetField("_device", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(capture, device);
+        type.GetField("_localAddresses", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(capture,
+            new HashSet<string> { "192.0.2.99" });
+
+        type.GetMethod("OnNetworkAddressChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(capture, new object?[] { null, EventArgs.Empty });
+
+        var addresses = (HashSet<string>)type.GetField("_localAddresses", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(capture)!;
+        CollectionAssert.AreEquivalent(network.GetIPProperties().UnicastAddresses.Select(a => a.Address.ToString()).ToArray(), addresses.ToArray());
+        Assert.DoesNotContain("192.0.2.99", addresses);
+    }
+
+    public class CaptureDeviceProxy : DispatchProxy
+    {
+        public string DeviceName { get; set; } = string.Empty;
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
+            targetMethod?.Name == "get_Name" ? DeviceName : null;
     }
 }

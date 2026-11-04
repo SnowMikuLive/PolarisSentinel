@@ -27,7 +27,7 @@ internal static class PrerequisiteCheck
         return Environment.CommandLine.Contains("dotnet-ef", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static IReadOnlyList<string> FindMissing(string contentRoot, string? connectionString = null)
+    public static IReadOnlyList<string> FindMissing(string contentRoot, string? connectionString = null, string? configuredModelPath = null)
     {
         var missing = new List<string>();
 
@@ -65,7 +65,7 @@ internal static class PrerequisiteCheck
             missing.Add(message.ToString());
         }
 
-        if (!File.Exists(ResolveArtifactPath(contentRoot, null, "rf_model.onnx")))
+        if (!File.Exists(ResolveArtifactPath(contentRoot, configuredModelPath, "rf_model.onnx")))
         {
             missing.Add(
                 "The Random Forest model file was not found.\r\n" +
@@ -92,12 +92,12 @@ internal static class PrerequisiteCheck
 
     private static IEnumerable<string> Candidates(string? configured, string fileName)
     {
-        yield return Path.Combine("ml", "artifacts", fileName);
-
         if (!string.IsNullOrWhiteSpace(configured))
         {
             yield return configured;
         }
+
+        yield return Path.Combine("ml", "artifacts", fileName);
 
         yield return Path.Combine("..", "ml", "artifacts", fileName);
     }

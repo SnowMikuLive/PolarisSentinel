@@ -80,7 +80,8 @@ public class RuleManagementService
 
         var decision = new Decision { Alert = alert, Action = rule.Action };
 
-        var created = _firewall.Apply(decision, resolvedPolicyId, resolvedAlertId, alert.AttackType, ResolveDuration(durationValue, durationUnit));
+        var created = _firewall.Apply(decision, resolvedPolicyId, resolvedAlertId, alert.AttackType,
+            ResolveDuration(durationValue, durationUnit), rule.Status);
         _unitOfWork.SaveChangesAsync().GetAwaiter().GetResult();
         return created;
     }
